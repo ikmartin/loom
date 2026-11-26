@@ -1,6 +1,6 @@
 """Links an agent or a person writes into what the viewer shows (plan 0.14 phase 3, specs/dialect.md §2.13).
 
-Two schemes and one grammar. `quilt:KEY[#PLACE]` names something this quilt owns by its fixed key -- a node, a document, an annotation, a session, the research state (`quilt:state`), or a shown file by its path with its suffix (`quilt:notes/day1.md#setup`) -- and `cited:SCHEME:VALUE[?page=N&quote=…]` names a place in a cited work by its global identifier. **Only what the viewer can show is linkable**: an included `.tex` file, a hidden file (a session's drafts among them), a deleted session are refused, because a link to something the viewer does not display is a link to nothing.
+Two schemes and one grammar. `quilt:KEY[#PLACE][&quote=WORDS]` names something this quilt owns by its fixed key -- a node, a document, an annotation, a session, the research state (`quilt:state`), a work by its reference, or a shown file by its path with its suffix (`quilt:notes/day1.md#setup`) -- and `cited:SCHEME:VALUE[?page=N&quote=…]` names a place in a cited work by its global identifier. A place in a document, a project PDF or a work may carry quoted words, which the viewer opens at and lights. **Only what the viewer can show is linkable**: an included `.tex` file, a hidden file (a session's drafts among them), a deleted session are refused, because a link to something the viewer does not display is a link to nothing.
 
 A link is checked when it is posted (`loom session say`, `loom annotate`) and printed correctly by `loom link`, so an agent never composes one by hand. A link written into a shown Markdown file is checked by `loom lint` through the same `resolve` (`scan.lint.markdown_links`).
 """
@@ -11,12 +11,15 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, quote, unquote
+from urllib.parse import parse_qs, quote, unquote, unquote_plus
 
 from loom.records import ids
 
 #: A markdown link whose destination is one of the two schemes.
 LINK = re.compile(r"\]\(((?:quilt|cited):[^)\s]+)\)")
+#: A link written raw in any text, as an org file, a plain note or a Markdown link holds one: it ends at whitespace, `]`, `)`, `>` or a quotation mark, so org's `[[quilt:…][name]]`, Markdown's `[name](quilt:…)` and `<quilt:…>` all read; punctuation a sentence puts after it is not part of it.
+RAW = re.compile(r"(?<![A-Za-z0-9])(?:quilt|cited):[^\s\])>\"<]+")
+_TRAILING = ".,;:!?'"
 ANNOTATION = re.compile(rf"^{ids.ANNOTATION}$")
 SESSION = re.compile(rf"^{ids.SESSION}$")
 
@@ -33,10 +36,11 @@ class LinkError(ValueError):
 class Target:
     """What a link names: its kind, the key it is addressed by, and the place in it, if any."""
 
-    kind: str  # node | document | annotation | session | work | page | file
+    kind: str  # node | document | annotation | session | work | library | page | file
     key: str
     place: str = ""
     href: str = ""
+    quote: str = ""
 
 
 def resolve(result: Any, root: Path, href: str, records: list[Any] | None = None) -> Target:
@@ -70,15 +74,37 @@ def resolve(result: Any, root: Path, href: str, records: list[Any] | None = None
 
 
 def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Target:
+    body = href[len("quilt:") :]
+    key, _, raw = body.partition("#")
+    # the viewer decodes the place as it decodes the key, so a heading written in other than ASCII is the same place either way
+    place, words = split_quote(raw)
+    if not key:
+        raise LinkError(f"{href}: names no key")
+    target = _quilt_target(result, root, href, key, place, records)
+    if words and not _quotable(target):
+        raise LinkError(f"{href}: quoted words are for a place in a document, a PDF or a work", "place")
+    return Target(target.kind, target.key, target.place, target.href, words)
+
+
+def split_quote(raw: str) -> tuple[str, str]:
+    """What follows a `quilt:` link's `#`, cut into the place and the quoted words, each decoded: `page=3&quote=the%20words` is `('page=3', 'the words')`, `quote=…` alone a quote with no place. The words are cut out before decoding, so an `&` in them, written `%26`, stays in them."""
+    parts = raw.split("&") if raw else []
+    words = next((unquote_plus(p[len("quote=") :]) for p in parts if p.startswith("quote=")), "")
+    place = "&".join(p for p in parts if not p.startswith("quote="))
+    return unquote(place), " ".join(words.split())
+
+
+def _quotable(target: Target) -> bool:
+    """Whether quoted words can be found in what `target` names: a document or a node in one, a project PDF, or a work's pages."""
+    if target.kind in ("document", "node", "work"):
+        return True
+    return target.kind == "file" and target.key.lower().endswith(".pdf")
+
+
+def _quilt_target(result: Any, root: Path, href: str, key: str, place: str, records: list[Any] | None) -> Target:
     from loom.cli._quilt import resolve_key
     from loom.errors import EnvError
 
-    body = href[len("quilt:") :]
-    key, _, place = body.partition("#")
-    # the viewer decodes the place as it decodes the key, so a heading written in other than ASCII is the same place either way
-    place = unquote(place)
-    if not key:
-        raise LinkError(f"{href}: names no key")
     if ANNOTATION.match(key):
         from loom.records.annotations import find_annotation, load_records
 
@@ -184,12 +210,20 @@ def _reached(result: Any, href: str, place: str, master: str) -> None:
 
 def _library_node(root: Path, href: str, key: str, place: str) -> Target | None:
     """A node of the library by its id (`quilt:tq-00K3`), a place in it one of its anchors; None when `key` is no library node's id, so the quilt's own keys are tried. A library id and a draft's key are minted from one namespace and never equal (`nodes.md` §3)."""
-    from loom.library.ids import anchor_owner, parse_id
+    from loom.library.ids import REFERENCE, anchor_owner, parse_id
     from loom.library.node import file_name
     from loom.paths import LIBRARY_NODES
 
-    if parse_id(key) is None or not (root / LIBRARY_NODES / file_name(key)).is_file():
+    parsed = parse_id(key)
+    if parsed is None or not (root / LIBRARY_NODES / file_name(key)).is_file():
         return None
+    if parsed.kind == REFERENCE and place:
+        # a place on a work's pages, as a `cited:` link's: the page
+        if not re.fullmatch(r"page=[1-9]\d*", place):
+            raise LinkError(f"{href}: a place on a work's pages is page=N, from 1", "place")
+        return Target("work", key, place, href)
+    if parsed.kind == REFERENCE:
+        return Target("work", key, href=href)
     if place and anchor_owner(place) != key:
         raise LinkError(f"{href}: {place} is not a place in {key}", "place")
     return Target("library", key, place, href)
@@ -250,9 +284,21 @@ def refuse_bad_links(result: Any, root: Path, text: str) -> None:
         )
 
 
-def quilt_link(key: str, place: str = "") -> str:
-    """`[](quilt:KEY#PLACE)`, the empty text the viewer fills with its own name for the thing; a file's path is percent-encoded, so a space does not end the link."""
-    return f"[](quilt:{quote(key, safe='/:._-~')}{'#' + place if place else ''})"
+def quilt_link(key: str, place: str = "", words: str | None = None) -> str:
+    """`[](quilt:KEY#PLACE&quote=WORDS)`, the empty text the viewer fills with its own name for the thing; a file's path and the words are percent-encoded, so a space, a bracket or a parenthesis does not end the link."""
+    keys = [k for k in (place, "quote=" + quote(" ".join(words.split()), safe="") if words else "") if k]
+    return f"[](quilt:{quote(key, safe='/:._-~')}{'#' + '&'.join(keys) if keys else ''})"
+
+
+def raw_links(text: str) -> list[tuple[int, str]]:
+    """Every `quilt:` and `cited:` link written in `text`, raw or inside a Markdown or org link, with its 1-based line, in order; a sentence's punctuation after a link is left off it."""
+    out: list[tuple[int, str]] = []
+    for n, line in enumerate(text.split("\n"), start=1):
+        for m in RAW.finditer(line):
+            href = m.group(0).rstrip(_TRAILING)
+            if href.partition(":")[2]:
+                out.append((n, href))
+    return out
 
 
 def cited_link(scheme: str, value: str, page: int | None = None, text: str | None = None) -> str:

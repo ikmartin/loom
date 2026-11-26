@@ -49,7 +49,8 @@ def test_a_document_a_block_and_the_words_selected_are_named_with_their_links(se
     assert got["item"]["link"] == "quilt:drafting/main.tex"
     assert (got["block"]["key"], got["block"]["link"]) == ("dm-0003", "quilt:dm-0003")
     assert got["selection"]["text"] == "a finite set"
-    assert got["beside"]["link"] == "cited:doi:10.4171/demo/14-1?page=2"
+    calloway = scanned_refs(q)["Calloway14"]
+    assert got["beside"]["link"] == f"quilt:{calloway}#page=2"
     assert got["session"]["link"] == f"quilt:{sid}"
     text = ok("here", cwd=q).stdout
     assert text.startswith("the person is looking at drafting/main.tex, at dm-0003 (")
@@ -70,7 +71,7 @@ def test_a_region_of_a_page_review_and_a_key_gone_are_each_said(session) -> None
     )
     text = ok("here", cwd=q).stdout
     assert "Calloway14" in text and "page 3" in text and "72,100.5,300,140" in text
-    assert "[](cited:doi:10.4171/demo/14-1?page=3)" in text
+    assert f"[](quilt:{scanned_refs(q)['Calloway14']}#page=3)" in text
     # the tab touched last wins: a second report replaces the first
     told(s, {"route": "review", "review": {"key": "dm-0003", "cause": "earlier-change"}})
     assert ok("here", cwd=q).stdout.startswith("the person is in Review, on dm-0003 (")
@@ -154,3 +155,10 @@ def test_the_annotation_whose_popup_is_open_and_a_region_come_with_crops(session
         s, {"route": "reading", "item": {"kind": "file", "id": "notes/paper.pdf"}, "annotation": "a-2026-01-01-gone00"}
     )
     assert json_of("here", "--json", cwd=q)["looking"]["annotation"] == {"id": "a-2026-01-01-gone00", "gone": True}
+
+
+def scanned_refs(q):  # type: ignore[no-untyped-def]
+    """The quilt's references by the key each entry has."""
+    from loom.cli._quilt import open_scan
+
+    return open_scan(str(q)).refs

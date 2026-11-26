@@ -132,7 +132,7 @@ Links in Markdown files: each link and image source of a shown Markdown file, re
 
 - `loom:link-target-missing` (warning, latex): a link names nothing the viewer shows: a file that does not exist, is hidden, is a folder or lies outside the quilt, a LaTeX file by its path, or a key, annotation or session the quilt does not hold; or, in the research state, a result gone since the page was written through loom, which its page lists among its broken links.
 - `loom:link-place-missing` (warning, latex): a link reaches what it names and not the place in it: a heading the Markdown file or notebook does not have, matched exactly as the viewer matches an id, a heading of the file's own, a line past a text file's end, a place in a PDF that is not `page=N`, or a key the document or node does not hold.
-- `loom:link-work-unknown` (warning, model): a `cited:` link names no identifier (`doi`, `arXiv`, `MR` or `zbMATH`), or one no work of the library states. Carries `loom link CITEKEY`, which prints the work's link as it is named now: by the first identifier its entry states, else as `quilt:` and its reference.
+- `loom:link-work-unknown` (warning, model): a `cited:` link names no identifier (`doi`, `arXiv`, `MR` or `zbMATH`), or one no work of the library states. Carries `loom link CITEKEY`, which prints the work's link as it is named now, `quilt:` and its reference.
 
 Interface:
 

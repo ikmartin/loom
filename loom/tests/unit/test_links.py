@@ -34,8 +34,51 @@ def test_each_kind_resolves(q: Path) -> None:
     work = resolve(result, q, "cited:doi:10.4171/demo/14-1?page=2")
     assert (work.kind, work.key, work.place) == ("work", result.refs["Calloway14"], "page=2")
     assert resolve(result, q, "cited:arxiv:0805.2065v2").key == result.refs["Man12"]
-    library = resolve(result, q, f"quilt:{result.refs['Har77']}")  # a work stating no identifier, by its reference
-    assert (library.kind, library.key) == ("library", result.refs["Har77"])
+    work = resolve(result, q, f"quilt:{result.refs['Har77']}")  # a work by its reference
+    assert (work.kind, work.key, work.place) == ("work", result.refs["Har77"], "")
+
+
+def test_a_place_carries_quoted_words(q: Path) -> None:
+    from loom.links import resolve
+
+    result = scanned(q)
+    har77 = result.refs["Har77"]
+    doc = resolve(result, q, "quilt:drafting/main.tex#dm-0003&quote=every%20vertex")
+    assert (doc.kind, doc.key, doc.place, doc.quote) == ("document", "drafting/main.tex", "dm-0003", "every vertex")
+    whole = resolve(result, q, "quilt:drafting/main.tex#quote=a%20%26%20b")
+    assert (whole.place, whole.quote) == ("", "a & b")  # an encoded & stays in the words
+    page = resolve(result, q, f"quilt:{har77}#page=4&quote=the+words")
+    assert (page.kind, page.key, page.place, page.quote) == ("work", har77, "page=4", "the words")
+    assert resolve(result, q, "quilt:dm-0003#quote=x").quote == "x"
+
+
+def test_quoted_words_need_a_place_that_holds_words(q: Path) -> None:
+    from loom.links import LinkError, resolve
+
+    result = scanned(q)
+    for href, why in [
+        ("quilt:a-2026-09-16-ecnav2#quote=x", "quoted words are for"),
+        ("quilt:s-2026-09-16-p9z37z#quote=x", "quoted words are for"),
+        (f"quilt:{result.refs['Har77']}#page=two&quote=x", "page=N"),
+    ]:
+        with pytest.raises(LinkError, match=why):
+            resolve(result, q, href)
+
+
+def test_raw_links_are_read_in_any_text() -> None:
+    from loom.links import raw_links
+
+    org = "* Reading\nSee [[quilt:papers/a.pdf#page=2&quote=x%20y][the lemma]] and [[quilt:dm-0003]].\n"
+    assert raw_links(org) == [(2, "quilt:papers/a.pdf#page=2&quote=x%20y"), (2, "quilt:dm-0003")]
+    md = "A [lemma](quilt:drafting/main.tex#dm-0003), then quilt:dm-0004. And <quilt:state>, cited:arxiv:0805.2065v2?page=9;"
+    assert [h for _, h in raw_links(md)] == [
+        "quilt:drafting/main.tex#dm-0003",
+        "quilt:dm-0004",
+        "quilt:state",
+        "cited:arxiv:0805.2065v2?page=9",
+    ]
+    # a word ending in the scheme's letters is not a link, and a scheme with nothing after it is none
+    assert raw_links("unquilt:x and quilt: alone") == []
 
 
 def test_what_the_viewer_does_not_show_is_refused(q: Path) -> None:
@@ -85,16 +128,20 @@ def test_loom_link_prints_what_the_viewer_follows(q: Path) -> None:
     assert link("drafting/main.tex", "--at", "dm-0003") == "[](quilt:drafting/main.tex#dm-0003)"
     assert link("a-2026-09-16-tc3rcf") == "[](quilt:a-2026-09-16-tc3rcf)"
     assert link("s-2026-09-16-p9z37z") == "[](quilt:s-2026-09-16-p9z37z)"
+    refs = scanned(q).refs
+    # a work by its reference, a place on its pages with the words to light
     assert (
-        link("Calloway14", "--page", "2", "--quote", "a phrase")
-        == "[](cited:doi:10.4171/demo/14-1?page=2&quote=a%20phrase)"
+        link("Calloway14", "--page", "2", "--quote", "a (phrase)")
+        == f"[](quilt:{refs['Calloway14']}#page=2&quote=a%20%28phrase%29)"
     )
-    # a work stating no identifier is linked whole, by its reference
-    har77 = scanned(q).refs["Har77"]
-    assert link("Har77") == f"[](quilt:{har77})"
-    refused("link", "Har77", "--page", "2", cwd=q, code=2, match="states no identifier")
+    assert link("Har77") == f"[](quilt:{refs['Har77']})"
+    assert (
+        link("drafting/main.tex", "--at", "dm-0003", "--quote", "every  vertex")
+        == "[](quilt:drafting/main.tex#dm-0003&quote=every%20vertex)"
+    )
     refused("link", "drafting/nodes/dm-0001.tex", cwd=q, code=2, match="file the documents include")
     refused("link", "dm-0003", "--page", "2", cwd=q, code=2, match="for a work")  # a page is a work's
+    refused("link", "a-2026-09-16-tc3rcf", "--quote", "x", cwd=q, code=2, match="quoted words are for")
 
 
 def test_an_agent_posting_a_bad_link_is_refused_and_a_good_one_lands(q: Path) -> None:
