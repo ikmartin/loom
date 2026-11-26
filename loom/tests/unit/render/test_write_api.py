@@ -18,6 +18,7 @@ from tests.unit.render.write_api import (  # noqa: F401  (each fills CASES as it
     cases_formal,
     cases_library,
     cases_library_evidence,
+    cases_notes,
     cases_review,
     cases_sync,
     cases_web,

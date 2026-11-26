@@ -33,6 +33,7 @@ EDITABLE = (
     "library.online",
     "lint.disable",
     "agents.deny",
+    "notes.dir",
 )
 
 #: Keys shown and never written: each names where files already are, so changing it alone would lose them.
@@ -292,6 +293,7 @@ def check(
     *,
     masters: Collection[str] | None = None,
     shown: Callable[[str], bool] | None = None,
+    folders: Callable[[str], bool] | None = None,
 ) -> Value | None:
     """`value` as `set_values` writes it for `key`, or ValueError saying why it is refused.
 
@@ -305,11 +307,13 @@ def check(
         The person's documents, which `quilt.main` must name; unchecked when None.
     shown : callable, optional
         Whether a quilt-relative file exists and the viewer shows it, which `quilt.home` must; unchecked when None.
+    folders : callable, optional
+        Whether a quilt-relative folder exists and the viewer shows it, which `notes.dir` must; unchecked when None.
 
     Returns
     -------
     str, bool, list of str, or None
-        The value to write; None removes the key, which an empty `main` or `home` does.
+        The value to write; None removes the key, which an empty `main`, `home` or `notes.dir` does.
     """
     from loom.agents import compile_pattern
     from loom.scan.diagnostics import can_disable
@@ -342,6 +346,11 @@ def check(
         if home and shown is not None and not shown(home):
             raise ValueError(f"{home} is not a file the viewer shows")
         return home or None
+    if key == "notes.dir":
+        folder = _text(value).strip().strip("/")
+        if folder and (".." in folder.split("/") or (folders is not None and not folders(folder))):
+            raise ValueError(f"{folder} is not a folder the viewer shows")
+        return folder or None
     if key == "library.online":
         if not isinstance(value, bool):
             raise ValueError("must be true or false")
@@ -366,6 +375,7 @@ def save(
     *,
     masters: Collection[str] | None = None,
     shown: Callable[[str], bool] | None = None,
+    folders: Callable[[str], bool] | None = None,
 ) -> QuiltConfig:
     """Check every change, then write them all or none: the viewer's Settings saving to `config.toml`.
 
@@ -375,7 +385,7 @@ def save(
         The quilt.
     changes : dict
         `"table.key"` -> the value the viewer sent.
-    masters, shown
+    masters, shown, folders
         As `check` takes them.
 
     Returns
@@ -392,7 +402,7 @@ def save(
     values: dict[str, Value | None] = {}
     for key, value in changes.items():
         try:
-            values[key] = check(key, value, masters=masters, shown=shown)
+            values[key] = check(key, value, masters=masters, shown=shown, folders=folders)
         except ValueError as exc:
             refused[key] = str(exc)
     if refused:
@@ -466,6 +476,7 @@ def published(result: ScanResult) -> dict[str, Any]:
             # how far the list holds for the apps set up here, in one sentence: which cannot edit there, which are only asked
             "holds": how_far_deny_holds(root),
         },
+        "notes": {"dir": cfg.notes_dir},
         "sync": sync,
         "warnings": list(cfg.warnings),
     }
