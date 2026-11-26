@@ -197,10 +197,6 @@
 	tbody tr.multi td {
 		background: var(--link-wash);
 	}
-	td.t {
-		font-family: var(--serif);
-		font-size: 14px;
-	}
 	td.d {
 		color: var(--ink-faint);
 		font-size: 11px;

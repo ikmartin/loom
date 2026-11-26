@@ -33,6 +33,12 @@ test("the list holds round six's 300 works, sorted by title, and sorts, filters 
 	await expect(row(page, 'Widgets and their bounds')).toContainText('11 of 62 · 2 compared');
 });
 
+test("a work's title is drawn in the list's sans, at the size of the columns beside it", async ({ page }) => {
+	await open(page);
+	const [title, authors] = await row(page, 'Widgets and their bounds').locator('td').evaluateAll((tds) => tds.slice(0, 2).map((td) => { const s = getComputedStyle(td); return `${s.fontFamily} ${s.fontSize}`; }));
+	expect(title).toBe(authors);
+});
+
 test('thumbnails draw sixty at first, and the choice is remembered', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('works-thumbs').click();
