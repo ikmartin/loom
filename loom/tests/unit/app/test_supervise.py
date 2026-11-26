@@ -10,6 +10,7 @@ import os
 import signal
 import socket
 import subprocess
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -155,6 +156,19 @@ def test_a_home_stopping_stops_its_servers_and_what_was_left_open_comes_back(
     after = home(sups)
     after.tick()
     until(running(after, entry), "the server started by the next home")
+
+
+def test_a_server_started_before_the_homes_own_restart_stops_at_once(tmp_path: Path, sups: list[Supervisor]) -> None:
+    """After `execv` the home's pid is the same, so the servers it started are still its children, adopted with no process object to reap them."""
+    entry = quilt(tmp_path / "q")
+    before = home(sups)
+    before.open(entry)
+    until(running(before, entry), "the server")
+    after = home(sups)
+    assert after.open(entry)["state"] == "running" and after.children[entry.id].proc is None
+    began = time.monotonic()
+    assert after.stop(entry) is True
+    assert time.monotonic() - began < supervise.STOP_WAIT / 2 and supervise.ask(entry) is None
 
 
 def test_a_server_found_running_is_stopped_at_the_pid_it_gives_and_never_at_one_its_quilt_names(

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from loom import paths
 from loom.agents import AGENT_PLACES, denied_by
+from loom.app.server import HANDLERS as HOME
 from loom.render.api import CAPABILITIES, HANDLERS
 from loom.render.attach import ATTACH
 from loom.scan.quilt import QuiltConfig
@@ -32,8 +33,13 @@ def test_no_reserved_write_operation_is_served() -> None:
     reserved = first_cells(section("Write operations"))
     assert reserved, "the table of reserved write operations parsed to nothing"
     assert all(re.fullmatch(r"[a-z]+(-[a-z]+)+", name) for name in reserved), reserved
-    served = sorted(set(reserved) & (set(CAPABILITIES) | set(HANDLERS)))
+    served = sorted(set(reserved) & (set(CAPABILITIES) | set(HANDLERS) | set(HOME)))
     assert served == [], f"served, and still on the page of reserved names: {served}"
+
+
+def test_install_reserves_no_operation() -> None:
+    """Install's operations are the home's endpoints (specs/write-api.md §7), all served: a paper dropped on the home makes a quilt (`quilt-create`), one dropped on an open quilt is the library's."""
+    assert [name for name in first_cells(section("Write operations")) if name.startswith("quilt-")] == []
 
 
 def test_every_reserved_path_is_named_once_and_kept_from_agents() -> None:

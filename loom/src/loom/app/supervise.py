@@ -75,6 +75,14 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def _gone(pid: int) -> bool:
+    """Whether the process `pid` has ended; reaped when it is this process's own child, as a server the home started before its own restart is, the pid kept across `execv`, which would otherwise stay alive to `kill` as a zombie until `STOP_WAIT` ran out."""
+    with contextlib.suppress(ChildProcessError):
+        if os.waitpid(pid, os.WNOHANG)[0] == pid:
+            return True
+    return not _alive(pid)
+
+
 @dataclass
 class Child:
     """A server the home started or adopted: its quilt, its process (None when adopted), when it started, its starts again so far, and when the next is due."""
@@ -208,7 +216,7 @@ class Supervisor:
             while time.monotonic() < end:
                 if child is not None and child.proc is not None and child.proc.poll() is not None:
                     return True
-                if (child is None or child.proc is None) and not _alive(pid):
+                if (child is None or child.proc is None) and _gone(pid):
                     return True
                 time.sleep(0.05)
             with contextlib.suppress(ProcessLookupError):
