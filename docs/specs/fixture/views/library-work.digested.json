@@ -31,7 +31,8 @@
      "paper": "unchecked",
      "section": "s1",
      "taxon": "definition",
-     "title": null
+     "title": null,
+     "waits": null
     },
     {
      "confirmed": true,
@@ -48,7 +49,8 @@
      "paper": "unchecked",
      "section": "s1",
      "taxon": "definition",
-     "title": null
+     "title": null,
+     "waits": null
     },
     {
      "confirmed": true,
@@ -65,7 +67,8 @@
      "paper": "unchecked",
      "section": "s2",
      "taxon": "proposition",
-     "title": null
+     "title": null,
+     "waits": null
     },
     {
      "confirmed": true,
@@ -82,7 +85,8 @@
      "paper": "unchecked",
      "section": "s2",
      "taxon": "lemma",
-     "title": null
+     "title": null,
+     "waits": null
     },
     {
      "confirmed": true,
@@ -99,7 +103,8 @@
      "paper": "unchecked",
      "section": "s3",
      "taxon": "theorem",
-     "title": null
+     "title": null,
+     "waits": null
     },
     {
      "confirmed": true,
@@ -116,7 +121,8 @@
      "paper": "unchecked",
      "section": "s3",
      "taxon": "corollary",
-     "title": null
+     "title": null,
+     "waits": null
     },
     {
      "confirmed": true,
@@ -133,7 +139,8 @@
      "paper": "unchecked",
      "section": "s4",
      "taxon": "remark",
-     "title": null
+     "title": null,
+     "waits": null
     },
     {
      "confirmed": true,
@@ -150,7 +157,8 @@
      "paper": "unchecked",
      "section": "s4",
      "taxon": "remark",
-     "title": null
+     "title": null,
+     "waits": null
     }
    ],
    "sections": [

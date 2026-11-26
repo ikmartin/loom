@@ -701,7 +701,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "fe069ee40053ddd59308920ff5ffbfb78e292d20b9b0ee17464f581c3842e404",
+   "hash": "b74cf7f8024824ee352a8685afab136286892677d4d2e3d6b4004791413dcd23",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -716,7 +716,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "cc439806024563afe65862b85c063742b2c67ca687b293c7c46e41c37548bbd9",
+   "hash": "d015d6a66e0cf473d236ec96f1fb8cf65ba562899f6bab12e330649bf76a2c5c",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -731,7 +731,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "e65c7e2d5956e5988a0ace45c6dbde181b610b2c5298a9f305e9d6c95caef409",
+   "hash": "6e401b902178a3370da99a989821e89fac43d4414675dde96b6f9ecc49b6070e",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
@@ -1027,9 +1027,6 @@
    "quilt.history",
    "quilt.research_state"
   ],
-  "sync": {
-   "paired": false
-  },
   "warnings": []
  },
  "contributions": [
