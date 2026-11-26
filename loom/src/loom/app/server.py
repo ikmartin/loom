@@ -179,6 +179,7 @@ def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(name, str) or not all(v is None or isinstance(v, str) for v in (place, drop, main)):
         raise ApiError("bad-field", "name, and place, drop and main where given, are strings")
     where = create.target(name, place)
+    registry.entries()  # a list that cannot be read refuses the create, which could not put its quilt on it
     home.makings.claim(where)
     try:
         paper = create.paper(drop, main) if drop else None

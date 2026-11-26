@@ -239,6 +239,15 @@ def test_a_paper_dropped_over_the_wire_becomes_a_quilt_that_is_served(home_serve
     until(lambda: home_server.supervisor.state(entry)["state"] == "running", "the quilt served")
 
 
+def test_a_create_while_the_list_cannot_be_read_is_refused_and_makes_nothing(home_server: Home, place: Path) -> None:
+    listed = registry.folder() / "quilts.json"
+    listed.write_text("{")
+    key = drop({"paper.tex": PAPER})
+    status, said = post(home_server.url + "_api/quilt-create", {"name": "Unlisted", "place": str(place), "drop": key})
+    assert status == 409 and said["error"]["code"] == "list-unreadable", said
+    assert list(place.iterdir()) == [] and listed.read_text() == "{" and (create.incoming() / key).is_dir()
+
+
 def test_a_file_dropped_where_a_folder_was_dropped_is_refused() -> None:
     key = drop({"a/b.tex": PAPER})
     with pytest.raises(ApiError) as refused:
