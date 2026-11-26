@@ -6,7 +6,8 @@
 	import FragmentNotes from '$lib/fragments/FragmentNotes.svelte';
 	import SideHost from '$lib/review/SideHost.svelte';
 	import { slotsFor } from '$lib/fragments/slots';
-	import { keyUrl, nodeUrl, reviewUrl, masterUrl, anchorId } from '$lib/nav';
+	import { keyUrl, nodeUrl, masterUrl, anchorId } from '$lib/nav';
+	import { docs } from '$lib/words/docs';
 	import { fetchSource } from '$lib/source';
 	import type { Item } from '../item';
 	import { nodeState } from '../state.svelte';
@@ -23,6 +24,8 @@
 	const owner = $derived(!node && stmt?.node && m.nodes[stmt.node] ? stmt.node : '');
 	// by the code's own name: the publisher's namespace in front of it is the manifest's to carry, not this module's to know
 	const missingProof = $derived(m.diagnostics.some((d) => d.keys.includes(key) && d.code.endsWith(':missing-proof')));
+	// said in words where the block waits to be accepted, never a link out of Docs
+	const waits = $derived((m.unresolved ?? []).some((r) => r.key === key));
 	// The source is fetched as soon as the node is shown, so the controls know whether to offer it: a corpus that publishes none shows no control (plan 0.11 Part E).
 	$effect(() => {
 		const s = held;
@@ -52,7 +55,7 @@
 					<FragmentNotes notes={held.notes} fallback={key}>
 						<Fragment path={node.fragment} macroSet={node.draft_macros ?? ''} isolatedMacros={!!node.draft_macros} margins comments={slots} annotations={held.notes} anchor={item.anchor ?? ''} jump={item.seq} note={item.note} quote={item.quote} arrival={held.arrival} />
 					</FragmentNotes>
-					{#if missingProof}<p class="muted absent" data-testid="missing-proof">No proof is attached. <a href={reviewUrl(node.reached_by[0], key)}>See this block in Review</a>.</p>{/if}
+					{#if missingProof}<p class="muted absent" data-testid="missing-proof">{docs.node.noProof}{#if waits}{' '}{docs.node.waitsToAccept}{/if}</p>{/if}
 					{#if node.children.length}
 						<ul class="plain children">
 							{#each node.children as ck (ck)}

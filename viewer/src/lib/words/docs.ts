@@ -193,6 +193,12 @@ export const docs = {
 		/** The column's message on a click on a mark of a result Lean accepted that waits for the person. */
 		waits: (name: string) => `${name}: Lean accepted, not attested. It waits for you in Review.`
 	},
+	node: {
+		/** Under a result whose proof is missing, where the proof would be. */
+		noProof: 'No proof is attached.',
+		/** After it, where the block waits to be accepted: what waits, and where, in words; nothing there leaves Docs. */
+		waitsToAccept: 'It waits for you in Review, under Results to accept.'
+	},
 	history: {
 		/** The word on a document's toolbar that opens its history menu, and the accessible names of the word and of the menu. */
 		label: 'history',
