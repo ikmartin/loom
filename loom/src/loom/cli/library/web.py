@@ -1,6 +1,6 @@
 """An agent's commands on the library's web (`docs/design/library.md`, "What an agent can do to the web"), each an MCP tool: to read a node with its neighbours, a search, what a node uses and what uses it, what a draft rests on, the stubs and a work; to write, fill a stub, propose a node at a place, and propose a correction; and to have loom digest a work from its TeX source.
 
-An agent writes no node file by hand: each write here goes through the library's checks (`store`) and the evidence lane's acts (`evidence.acts`), which record how the text was made and by whom. What an agent transcribes from a PDF's pages or reads from a source is checked to stand there; a correction of a text a person compared waits as a proposal, and the compared text stands. Comparing a node with its paper is the person's, and no command here records it.
+An agent writes no node file by hand: each write here is an act of the evidence lane (`evidence.acts`: `give` for a filled stub or a proposed node, `propose` for a correction), which writes through the library's checks and records how the text was made and by whom. What an agent transcribes from a PDF's pages or reads from a source is checked to stand there; a correction of a text a person compared waits as a proposal, and the compared text stands. Comparing a node with its paper is the person's, and no command here records it.
 """
 
 from __future__ import annotations
@@ -213,6 +213,8 @@ def _check_read(root: Path, work: Any, body: str, read_from: str, pages: str | N
     from loom.refs.search import fold
 
     words = re.findall(r"[^\W\d_]{3,}", fold(" ".join(_words(body))))
+    if not words:
+        raise ContentError("the text has no words outside its mathematics for loom to find where it was read, so loom cannot check it stands there")  # fmt: skip
     if read_from == "pdf":
         from loom.refs.pages import mapped, read_page
 
@@ -251,23 +253,15 @@ def _pointed(
     return tuple(sorted(named - set(mentions))), tuple(sorted(set(mentions)))
 
 
-def _record(root: Path, node: Any, by: Any, read_from: str, where: dict[str, Any], *, new: bool) -> str:
-    """Write an agent's node through the checks and record how it was made, as one act under the library's lock."""
-    from loom.evidence.acts import ActRefused, digested
-    from loom.library.gather import writing
-    from loom.library.store import NodeRefused, write_node
+def _record(root: Path, node: Any, by: Any, read_from: str, where: dict[str, Any], *, new: bool) -> None:
+    """Write an agent's node and record how it was made, as one act (`evidence.acts.give`); its refusal said as a command says one."""
+    from loom.evidence.acts import ActRefused, give
 
-    with writing(root):
-        try:
-            written = write_node(root, node, new=new)
-        except NodeRefused as exc:
-            said = "; ".join(d.message for d in exc.diagnostics[:3])
-            raise ContentError(f"the library's checks refuse it: {said}") from None
-        try:
-            digested(root, node.id, written, by, "transcribed" if read_from == "pdf" else "read", where)
-        except ActRefused as exc:
-            raise ContentError(str(exc)) from None
-    return written
+    try:
+        give(root, node, by, "transcribed" if read_from == "pdf" else "read", where, fresh=new)
+    except ActRefused as exc:
+        said = "; ".join(getattr(d, "message", str(d)) for d in exc.diagnostics[:3])
+        raise ContentError(f"{exc}: {said}" if said else str(exc)) from None
 
 
 @click.command(name="fill")

@@ -136,5 +136,89 @@ def test_a_transcription_not_on_its_pages_is_refused(tmp_path: Path) -> None:
     words = "Let $\\prec$ be a median order and let $u$ and $v$ be consecutive in $\\prec$, with $u$ immediately preceding $v$."
     wrong = "Every gadget tower of a median order is finite."
     refused("library", "fill", "sh-0Z01", "--pages", "1-2", "--body", wrong, "--as", AGENT, cwd=root, code=1, match="not all on its pages")  # fmt: skip
+    refused("library", "fill", "sh-0Z01", "--pages", "40", "--body", words, "--as", AGENT, cwd=root, code=1, match="not all on its pages")  # fmt: skip
+    refused("library", "propose", bellamy, "--taxon", "lemma", "--number", "9.9", "--pages", "1-2", "--body", wrong, "--as", AGENT, cwd=root, code=1, match="not all on its pages")  # fmt: skip
     ok("library", "fill", "sh-0Z01", "--pages", "1-2", "--body", words, "--as", AGENT, cwd=root)
     assert [r.get("how") for r in replay(root).about("node", "sh-0Z01", of="digested")] == ["transcribed"]
+
+
+def test_an_agent_proposes_a_result_no_node_holds_its_words_checked_and_unchecked_until_compared(
+    tmp_path: Path, pdf_text: list[str]
+) -> None:
+    from loom.evidence.status import files_unchanged, status
+    from loom.evidence.web import Here, LibraryWeb
+
+    result, smith = quilt(tmp_path)
+    root = result.quilt.root
+    far = "This lemma uses its only display."
+    refused("library", "propose", smith, "--taxon", "lemma", "--number", "1.2", "--from", "tex", "--body", far, "--as", AGENT, cwd=root, code=1, match="at lemma 1.2 already")  # fmt: skip
+    refused("library", "propose", smith, "--taxon", "lemma", "--number", "2.2", "--from", "tex", "--body", "This gadget is unbounded.", "--as", AGENT, cwd=root, code=1, match="not all on its source")  # fmt: skip
+    said = json_of("library", "propose", smith, "--taxon", "lemma", "--number", "2.2", "--from", "tex", "--body", far, "--as", AGENT, "--json", cwd=root)  # fmt: skip
+    node = read(root, said["node"])
+    assert node is not None and (node.taxon, node.number, node.source) == ("lemma", "2.2", smith)
+    work = read(root, smith)
+    assert work is not None
+    made = replay(root).about("node", node.id, of="digested")
+    assert [(r.get("how"), r.by.kind, r.get("from")) for r in made] == [
+        ("read", "agent", {"ref": smith, "tex": work.tex})
+    ]
+    found = status(replay(root), LibraryWeb(root), Here("node", node.id), lean_now=files_unchanged(root))
+    assert found.reading == "unchecked", "a node an agent made exists and reads as not checked"
+
+
+def test_a_text_with_no_words_to_find_is_refused(tmp_path: Path, pdf_text: list[str]) -> None:
+    result, smith = quilt(tmp_path)
+    root = result.quilt.root
+    lemma = stub(root, smith, "1.2")
+    refused("library", "fill", lemma, "--from", "tex", "--body", "$|x| \\le 1$", "--as", AGENT, cwd=root, code=1, match="no words outside its mathematics")  # fmt: skip
+    still = read(root, lemma)
+    assert still is not None and still.empty, "nothing written"
+
+
+def test_give_is_an_agent_s_and_gives_a_stub_its_text_alone(tmp_path: Path, pdf_text: list[str]) -> None:
+    """`acts.give`, the one path an agent's filled stub or proposed node takes: a refusal leaves the store and the log as they were."""
+    from dataclasses import replace
+
+    from loom.evidence.log import log_path
+
+    result, smith = quilt(tmp_path)
+    root = result.quilt.root
+    lemma = stub(root, smith, "1.2")
+    was = read(root, lemma)
+    assert was is not None and was.empty
+    tex = {"ref": smith, "tex": read(root, smith).tex}  # type: ignore[union-attr]
+    filled = replace(was, body=LEMMA + "\n")
+    agent = Who("agent", AGENT)
+    refusals = [
+        (filled, ME, "read", tex, "only an agent"),
+        (filled, agent, "extracted", tex, "not extracted"),
+        (filled, agent, "written", tex, "not written"),
+        (filled, agent, "read", {**tex, "ref": "tq-0000-ref"}, "its own work"),
+        (replace(filled, number="9.9"), agent, "read", tex, "changes nothing else"),
+        (replace(filled, taxon="theorem"), agent, "read", tex, "changes nothing else"),
+        (replace(filled, anchors=(("a", "1"),), awaiting=("a",)), agent, "read", tex, "only loom's digest"),
+    ]
+    for node, by, how, source, match in refusals:
+        with pytest.raises(acts.ActRefused, match=match):
+            acts.give(root, node, by, how, source)
+        assert read(root, lemma) == was
+        assert not log_path(root).exists() or not replay(root).about("node", lemma, of="digested")
+    acts.give(root, filled, agent, "read", tex)
+    with pytest.raises(acts.ActRefused, match="has its text already"):
+        acts.give(root, replace(filled, body="Every widget is bounded.\n"), agent, "read", tex)
+    with pytest.raises(acts.ActRefused, match="no-such-node|has no statement"):
+        acts.give(root, replace(filled, id="tq-0ZZZ"), agent, "read", tex)
+
+
+def test_the_agent_s_library_commands_are_its_mcp_tools_and_none_records_compared() -> None:
+    from loom.ai.layout import ACTS
+    from loom.mcp.tools import schema, tools
+
+    specs = {s.name: s for s in tools()}
+    reads = ["node", "search", "uses", "rests-on", "stubs", "work"]
+    writes = ["fill", "propose", "correct", "digest"]
+    assert {f"loom_library_{n}" for n in reads + writes} <= set(specs)
+    assert {ACTS[specs[f"loom_library_{n}"].path] for n in reads} == {"read"}
+    assert {ACTS[specs[f"loom_library_{n}"].path] for n in writes} == {"write"}
+    assert not [n for n in specs if n.startswith("loom_library") and n.removeprefix("loom_library_") not in reads + writes], "no other library tool, `add` and checking a node the person's"  # fmt: skip
+    assert "as" not in schema(specs["loom_library_fill"])["properties"], "the server says who is acting"
