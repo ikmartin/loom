@@ -19,7 +19,7 @@ from pathlib import Path
 
 from loom.scan.preamble import PreambleClosure
 from loom.tex import missing, private
-from loom.tex.runner import stage_document, stop_run, tex_env
+from loom.tex.runner import fence_refused, stage_document, stop_run, tex_env
 
 #: What a quilt could carry that TeX4ht or make4ht would run or obey: build files, make4ht's own configuration, and the commands `t4ht` reads.
 CARRIED = re.compile(r"(?:\.mk4|\.make4ht|^tex4ht\.env|^\.tex4ht)$")
@@ -315,11 +315,14 @@ class HtmlResult:
     needed: list[str] = field(default_factory=list)
     note: str = ""
     said: str = ""  # what make4ht itself printed, where dvisvgm's errors are
+    refused: str = ""  # the first error, a file not found, said as the fence keeping it out (`runner.fence_refused`)
 
     @property
     def first_error(self) -> str:
         if self.needed:
             return self.note
+        if self.refused:
+            return self.refused
         return self.errors[0] if self.errors else (f"make4ht exited {self.returncode}" if self.returncode else "")
 
 
@@ -375,6 +378,7 @@ def compile_html(
             break
         res = _html_once(root, base, tex, outdir, envs=envs, engine=engine, seed=seed, timeout=timeout, started=started)
     res.fetched, res.needed, res.note = rounds.fetched, rounds.needed, rounds.note
+    res.refused = fence_refused(res.errors[0], root / base, root) if res.errors else ""
     return res
 
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import difflib
+import errno
 import hashlib
 import json
 import os
@@ -574,7 +575,7 @@ def _flush_dir(d: Path) -> None:
 def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None, mode: int | None = None) -> None:
     """Make `rel` hold `data` (None removes it), whole or not at all, refusing (`changed`) when it no longer holds `expect`.
 
-    The temp is written and flushed beside the target, the target read once more, the mode kept (`mode` for a file this makes, else the umask's), then the rename: the window in which a save can be lost is the instant between the read and the rename. A temp is removed when this fails and left by a crash, for recovery.
+    The file's folder is opened once, its real path a part at a time without following a link (`_folder_at`), and made only for a new file: the folder of a file this replaces is never made again, and a folder swapped or remade after it was opened is never written through, since the temp exists only in the folder opened. The temp is written and flushed there, the target read once more, the mode kept (`mode` for a file this makes, else the umask's), then the rename: the window in which a save can be lost is the instant between the read and the rename. A temp is removed when this fails and left by a crash, for recovery.
     """
     if data is None:
         if _read(root, rel) != expect:
@@ -583,35 +584,59 @@ def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None, mod
         _flush_dir((root / rel).parent)
         return
     target = _target(root, rel)
-    if expect is not None and not os.access(target, os.W_OK):
-        raise WriteRefused("not-writable", f"{rel} is read-only, so loom writes nothing into it; nothing was written")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}.{secrets.token_hex(6)}{TEMP}")
+    folder = _real(target.parent)
+    if folder is None:
+        raise WriteRefused("changed", f"the folder holding {rel} moved while loom was writing it; nothing was written")
+    top = Path(os.path.realpath(root))
+    anchor = top if folder.is_relative_to(top) else Path(folder.anchor)
+    name = f".{target.name}.{secrets.token_hex(6)}{TEMP}"
+    tmp = target.with_name(name)
     try:
-        try:
-            with tmp.open("wb") as fh:
-                fh.write(data)
-                _flush(fh)
-        except PermissionError as exc:
-            raise WriteRefused(
-                "not-writable",
-                f"loom cannot write {rel}: its folder does not let loom make a file beside it ({exc.strerror}); nothing was written",
-            ) from exc
-        try:
-            mode = target.stat().st_mode & 0o7777
-        except FileNotFoundError:
-            if mode is None:
-                umask = os.umask(0)
-                os.umask(umask)
-                mode = 0o666 & ~umask
-        os.chmod(tmp, mode)
-        if _read(root, rel) != expect:
-            raise WriteRefused("changed", f"{rel} changed while loom was writing it; nothing was written")
-        _rename(tmp, target)
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        raise
-    _flush_dir(target.parent)
+        with _folder_at(anchor, folder.relative_to(anchor).parts, make=expect is None, judged=False) as at:
+            if expect is not None and not os.access(target.name, os.W_OK, dir_fd=at):
+                raise WriteRefused(
+                    "not-writable", f"{rel} is read-only, so loom writes nothing into it; nothing was written"
+                )
+            try:
+                fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=at)
+            except PermissionError as exc:
+                raise WriteRefused(
+                    "not-writable",
+                    f"loom cannot write {rel}: its folder does not let loom make a file beside it ({exc.strerror}); nothing was written",
+                ) from exc
+            try:
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(data)
+                    _flush(fh)
+                    try:
+                        mode = os.stat(target.name, dir_fd=at, follow_symlinks=False).st_mode & 0o7777
+                    except FileNotFoundError:
+                        if mode is None:
+                            umask = os.umask(0)
+                            os.umask(umask)
+                            mode = 0o666 & ~umask
+                    os.fchmod(fh.fileno(), mode)
+                if _read(root, rel) != expect:
+                    raise WriteRefused("changed", f"{rel} changed while loom was writing it; nothing was written")
+                # by the path, which reaches the temp only while it still names the folder opened
+                _rename(tmp, target)
+            except Exception:
+                # a temporary that cannot be removed just now is left for the commit's own sweep, never raised over the failure
+                with contextlib.suppress(OSError):
+                    os.unlink(name, dir_fd=at)
+                raise
+            with contextlib.suppress(OSError):
+                os.fsync(at)
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise WriteRefused(
+            "changed", f"the folder holding {rel} moved while loom was writing it; nothing was written"
+        ) from exc
+    except OSError as exc:
+        if exc.errno != errno.ELOOP:
+            raise
+        raise WriteRefused(
+            "changed", f"the folder holding {rel} moved while loom was writing it; nothing was written"
+        ) from exc
 
 
 def _undo_file(root: Path, history: Path, rel: str, ab: list[str | None]) -> bool:
@@ -2130,12 +2155,17 @@ class Act:
         except Exception as exc:
             # each file already written goes back while it holds what loom wrote; one changed since is the person's
             kept = [rel for rel in reversed(done) if not _put_back(self.root, rel, self.before.get(rel), changed[rel])]
+            # a temporary that cannot be removed just now leaves the act begun, so recovery clears it (`_clear_temps_at`); the act's own failure is what is raised
+            littered = False
             for rel in changed:
                 for tmp in _temps(self.root, rel):
-                    tmp.unlink(missing_ok=True)
+                    try:
+                        tmp.unlink(missing_ok=True)
+                    except OSError:
+                        littered = True
             _prune(self.root, self.history, [rel for rel in done if self.before.get(rel) is None and rel not in kept])
             _remove_folders(self.root, made)
-            if not kept:
+            if not kept and not littered:
                 why = exc.message if isinstance(exc, WriteRefused) else f"{type(exc).__name__}: {exc}"
                 self.journal.append(self.root, {"event": "aborted", "act": self.id, "when": stamp(), "why": why})
             # else the act stays begun: recovery reports it, and its edits wait until the person has looked
