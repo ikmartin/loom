@@ -1,7 +1,15 @@
 {
  "answer": {
   "body": {
+   "definitions": [],
    "difference": null,
+   "lean": [
+    {
+     "kind": "theorem",
+     "name": "Synthetic.sy_0202",
+     "shown": null
+    }
+   ],
    "notation": [],
    "observation": "ev-2026-09-16-t7q6g3",
    "parts": null,
