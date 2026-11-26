@@ -880,7 +880,7 @@ class _Run:
     def _number_kept(self) -> None:
         """Fill the compile's display numbers into the anchors waiting in each kept item's statement and proofs, nothing else of them (`acts.numbered`).
 
-        An anchor is its label's place among its owner's in the source, and a correction may move it or relabel the node, so one is filled only where the node's display holding it is the source's display holding that label, labels aside (`_display`); a node whose anchors were given from another text of the source stays waiting.
+        An anchor is its label's place among its owner's in the source, and a correction may move it, swap it with another or relabel the node, so a node is filled only where its body holds its display anchors in the source's order, and each anchor only where the node's display holding it is the source's display holding that label, in the same place within it (`_display`); a node whose anchors were given from another text of the source stays waiting.
         """
         from loom.evidence.acts import ActRefused, numbered
         from loom.library.node import node_bytes, node_hash
@@ -889,12 +889,17 @@ class _Run:
             sid = self.statement_of(item)
             self._give_proofs(item, sid)
             confirmed: dict[str, tuple[str, str | None]] = {}
+            placed: dict[str, list[str]] = {}  # each owner's display anchors in the source's order
             for name, label in self.s.labels.items():
-                if label.owner != item.item or label.kind != "equation" or label.number is None or name in self.s.twice:
+                if label.owner != item.item or label.kind != "equation":
                     continue
                 try:
                     anchor = self.anchor(name)
                 except _Wait:
+                    placed.setdefault("", []).append(name)  # an owner it cannot place, which nothing is filled in
+                    continue
+                placed.setdefault(anchor.rsplit("-eq", 1)[0], []).append(anchor)
+                if label.number is None or name in self.s.twice:
                     continue
                 if label.proof is None:
                     rel, start, end = item.file, item.body_start, item.body_end
@@ -907,6 +912,13 @@ class _Run:
                 if n is None or not n.awaiting or not self._anchored_here(n):
                     continue
                 held = bodies.unread(n.body)
+                own = [
+                    lab
+                    for m in _LABELLED.finditer(held)
+                    if (lab := " ".join(m.group(0)[6:].strip(" {}").split())).startswith(f"{nid}-eq")
+                ]
+                if "" in placed or own != sorted(placed.get(nid, [])):
+                    continue
                 fill = {
                     a: confirmed[a][0]
                     for a in n.awaiting
@@ -1180,7 +1192,7 @@ _LABELLED = re.compile(r"\\label\s*\{[^{}]*\}")
 
 
 def _display(text: str, name: str) -> str | None:
-    """The display environment of `text` holding the one `\\label{name}`, its labels dropped and its spaces run together; None where the label is not there once or no environment holds it.
+    """The display environment of `text` holding the one `\\label{name}`, that label written `\\label{@}` and every other dropped, its spaces run together; None where the label is not there once or no environment holds it.
 
     `text` has its comments and verbatim blanked. `_number_kept` compares a kept node's display with the source's by it, so a number goes only to the display it was printed for.
     """
@@ -1199,7 +1211,14 @@ def _display(text: str, name: str) -> str | None:
             continue
         _env, start = open_.pop()
         if start < at[0] < m.start():
-            return " ".join(_LABELLED.sub(" ", text[start : m.end()]).split())
+            segment, here = text[start : m.end()], at[0] - start
+            parts, last = [], 0
+            for lab in _LABELLED.finditer(segment):
+                # the label itself kept as a mark, so which row of the display holds it counts
+                parts += [segment[last : lab.start()], "\\label{@}" if lab.start() == here else " "]
+                last = lab.end()
+            parts.append(segment[last:])
+            return " ".join("".join(parts).split())
     return None
 
 

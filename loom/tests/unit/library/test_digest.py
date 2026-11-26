@@ -572,3 +572,49 @@ def test_a_number_goes_only_to_the_display_it_was_printed_for(tmp_path: Path, pd
             assert lemma in done.numbered and after.anchors == ((f"{lemma}-eq00", "1.1"), (f"{lemma}-eq01", "1.2"))
         else:
             assert lemma not in done.numbered and after == before, (case, after)
+
+
+@pytest.mark.parametrize(
+    ("display", "printed"),
+    [
+        (
+            "\\begin{align}\n|x| &\\le 1 \\label{eq:bound} \\\\\n|y| &\\le 2 \\label{eq:two}\n\\end{align}\n",
+            "|x| ≤ 1\n(1.1)\n|y| ≤ 2\n(1.2)\n",
+        ),  # fmt: skip
+        (
+            "\\begin{equation}\\label{eq:bound}\n|x| \\le 1 .\n\\end{equation}\nand\n\\begin{equation}\\label{eq:two}\n|x| \\le 1 .\n\\end{equation}\n",
+            "|x| ≤ 1 .\n(1.1)\nand\n|x| ≤ 1 .\n(1.2)\n",
+        ),  # fmt: skip
+    ],
+    ids=["rows-of-one-align", "two-displays-alike"],
+)
+def test_two_anchors_whose_displays_read_alike_never_trade_numbers(
+    tmp_path: Path, pdf_text: list[str], display: str, printed: str
+) -> None:
+    """The numbered review's N-3: two rows of one environment, or two displays of the same text, compare alike once labels are dropped; swapping their labels leaves both waiting, since the anchor's place in its display and among the node's anchors must be the source's, while the text as extracted is numbered."""
+    source = SOURCE.replace("\\documentclass{article}\n", "\\documentclass{article}\n\\usepackage{amsmath}\n").replace(
+        "\\begin{equation}\\label{eq:bound}\n|x| \\le 1 .\n\\end{equation}\n", display
+    )
+    pdf_text[0] = pdf_text[0].replace("|x| ≤ 1 .\n(1.1)\n", printed)
+    for case in ("swapped", "as-extracted"):
+        (tmp_path / case).mkdir()
+        result, smith = quilt(tmp_path / case, source=source)
+        root = result.quilt.root
+        lemma = stub(root, smith, "1.2")
+        digest(result, smith, ["lem:bound"], surveyed(result, smith))
+        held = read(root, lemma)
+        assert held is not None and held.awaiting == (f"{lemma}-eq00", f"{lemma}-eq01"), held
+        a, b = f"\\label{{{lemma}-eq00}}", f"\\label{{{lemma}-eq01}}"
+        body = held.body.replace(a, "@").replace(b, a).replace("@", b) if case == "swapped" else held.body + "\n"
+        acts.correct(root, lemma, _hash(root, lemma), body, ME)
+        before = read(root, lemma)
+        s = survey.Survey.from_json(surveyed(result, smith).to_json())
+        s.compiled = True
+        for name, number in (("eq:bound", "1.1"), ("eq:two", "1.2")):
+            s.labels[name] = replace(s.labels[name], number=number)
+        done = digest(result, smith, ["lem:bound"], s, numbers=True)
+        after = read(root, lemma)
+        if case == "swapped":
+            assert lemma not in done.numbered and after == before, after
+        else:
+            assert after is not None and after.anchors == ((a[7:-1], "1.1"), (b[7:-1], "1.2")), after
