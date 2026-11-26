@@ -13,6 +13,8 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
+from loom.paths import LAKE_BUILD, LAKE_LOOM
+
 #: Apple's program that runs a command under a profile; macOS ships it, and no other system has it.
 SANDBOX = "/usr/bin/sandbox-exec"
 #: The one profile every fenced TeX compile runs under.
@@ -126,8 +128,8 @@ def lean_places(*, project: Path, toolchain: Path, probe: Path) -> dict[str, str
     dev = _ask(["/usr/bin/xcode-select", "-p"], {"PATH": "/usr/bin:/bin"}).strip()
     at = {
         "PROJECT": str(project),
-        "BUILD": str(project / ".lake" / "build"),
-        "OWN": str(project / ".lake" / "loom"),
+        "BUILD": str(project / LAKE_BUILD),
+        "OWN": str(project / LAKE_LOOM),
         "TOOLCHAIN": str(toolchain),
         "DEVDIR": dev,
         "PROBE": str(probe),

@@ -179,6 +179,17 @@ CLOSURES = f"{CACHE}/closures"
 #: Where `loom new`, atomize and fork write node files, relative to the document they serve.
 NODES = "nodes"
 
+#: Lake's folder in a Lake project, relative to the project: the quilt's Lean project, or a package it depends on, which is a Lake project of its own.
+LAKE = ".lake"
+#: Lake's build of a project's own modules, the same place in the quilt's project and in each package.
+LAKE_BUILD = f"{LAKE}/build"
+#: The packages a project depends on, `<name>/` each, as Lake fetched them.
+LAKE_PACKAGES = f"{LAKE}/packages"
+#: Loom's own folder in the quilt's Lean project, the HOME and TMPDIR of a check's runs, emptied by each check (`formal.check`).
+LAKE_LOOM = f"{LAKE}/loom"
+#: Held while loom checks the quilt's Lean, so two checks never share the project.
+LAKE_LOCK = f"{LAKE}/loom.lock"
+
 
 def within(folder: str, path: str) -> str:
     """`path` relative to `folder`, one of the constants here inside another: what a caller joins to a folder it was handed in `folder`'s place (a render plan's cache)."""
