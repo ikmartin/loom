@@ -386,6 +386,23 @@
 .rvw .crop-cap.gap {
 	margin-top: 16px;
 }
+.rvw .beside {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 18px;
+	align-items: start;
+}
+.rvw .beside .lean + .lean {
+	margin-top: 8px;
+}
+.rvw .att.defs td.ll {
+	width: 50%;
+}
+.rvw .att .only {
+	font-family: system-ui, sans-serif;
+	font-size: 12.5px;
+	color: var(--ink-soft);
+}
 .rvw table.att {
 	width: 100%;
 	border-collapse: collapse;

@@ -680,3 +680,58 @@ def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(r
     # its notation, its work's macros node's rows its text uses, each not yet attested in its definition
     assert [(n["part"], n["from"], n["attested"]) for n in body["notation"]] == [("Wid", "macros", False), ("diam", "macros", False)]  # fmt: skip
     assert body["statement"]["macros"]["node"] == "tq-00A1-macros" and "\\Wid" in body["statement"]["macros"]["body"]
+
+
+def test_a_row_to_attest_shows_loom_s_lean_and_each_definition_its_statement_names_beside_what_it_stands_for(
+    root: Path,
+) -> None:
+    """The Lean the person reads is the record's, as loom's check had Lean print it: the declaration stating the result, then each definition of the project its statement names, in turn, a marked one beside the result it stands for and when the person attested its Lean, an unmarked one standing for nothing, and a lemma only the proof uses left out."""
+    _lean(root, "def:cycle")
+    _attest(root, "def:cycle")
+    web = DraftWeb(scan(load_quilt(root)))
+    subject = web.subject(Here("block", _key(root, "lem:balanced")))
+    digest = "sha256:" + hashlib.sha256((root / "lean" / "A.lean").read_bytes()).hexdigest()
+
+    def decl(name: str, kind: str, role: str, names: dict | None, means: list[str], shown: str | None) -> dict:
+        return {"name": name, "kind": kind, "role": role, "names": names, "statement": digest, "axioms": [], "sorry": False, "means": means, "shown": shown}  # fmt: skip
+
+    write(
+        root,
+        "lean",
+        LOOM,
+        on=subject,
+        project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": digest},
+        files={"lean/A.lean": digest},
+        declarations=[
+            decl(
+                "F.balanced",
+                "theorem",
+                "states",
+                {"label": "lem:balanced"},
+                ["F.Z"],
+                "theorem F.balanced (w : F.W) (h : w ∈ F.Z) : w = 0",
+            ),  # fmt: skip
+            decl("F.lemma", "theorem", "supports", None, ["F.Z"], "theorem F.lemma : True"),
+            decl("F.Z", "def", "states", {"label": "def:cycle"}, ["F.W"], "def F.Z : Set F.W :=\n  F.kernel"),
+            decl("F.W", "def", "supports", None, [], "def F.W : Type :=\n  Nat → Int"),
+        ],
+        assumed=[],
+        uses=[
+            {
+                "label": "def:cycle",
+                "hash": web.closure(Here("block", _key(root, "lem:balanced")))[("label", "def:cycle")],
+            }
+        ],  # fmt: skip
+        replay={"tool": "leanchecker", "exit": 0, "output": ""},
+        ok=True,
+    )
+    manifest = {"nodes": {_key(root, "def:cycle"): {"fragment": "fragments/def-cycle.html"}}}
+    [row] = [r for r in _gather(root, manifest).of("attest") if r.fields["result"] == _key(root, "lem:balanced")]
+    body = review.body_of(row, manifest)
+    assert body["lean"] == [{"name": "F.balanced", "kind": "theorem", "shown": "theorem F.balanced (w : F.W) (h : w ∈ F.Z) : w = 0"}]  # fmt: skip
+    [z, w] = body["definitions"]
+    assert (z["name"], z["shown"]) == ("F.Z", "def F.Z : Set F.W :=\n  F.kernel")
+    attested = [r for r in replay(root).about("label", "def:cycle", of="attested")][-1]
+    assert z["stands_for"] == {"result": _key(root, "def:cycle"), "name": z["stands_for"]["name"], "statement": {"fragment": "fragments/def-cycle.html"}, "attested": attested.at}  # fmt: skip
+    assert (w["name"], w["stands_for"]) == ("F.W", None)
+    assert body["supporting"] == ["F.lemma", "F.W"]

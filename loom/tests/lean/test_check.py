@@ -101,6 +101,12 @@ def test_loom_checks_the_lean_itself_and_records_what_it_saw(quilt: Path) -> Non
     assert rows["Formal.double_even"]["role"] == "states" and rows["Formal.double_even"]["sorry"] is False
     assert rows["Formal.double_eq"]["role"] == "supports"
     assert rows["Formal.double"]["names"] == {"label": "sh-0003"}
+    # what the person reads before attesting is Lean's own print, from loom's probe: the theorem's signature, never its proof, and the definition its statement names, with its value
+    assert rows["Formal.double_even"]["shown"] == "theorem Formal.double_even (n : Nat) : Formal.double n % 2 = 0"
+    assert rows["Formal.double_even"]["means"] == ["Formal.double"] and rows["Formal.double_eq"]["means"] == [
+        "Formal.double"
+    ]
+    assert rows["Formal.double"]["shown"] == "def Formal.double (n : Nat) : Nat :=\n  fun n => n + n"
     assert set(rows["Formal.double_even"]["axioms"]) <= {"propext", "Classical.choice", "Quot.sound"}
     assert [u.get("label") for u in record.get("uses")] == ["sh-0003"]
     assert _lean(quilt, "sh-0007") == "unattested"

@@ -448,8 +448,10 @@ def _lean(raw: dict[str, Any], by: Who) -> Subject:
 
 def _declaration(d: Any) -> None:
     """One declaration of a `lean` record (`docs/specs/evidence.md` §3.4)."""
-    if not isinstance(d, dict) or set(d) != {"name", "kind", "role", "names", "statement", "axioms", "sorry"}:
-        raise ValueError("a declaration has name, kind, role, names, statement, axioms and sorry")
+    if not isinstance(d, dict) or not {"name", "kind", "role", "names", "statement", "axioms", "sorry"} <= set(d) <= {"name", "kind", "role", "names", "statement", "axioms", "sorry", "means", "shown"}:  # fmt: skip
+        raise ValueError(
+            "a declaration has name, kind, role, names, statement, axioms and sorry, and may have means and shown"
+        )
     _text(d["name"], "a declaration's name", empty=False, most=1000)
     if d["kind"] not in ("theorem", "def", "axiom", "structure", "inductive", "instance", "abbrev", "opaque"):
         raise ValueError(f"{d['kind']!r} is not a kind of declaration")
@@ -469,6 +471,10 @@ def _declaration(d: Any) -> None:
     _string_list(d["axioms"], f"{d['name']}'s axioms")
     if not isinstance(d["sorry"], bool):
         raise ValueError(f"{d['name']}'s sorry is true or false")
+    if "means" in d:
+        _string_list(d["means"], f"{d['name']}'s means")
+    if d.get("shown") is not None:
+        _text(d["shown"], f"{d['name']}'s shown", empty=False, most=20000)
 
 
 def _attested(raw: dict[str, Any], by: Who) -> Subject:

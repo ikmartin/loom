@@ -100,13 +100,23 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 	bodies['attest:lem:forest'] = {
 		observation: 'ev-2026-11-21-l3an9e',
 		statement: frag('lem-forest', p(`<b>Lemma 3.3.</b> <em>Let ${m('w')} be a balanced weighting of a quiver ${m('Q')}. Then (i) if ${m('\\operatorname{supp} w')} is a forest, then ${m('w = 0')}; and (ii) if the underlying graph of ${m('Q')} is a cycle, then ${m('w(a) = \\varepsilon(a)\\, w(a_0)')} for every arrow ${m('a')}, where ${m('\\varepsilon(a) = \\pm 1')} as ${m('a')} agrees with the orientation of ${m('a_0')} round the cycle.</em>`)),
+		// loom's own: the Lean as its check had Lean print it, and each definition the Lean's statement names beside what it stands for
+		lean: [
+			{ name: 'Weighting.IsBalanced.eq_zero_of_isForest', kind: 'theorem', shown: "theorem Weighting.IsBalanced.eq_zero_of_isForest {Q : Quiver'} {w : Q.Weighting} (hw : w.IsBalanced)\n  (hF : (Q.restrict (Function.support w)).IsForest) : w = 0" },
+			{ name: 'Weighting.IsBalanced.eq_cycleSign_mul', kind: 'theorem', shown: "theorem Weighting.IsBalanced.eq_cycleSign_mul {Q : Quiver'} {w : Q.Weighting} (hw : w.IsBalanced)\n  (hC : Q.underlying.IsCycle) (a₀ : Q.Arrow) : ∀ (a : Q.Arrow), w a = Q.cycleSign a₀ a * w a₀" }
+		],
+		definitions: [
+			{ name: 'Weighting.IsBalanced', kind: 'def', shown: "def Weighting.IsBalanced {Q : Quiver'} (w : Q.Weighting) : Prop :=\n  fun {Q} w => ∀ (v : Q.Vertex), Q.divergence w v = 0", stands_for: { result: 'def:balanced', name: 'Definition 2.3', statement: frag('d23', p(`<b>Definition 2.3.</b> A weighting ${m('w')} is <em>balanced</em> if ${m('\\partial w = 0')}.`)), attested: '2026-11-12T10:40:00Z' } },
+			{ name: "Quiver'.cycleSign", kind: 'def', shown: "def Quiver'.cycleSign (Q : Quiver') (a₀ a : Q.Arrow) : ℤ :=\n  fun Q a₀ a => if Q.sameWay a₀ a then 1 else -1", stands_for: null },
+			{ name: "Quiver'.sameWay", kind: 'def', shown: null, stands_for: null }
+		],
 		parts: [
-			{ part: '(i)', draft: String.raw`if $\operatorname{supp} w$ is a forest, then $w = 0$;`, lean: "theorem Weighting.IsBalanced.eq_zero_of_isForest\n    {Q : Quiver'} {w : Q.Weighting}\n    (hw : w.IsBalanced)\n    (hF : (Q.restrict (Function.support w)).IsForest) :\n    w = 0", reading: String.raw`If $w$ is balanced and the arrows where $w$ is not zero form a forest, then $w$ is zero on every arrow.`, by: 'Claude Code' },
-			{ part: '(ii)', draft: String.raw`if the underlying graph of $Q$ is a cycle, then $w(a) = \varepsilon(a)\, w(a_0)$ for every arrow $a$.`, lean: "theorem Weighting.IsBalanced.eq_cycleSign_mul\n    {Q : Quiver'} {w : Q.Weighting}\n    (hw : w.IsBalanced) (hC : Q.underlying.IsCycle)\n    (a₀ : Q.Arrow) :\n    ∀ a, w a = Q.cycleSign a₀ a * w a₀", reading: String.raw`If the underlying graph of $Q$ is a single cycle, then for any arrow $a_0$, each arrow carries $\pm$ the weight of $a_0$, the sign saying whether it points the same way round the cycle.`, by: 'Claude Code' }
+			{ part: '(i)', draft: String.raw`if $\operatorname{supp} w$ is a forest, then $w = 0$;`, reading: String.raw`If $w$ is balanced and the arrows where $w$ is not zero form a forest, then $w$ is zero on every arrow.`, by: 'Claude Code' },
+			{ part: '(ii)', draft: String.raw`if the underlying graph of $Q$ is a cycle, then $w(a) = \varepsilon(a)\, w(a_0)$ for every arrow $a$.`, reading: String.raw`If the underlying graph of $Q$ is a single cycle, then for any arrow $a_0$, each arrow carries $\pm$ the weight of $a_0$, the sign saying whether it points the same way round the cycle.`, by: 'Claude Code' }
 		],
 		notation: [
-			{ part: 'ε', draft: String.raw`$\varepsilon(a) = \pm 1$ as $a$ agrees with the orientation of $a_0$ round the cycle`, lean: "def Quiver'.cycleSign (Q : Quiver')\n    (a₀ a : Q.Arrow) : ℤ", reading: String.raw`$+1$ if $a$ and $a_0$ run the same way round the cycle, $-1$ otherwise.`, from: 'statement' },
-			{ part: 'supp', lean: 'Function.support w     -- Mathlib', reading: String.raw`The arrows on which $w$ is not zero, as Mathlib defines the support of a function.`, from: 'macros' }
+			{ part: 'ε', draft: String.raw`$\varepsilon(a) = \pm 1$ as $a$ agrees with the orientation of $a_0$ round the cycle`, reading: String.raw`$+1$ if $a$ and $a_0$ run the same way round the cycle, $-1$ otherwise.`, from: 'statement' },
+			{ part: 'supp', reading: String.raw`The arrows on which $w$ is not zero, as Mathlib defines the support of a function.`, from: 'macros' }
 		],
 		uses_attested: [{ result: 'def:quiver', name: 'Definition 2.1', title: 'Quiver', at: '2026-11-12T10:40:00Z' }, { result: 'def:balanced', name: 'Definition 2.3', title: 'Balanced', at: '2026-11-12T10:40:00Z' }],
 		supporting: ['Weighting.exists_leaf_of_isForest', 'Weighting.IsBalanced.restrict', "Quiver'.cycleSign_mul_self"],
@@ -115,7 +125,9 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 	bodies['attest:tq-00K5'] = {
 		observation: 'ev-2026-11-21-k5ob2q',
 		statement: frag('smith-34', p(`<b>Proposition 3.4.</b> <em>Let ${m('W')} be a widget as in Definition 2.1. Then ${m('W')} lies in a ball about the origin.</em>`)),
-		parts: [{ part: '', draft: String.raw`Let $W$ be a widget as in Definition 2.1. Then $W$ lies in a ball about the origin.`, lean: 'theorem Smith.widget_bounded (W : Widget) :\n    ∃ r, W.carrier ⊆ Metric.ball 0 r', reading: String.raw`Every widget is contained in some ball centred at the origin.`, by: 'Claude Code' }],
+		lean: [{ name: 'Smith.widget_bounded', kind: 'axiom', shown: 'axiom Smith.widget_bounded (W : Smith.Widget) : ∃ r, W.carrier ⊆ Metric.ball 0 r' }],
+		definitions: [{ name: 'Smith.Widget', kind: 'structure', shown: 'structure Smith.Widget : Type\n  | Smith.Widget.mk (carrier : Set (EuclideanSpace ℝ (Fin 2))) (compact : IsCompact carrier) : Smith.Widget', stands_for: { result: 'tq-00A4', name: 'Definition 2.1', statement: { body: String.raw`A \emph{widget} is a compact subset of the plane.` }, attested: null } }],
+		parts: [{ part: '', draft: String.raw`Let $W$ be a widget as in Definition 2.1. Then $W$ lies in a ball about the origin.`, reading: String.raw`Every widget is contained in some ball centred at the origin.`, by: 'Claude Code' }],
 		notation: [],
 		uses_attested: [],
 		supporting: []

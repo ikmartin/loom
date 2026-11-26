@@ -197,10 +197,30 @@ export const review = {
 		asWritten: (where: string) => `${where}, as you wrote it`,
 		/** Over a library result's whole statement. */
 		asPaper: (short: string) => `${short}, as the paper has it`,
+		/** Over the Lean beside the statement: loom's own print of it, from its check. */
+		leanStates: 'the Lean that states it, as Lean printed it when loom checked it',
+		/** In place of the Lean, where loom's check kept no print of it. */
+		noLean: 'Loom kept no print of this Lean; check it again to see it.',
+		/** Over the table of the Lean's definitions. */
+		definitions: 'What the Lean’s statement uses, each beside what it stands for in your draft',
+		/** Over the table of the Lean's definitions, for a library result. */
+		definitionsPaper: 'What the Lean’s statement uses, each beside what it stands for in the paper',
+		/** The definitions table's second head. */
+		stands: 'in your draft',
+		/** The definitions table's second head, for a library result. */
+		standsPaper: 'in the paper',
+		/** Where a definition's Lean is marked for a result nothing answers to now. */
+		standsNowhere: (label: string) => `marked for ${label}, which no result answers to now`,
+		/** Under a definition the Lean stands for, once the person attested its own Lean. */
+		itsLeanAttested: (date: string) => `You attested its Lean on ${date}.`,
+		/** Under a definition the Lean stands for, its own Lean not yet attested. */
+		itsLeanNot: 'You have not attested its Lean yet.',
+		/** Beside a definition that stands for no result: the Lean defines it alone. */
+		leanOnly: 'Defined in the Lean only, standing for no result, so your yes covers it.',
 		/** Over the table of parts. */
-		partByPart: (by: string) => `Part by part: what you wrote, the Lean that states it, and ${by}'s reading of the Lean`,
+		partByPart: (by: string) => `Part by part: what you wrote, and ${by}'s reading of the Lean`,
 		/** Over the table of parts of a library result. */
-		partByPaper: (by: string) => `Part by part: what the paper says, the Lean that states it, and ${by}'s reading of the Lean`,
+		partByPaper: (by: string) => `Part by part: what the paper says, and ${by}'s reading of the Lean`,
 		/** The table's heads. */
 		draft: 'your draft',
 		/** The table's first head for a library result. */
@@ -227,6 +247,8 @@ export const review = {
 		no: 'no, it differs…',
 		/** Beside the yes: what it covers. */
 		covers: (parts: string[], notation: string[], name: string) => `Yes covers ${parts.length === 1 ? 'part' : 'parts'} ${listed(parts)}${notation.length ? `, ${listed(notation)}` : ''}. ${name} then reads formalized.`,
+		/** Beside the yes, after what it covers: the Lean's own definitions, which stand for no result. */
+		coversAlone: (names: string[]) => `It covers ${listed(names)} too, which the Lean defines alone.`,
 		/** Beside the yes, for a statement in one part. */
 		coversAll: (name: string) => `Yes covers the statement as written. ${name} then reads formalized.`,
 		/** The field after "no, it differs…". */

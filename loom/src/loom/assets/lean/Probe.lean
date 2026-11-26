@@ -74,6 +74,40 @@ partial def axiomsOf (find : Name → Option ConstantInfo) (c : Name) : StateM (
   modify (·.insert c found)
   return found
 
+/-- Each declaration of the project put in `env` unchecked, what it uses first, so that Lean's printer finds them; the kernel's check of them is the replay's, never this. -/
+partial def withProject (consts : Std.HashMap Name ConstantInfo) (env : Environment) : Environment :=
+  let all : StateM (Environment × NameSet) Unit := consts.toList.forM fun (n, _) => add n
+  (all.run (env, {})).2.1
+where
+  add (n : Name) : StateM (Environment × NameSet) Unit := do
+    if (← get).2.contains n then return
+    let some c := consts[n]? | return
+    modify fun (e, s) => (e, s.insert n)
+    for u in c.getUsedConstantsAsSet do add u
+    let decl? : Option Declaration := match c with
+      | .defnInfo v => some (.defnDecl v)
+      | .thmInfo v => some (.thmDecl v)
+      | .axiomInfo v => some (.axiomDecl v)
+      | .opaqueInfo v => some (.opaqueDecl v)
+      | .inductInfo v =>
+        let types := v.all.filterMap fun i => match (consts[i]? : Option ConstantInfo) with
+          | some (.inductInfo w) => some { name := i, type := w.type, ctors := w.ctors.filterMap fun k => (consts[k]? : Option ConstantInfo).map fun ci => { name := k, type := ci.type } : InductiveType }
+          | _ => none
+        some (.inductDecl v.levelParams v.numParams types v.isUnsafe)
+      | _ => none
+    let some d := decl? | return
+    for m in d.getNames do modify fun (e, s) => (e, s.insert m)
+    if let .ok e := (← get).1.addDeclCore 0 0 d none (doCheck := false) then modify fun (_, s) => (e, s)
+
+/-- What a declaration says as Lean prints it, its kind's word first: a definition's value after its signature, a type's constructors under it, never a theorem's proof. -/
+def shown (c : ConstantInfo) : MetaM String := do
+  let head := s!"{kind c} {(← PrettyPrinter.ppSignature c.name).fmt}"
+  let indent (f : Format) : String := "\n  " ++ (toString f).replace "\n" "\n  "
+  match c with
+  | .defnInfo v => return s!"{head} :={indent (← Meta.ppExpr v.value)}"
+  | .inductInfo v => return head ++ String.join (← v.ctors.mapM fun k => return s!"\n  | {(← PrettyPrinter.ppSignature k).fmt}")
+  | _ => return head
+
 /-- A module's data, read from its .olean and the module system's parts beside it, as leanchecker reads them: its imports, and the constants of its most private part. -/
 unsafe def readModule (m : Name) : IO (Array Import × Array ConstantInfo) := do
   let file ← findOLean m
@@ -115,7 +149,8 @@ unsafe def main (args : List String) : IO UInt32 := do
   for i in outside do
     if (← findOLean i.module).toString.startsWith (own ++ "/") then
       throw <| IO.userError s!"the module {i.module} is the project's own and not one loom checks"
-  let env ← importModules outside {} (loadExts := false)
+  enableInitializersExecution
+  let env ← importModules outside {} (loadExts := true)
   let replay ← try
       discard <| env.toKernelEnv.replay constants
       pure (Json.mkObj [("exit", toJson (0 : Nat)), ("output", toJson "")])
@@ -126,6 +161,12 @@ unsafe def main (args : List String) : IO UInt32 := do
     | some (.ctorInfo v) => v.induct
     | some (.recInfo v) => v.getMajorInduct
     | _ => c
+  let printing := withProject constants env
+  let ctx : Core.Context := { fileName := "<loom>", fileMap := default, options := {}, maxHeartbeats := 0 }
+  let print (c : ConstantInfo) : IO (Option String) := do
+    try
+      return some (← ((shown c).run' {} {}).toIO' ctx { env := printing })
+    catch _ => return none
   let mut decls : Array Json := #[]
   let mut seen : NameMap NameSet := {}
   for (m, consts) in held do
@@ -143,10 +184,12 @@ unsafe def main (args : List String) : IO UInt32 := do
         seen := s
         axioms := found.toArray.qsort Name.lt
       let uses := (mentions c).map owner |>.filter fun n => n != c.name && constants.contains n
+      let said ← if internal then pure none else print c
       let means := (meaning find c).map owner |>.filter fun n => n != c.name && constants.contains n
       decls := decls.push <| Json.mkObj [
         ("name", toJson c.name.toString), ("module", toJson m.toString), ("kind", toJson (kind c)),
         ("internal", toJson internal), ("statement", toJson (statement find c)),
+        ("shown", toJson said),
         ("means", toJson ((means.foldl (·.insert ·) ({} : NameSet)).toArray.map (·.toString))),
         ("axioms", toJson (axioms.map (·.toString))), ("marker", toJson marker),
         ("uses", toJson ((uses.foldl (·.insert ·) ({} : NameSet)).toArray.map (·.toString)))]

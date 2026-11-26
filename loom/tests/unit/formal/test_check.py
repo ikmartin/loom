@@ -319,3 +319,33 @@ def test_a_statement_s_hash_covers_the_unmarked_definitions_it_names(
     first = stated("n + 0 = n", "by simp")
     assert stated("n + 0 = n", "by omega") == first
     assert stated("True", "by omega") != first
+
+
+def test_a_record_keeps_each_declaration_as_lean_printed_it_and_what_its_statement_names(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the person reads before attesting is loom's own: each declaration as the probe had Lean print it, null where the printer failed, and the declarations of the project its statement names, followed through one Lean made for another to what that one names."""
+    shown = "theorem Formal.t (n : Nat) : Formal.D n"
+    extra = [
+        {
+            **_decl("Formal.D", "def", "def D := E", []),
+            "means": ["Formal.D._aux"],
+            "shown": "def Formal.D (n : Nat) : Prop :=\n  fun n => Formal.E n",
+        },  # fmt: skip
+        {**_decl("Formal.D._aux", "def", "", [], internal=True), "means": ["Formal.E"]},
+        {**_decl("Formal.E", "def", "def E", []), "means": [], "shown": None},
+        {
+            **_decl("Formal.t", "theorem", "theorem t : D", ["Formal.D", "Formal.D._aux", "Formal.E", "Formal.p"]),
+            "means": ["Formal.D"],
+            "shown": shown,
+        },  # fmt: skip
+        {**_decl("Formal.p", "theorem", "theorem p", []), "means": [], "shown": "theorem Formal.p : True"},
+        _marker("Formal.t", "sh-0002"),
+    ]
+    _steps(monkeypatch, _probe(extra=extra))
+    check.check(quilt)
+    [record] = replay(quilt).about("label", "sh-0002", of="lean")
+    rows = {d["name"]: d for d in record.get("declarations")}
+    assert rows["Formal.t"]["shown"] == shown and rows["Formal.t"]["means"] == ["Formal.D"]
+    assert rows["Formal.D"]["means"] == ["Formal.E"] and rows["Formal.D"]["shown"].startswith("def Formal.D")
+    assert rows["Formal.E"]["shown"] is None and rows["Formal.p"]["means"] == []
