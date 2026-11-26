@@ -119,8 +119,8 @@ def _reopen(root: Path, ids: list[str], writer: tuple[str, str]) -> dict[str, An
 
 
 def _history(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
-    """`history-record` keeps a version of a document under the author's name for it, as `loom stamp DOC -m NAME`; `history-restore` puts a version back into its document (`document`, `version`), or the text an undo set aside back into its file (`path`, `text`), keeping what it replaces first. The author's acts, refused to a declared agent."""
-    from loom.history.acts import RestoreRefused, put_back, restore
+    """`history-record` keeps a version of a document under the author's name for it, as `loom stamp DOC -m NAME`; `history-restore` puts a version back into its document (`document`, `version`), a file's own version back into the file (`file`, `version`), or the text an undo set aside back into its file (`path`, `text`), keeping what it replaces first. The author's acts, refused to a declared agent."""
+    from loom.history.acts import RestoreRefused, put_back, restore, restore_file
     from loom.history.ledger import actor_for, load_history
     from loom.history.steps import slug, stamp_document
     from loom.identity import is_agent
@@ -133,6 +133,20 @@ def _history(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
             "author-only", "An agent reads and annotates; only the author records or restores a version", status=403
         )
     quilt = load_quilt(root)
+    if endpoint == "history-restore" and body.get("file") is not None:
+        path = _str(body, "file", required=True) or ""
+        version = _str(body, "version", required=True) or ""
+        try:
+            done = restore_file(root, quilt.history_dir, path, version, who)
+        except RestoreRefused as exc:
+            raise ApiError(exc.code, exc.message, status=404 if exc.code == "unknown-version" else 409) from exc
+        name = Path(done["path"]).name
+        if not done["written"]:
+            return {"ok": True, "result": f"{name} is already as “{done['label']}” holds it"}
+        return {
+            "ok": True,
+            "result": f"put {name} back as “{done['label']}” holds it; its bytes before are kept as a version",
+        }
     if endpoint == "history-restore" and body.get("path") is not None:
         path = _str(body, "path", required=True) or ""
         digest = _str(body, "text", required=True) or ""

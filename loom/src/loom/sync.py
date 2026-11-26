@@ -323,6 +323,9 @@ class Changes:
     own: int = 0
 
 
+#: What the version an update keeps first is called, a document's or a file's.
+BEFORE_UPDATE = "Before an update from Overleaf"
+
 #: What kind of place outside a block a change fell in, as the record names it and the viewer words it.
 PLACES = ("preamble", "between", "removed", "not-a-document")
 
@@ -527,26 +530,30 @@ def _reaching(root: Path, documents: list[str], paths: set[str]) -> list[str]:
 
 def _stamp(
     quilt: Quilt, result: ScanResult, documents: list[str], name: str, message: str, actor: str | None
-) -> list[str]:
-    """Stamp each document as a landmark named `<stem> <name>`; one that reaches two definitions of a key has no one text to stamp and is passed over, so what a co-author wrote never stops an update (the scan reports the two as a problem in the document)."""
+) -> tuple[list[str], set[tuple[str, str]]]:
+    """Stamp each document as a landmark named `<stem> <name>`; with the landmarks, each (file, hash) their versions hold. One that reaches two definitions of a key has no one text to stamp and is passed over, so what a co-author wrote never stops an update (the scan reports the two as a problem in the document)."""
     from loom.history.ledger import load_history
     from loom.history.steps import conflicted_in, free_name, slug, stamp_document
 
-    landmarks = []
+    landmarks: list[str] = []
+    held: set[tuple[str, str]] = set()
     for document in documents:
         if conflicted_in(result, document):
             continue
         history = load_history(quilt.history_dir)
         landmark = free_name(history, slug(f"{Path(document).stem} {name}", limit=120))
-        stamp_document(result, history, document, landmark, message.format(document=document), actor, kept_for="sync")
+        entry, _ = stamp_document(
+            result, history, document, landmark, message.format(document=document), actor, kept_for="sync"
+        )
         landmarks.append(landmark)
-    return landmarks
+        held |= set((entry.get("files") or {}).items())
+    return landmarks, held
 
 
 def incorporate(quilt: Quilt, state: SyncState, me: list[str], actor: str | None = None) -> dict[str, Any]:
     """Take the fetched revision into the mirrored folder as Overleaf holds it, stamping first each document it reaches, as one act through the door.
 
-    Each file is written with Overleaf's bytes (`theirs`), so a change made here never stops an update: it is written over, its bytes kept in the version stamped first and in the act's journal, and named in the answer. Nothing is committed and no mathematics is accepted.
+    Each file is written with Overleaf's bytes (`theirs`), so a change made here never stops an update: it is written over, its bytes kept in the version stamped first, or, for a file no such version holds as it is, in a version of the file (`history.acts.FILE_VERSION`), and named in the answer. Nothing is committed and no mathematics is accepted.
 
     Parameters
     ----------
@@ -562,7 +569,7 @@ def incorporate(quilt: Quilt, state: SyncState, me: list[str], actor: str | None
     Returns
     -------
     dict
-        `integrated`, the revision now taken in; `paths`, the files written; `landmarks`, one per stamped document; `by`, the names of the others whose changes Review lists; `own`, how many changed blocks and places it leaves out as the person's alone; `places`, each change outside a block (`{file, place, by}`); `here`, the blocks whose change was one made here, written over; `overwritten`, the files that held a change made here.
+        `integrated`, the revision now taken in; `paths`, the files written; `landmarks`, one per stamped document; `by`, the names of the others whose changes Review lists; `own`, how many changed blocks and places it leaves out as the person's alone; `places`, each change outside a block (`{file, place, by}`); `here`, the blocks whose change was one made here, written over; `overwritten`, the files that held a change made here, each kept as a version.
 
     Raises
     ------
@@ -589,6 +596,9 @@ def incorporate(quilt: Quilt, state: SyncState, me: list[str], actor: str | None
 
 def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None, me: list[str]) -> dict[str, Any]:
     """`incorporate` under the door's lock, staged into the act `w`, which stages loom's records (`writes.staging`): Overleaf's bytes against the files as read through the act, so what is written over is what the act replaces."""
+    from loom import writes
+    from loom.history.acts import FILE_VERSION
+    from loom.history.ledger import append_entry
     from loom.review_queue import fingerprint
     from loom.scan.scan import scan
     from loom.scan.source import decode
@@ -614,7 +624,18 @@ def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None, me: li
         if under(folder, gone) in result.masters and came.endswith(".tex")
     ]
     documents = _reaching(root, [state.master], set(after))
-    landmarks = _stamp(quilt, result, documents, "before update from Overleaf", "Before an update from Overleaf", who)
+    # the bytes each file written over holds now, read last before it is staged, so they are what the act replaces and its text store keeps
+    replaced = {path: writes.digest(w.read(path)) for path in overwritten}
+    landmarks, held = _stamp(quilt, result, documents, "before update from Overleaf", BEFORE_UPDATE, who)
+    # a file written over that no document's version holds as it is (a bibliography, a figure, a file no document reads) is kept as a version of its own
+    for path, digest in replaced.items():
+        if digest is not None and (path, digest) not in held:
+            append_entry(
+                quilt.history_dir,
+                FILE_VERSION,
+                {"path": path, "from": digest, "kept_for": "sync", "message": BEFORE_UPDATE},
+                who,
+            )
     for path, data in after.items():
         w.replace(path, data)
     # the quilt as the act will leave it, and as the last update left the files Overleaf changed, scanned before anything is written so the records go with the files
