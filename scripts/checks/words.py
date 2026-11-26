@@ -90,7 +90,6 @@ LEGACY = (
     "viewer/src/lib/sessions/DeleteSession.svelte",
     "viewer/src/lib/shell/AgentMark.svelte",
     "viewer/src/lib/shell/Contents.svelte",
-    "viewer/src/lib/shell/FileTree.svelte",
     "viewer/src/lib/shell/Settings.svelte",
     "viewer/src/lib/shell/column/DocumentList.svelte",
     "viewer/src/lib/shell/settings/Agents.svelte",

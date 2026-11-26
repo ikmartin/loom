@@ -1,10 +1,11 @@
 <script lang="ts">
-	// Docs as the project's tree (plan 0.22.7): the person's directories and the files the viewer shows, each directory folding as an explorer's does. A document opens as itself, with the agent's copies of it beneath its row; the tree carries no compiled PDF and no compile state (its PDF opens from the toolbar's `view PDF`), and the document's row is current while its PDF is read; the research state opens as the page it is, where it lives; an included `.tex` file opens the document that reads it, at its place (V7); every other file opens as a file. Which directories are open is the reader's, kept per quilt in this browser; the ones holding a live document start open, and the one holding what is being read opens when it is read.
+	// Docs as the project's tree (plan 0.22.7): the person's directories and the files the viewer shows, each directory folding as an explorer's does. A document opens as itself, with the agent's copies of it beneath its row; the tree carries no compiled PDF and no compile state (its PDF opens from the toolbar's `view PDF`), and the document's row is current while its PDF is read; the research state opens as the page it is, where it lives; an included `.tex` file opens the document that reads it, at its place (V7); every other file opens as a file. Which directories are open is the reader's alone, kept per quilt in this browser: the ones holding a live document start open, the rest folded, and only the reader's click turns one, so a file opened from a link or a search into a folded directory leaves it folded, its name in bold, saying what it holds.
 	import { store } from '$lib/manifest/client.svelte';
 	import { keptUnder } from '$lib/manifest/kept.svelte';
 	import type { Master, ProjectFile } from '$lib/manifest/types';
 	import { masterUrl } from '$lib/nav';
 	import { documentLabel } from '$lib/workspace/names';
+	import { docs as words } from '$lib/words/docs';
 	import { workspace } from '$lib/workspace/store.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { isAgentConfig, isAux } from './aux';
@@ -107,15 +108,11 @@
 			// a browser that stores nothing still folds for this visit
 		}
 	}
-	// what is read is shown: a directory closed earlier opens when something in it is opened
-	$effect(() => {
-		const shut = ancestors(reading).filter((d) => toggled[d] === false);
-		if (!shut.length) return;
-		toggled = { ...toggled, ...Object.fromEntries(shut.map((d) => [d, true])) };
-		save();
-	});
-	const startsOpen = $derived(new Set([...own.flatMap((o) => ancestors(o.path)), ...ancestors(reading)]));
+	// what is being read never turns a directory: it depends on the live documents alone, so the default stays put as the reader moves between files
+	const startsOpen = $derived(new Set(own.flatMap((o) => ancestors(o.path))));
 	const open = (dir: string) => toggled[dir] ?? startsOpen.has(dir);
+	/** What is being read, as a path from `dir`, where `dir` is folded over it; '' otherwise. */
+	const folded = (dir: string) => (!open(dir) && reading.startsWith(dir + '/') ? reading.slice(dir.length + 1) : '');
 	function toggle(dir: string): void {
 		toggled = { ...toggled, [dir]: !open(dir) };
 		save();
@@ -137,8 +134,9 @@
 
 {#snippet level(d: Dir)}
 	{#each d.dirs as sub (sub.path)}
+		{@const holds = folded(sub.path)}
 		<li class="dir" data-testid="docs-dir" data-path={sub.path}>
-			<button class="fold" aria-expanded={open(sub.path)} onclick={() => toggle(sub.path)}>{open(sub.path) ? '▾' : '▸'} {sub.name}</button>{#if marks}{@const a = accessOfAll(under.get(sub.path) ?? [])}{#if a}<AgentMark agents={a.agents} said={explain(a, { dir: true, statePath })} testid="access-{sub.path}" />{/if}{/if}
+			<button class="fold" class:holds={!!holds} aria-expanded={open(sub.path)} title={holds ? words.files.holds(holds) : undefined} onclick={() => toggle(sub.path)}>{open(sub.path) ? '▾' : '▸'} {sub.name}</button>{#if marks}{@const a = accessOfAll(under.get(sub.path) ?? [])}{#if a}<AgentMark agents={a.agents} said={explain(a, { dir: true, statePath })} testid="access-{sub.path}" />{/if}{/if}
 			{#if open(sub.path)}
 				<ul class="plain docs level">{@render level(sub)}</ul>
 			{/if}
@@ -149,7 +147,7 @@
 		{@const copies = f.kind === 'document' ? copiesOf(f.path) : []}
 		{#if f.path === statePath}
 			<li data-testid="docs-state" class="file state">
-				<a href={href(f)} class:here aria-current={here ? 'page' : undefined} title={f.path}>Research state</a>{@render mark(f)}
+				<a href={href(f)} class:here aria-current={here ? 'page' : undefined} title={f.path}>{words.files.researchState}</a>{@render mark(f)}
 			</li>
 		{:else}
 			<li class="file" class:document={f.kind === 'document'} class:live={ownPaths.has(f.path)} data-kind={f.kind} data-testid="docs-file">
@@ -185,6 +183,11 @@
 	.fold:hover,
 	.fold:focus-visible {
 		color: var(--ink);
+	}
+	/* a folded directory holding what is being read */
+	.fold.holds {
+		color: var(--ink);
+		font-weight: 600;
 	}
 	.file:not(.document):not(.state) > a {
 		color: var(--ink-soft);
