@@ -34,6 +34,8 @@ class MarkEntry:
     moved: bool = False
     #: `quote` is the page's words already, compared as they are rather than as TeX prints them: a Markdown file's (`render.build._marks_by_file`)
     plain: bool = False
+    #: which occurrence of `quote` in its block the mark goes on, from 0, where the same words stand earlier in it (`records.mdtext.on_page`)
+    nth: int = 0
 
 
 @dataclass
@@ -173,7 +175,7 @@ def _place(html: str, entries: list[MarkEntry]) -> str:
                     moved.add(found)
                 placed = True
         elif not _is_math(html[blk.open_start : blk.open_end]):
-            for a_, b_ in _locate(html, blk.open_end, blk.close_start, e.quote, e.plain):
+            for a_, b_ in _locate(html, blk.open_end, blk.close_start, e.quote, e.plain, e.nth):
                 spans.setdefault((a_, b_), []).append(e.ann_id)
                 if e.moved:
                     moved.add((a_, b_))
@@ -354,8 +356,8 @@ def _close_of(html: str, start: int, limit: int, name: str) -> int:
     return limit
 
 
-def _locate(html: str, a: int, b: int, quote: str, plain: bool = False) -> list[tuple[int, int]]:
-    """Where `quote` falls in html[a:b], as the ranges to wrap: one range when it is balanced markup, else one per run of text or formula. With `plain` the quote is the page's words already, compared as they are."""
+def _locate(html: str, a: int, b: int, quote: str, plain: bool = False, nth: int = 0) -> list[tuple[int, int]]:
+    """Where `quote` falls in html[a:b], as the ranges to wrap: one range when it is balanced markup, else one per run of text or formula. With `plain` the quote is the page's words already, compared as they are; `nth` takes that occurrence of it, from 0, the last there is where there are fewer."""
     target = _norm(quote if plain else project(quote)[0])
     if not target:
         return []
@@ -383,6 +385,11 @@ def _locate(html: str, a: int, b: int, quote: str, plain: bool = False) -> list[
     k = flat.find(target)
     if k < 0:
         return []
+    for _ in range(nth):
+        later = flat.find(target, k + 1)
+        if later < 0:
+            break
+        k = later
     lo = where[idx[k]][0]
     hi = where[idx[k + len(target) - 1]][1]
     lo, hi = _widen(html, lo, hi)

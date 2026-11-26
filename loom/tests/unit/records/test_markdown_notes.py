@@ -95,3 +95,19 @@ def test_a_link_quotes_words_of_the_file_and_is_a_problem_once_they_are_gone(q: 
     assert words_found(open_scan(str(q)), q, said) is True
     (q / NOTE).write_text(TEXT.replace("median order", "mean order"), encoding="utf-8")
     assert words_found(open_scan(str(q)), q, said) is False
+
+
+def test_the_mark_is_on_the_words_the_annotation_resolved_to_and_words_twice_on_the_page_are_ambiguous(q: Path) -> None:
+    (q / NOTE).write_text("Say a *b* c and then a b c here.\n\nfoo bar\n\n*foo* bar\n", encoding="utf-8")
+    ann = annotate(q, NOTE, "--quote", "and then a b c", "The second.")
+    ok("build", cwd=q)
+    page = (q / ".loom/cache/site/files" / f"{NOTE}.html").read_text(encoding="utf-8")
+    assert f'Say a <em>b</em> c <mark class="annotation" data-annotation="{ann}">and then a b c</mark> here.' in page
+    # once the paragraph reads the words twice, the mark stays on the occurrence the annotation is on
+    other = annotate(q, NOTE, "--quote", "a b c here", "The last.")
+    ok("build", cwd=q)
+    page = (q / ".loom/cache/site/files" / f"{NOTE}.html").read_text(encoding="utf-8")
+    assert f'data-annotation="{other}">a b c here</mark>' in page or f'data-annotation="{ann} {other}"' in page
+    assert f'Say <mark class="annotation" data-annotation="{other}">' not in page
+    # words the page prints twice, once as written and once through markup, are not one place
+    refused("annotate", NOTE, "--quote", "foo bar", "x", "--as", AGENT, cwd=q, code=2, match="ambiguous", env={"AI_AGENT": "1"})

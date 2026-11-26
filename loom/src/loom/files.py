@@ -429,6 +429,23 @@ def _sources(text: str, rel: str) -> Any:
     return walk
 
 
+def _on_blocks(text: str, rel: str, body: str, entries: list[MarkEntry]) -> list[MarkEntry]:
+    """Each mark entry on a Markdown file with the words its place prints on the page and which occurrence of them it is in the smallest block of `body` holding it (`records.mdtext.on_page`), so the mark goes on the words the annotation resolved to."""
+    from dataclasses import replace
+
+    from loom.records.mdtext import on_page
+
+    blocks = [
+        (int(a), int(b)) for a, b in re.findall(rf'data-src="{re.escape(html.escape(rel, quote=True))}:(\d+):(\d+)"', body)
+    ]
+    out: list[MarkEntry] = []
+    for e in entries:
+        holding = [(b - a, a) for a, b in blocks if a <= e.start and e.end <= b]
+        words, nth = on_page(text, e.start, e.end, min(holding)[1] if holding else 0)
+        out.append(replace(e, quote=words or e.quote, nth=nth))
+    return out
+
+
 def headings(body: str) -> set[str]:
     """The heading ids a drawn body carries, written by Markdown or by a file's own HTML: the places a link into it may name."""
     return set(re.findall(r'<h[1-6]\b[^>]*?\sid="([^"]+)"', body))
@@ -592,7 +609,7 @@ def attach_files(
             if kind == "markdown" and marks and marks.get(rel):
                 from loom.render.marks import place_marks
 
-                body = place_marks(body, marks[rel])
+                body = place_marks(body, _on_blocks(text, rel, body, marks[rel]))
             entry["body"] = f"{BODIES}/{rel}.html"
             files[entry["body"]] = body
         entries.append(entry)

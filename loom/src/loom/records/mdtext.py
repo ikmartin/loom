@@ -190,20 +190,35 @@ def _link_end(text: str, at: int) -> int | None:
 
 
 def find(text: str, quote: str) -> list[tuple[int, int]]:
-    """Every occurrence of `quote` in the Markdown `text`, as source spans: as written, whitespace normalised, else as the page prints the text (`printed`), the quote being the page's words already."""
+    """Every occurrence of `quote` in the Markdown `text`, as source spans: as written, whitespace normalised, and as the page prints the text (`printed`), the quote being the page's words already; words found both ways are one occurrence."""
     spans = find_written(text, quote)
-    if spans:
-        return spans
     pt, where = printed(text)
     pq = " ".join(quote.split())
     if not pq:
-        return []
-    out: list[tuple[int, int]] = []
+        return spans
     k = pt.find(pq)
     while k >= 0:
-        out.append((where[k][0], where[k + len(pq) - 1][1]))
+        a, b = where[k][0], where[k + len(pq) - 1][1]
+        # words that stand as written are found once, however the page prints them
+        if not any(a < y and x < b for x, y in spans):
+            spans.append((a, b))
         k = pt.find(pq, k + 1)
-    return out
+    return sorted(spans)
+
+
+def on_page(text: str, lo: int, hi: int, block: int) -> tuple[str, int]:
+    """The words the file's `lo`..`hi` print on its page, and which occurrence of them, from 0, they are among those printed from `block`, the start of the page's block that holds them: how a mark is put on them and not on the same words earlier in the block (`render.marks.MarkEntry.nth`)."""
+    pt, where = printed(text)
+    inside = [i for i, (a, b) in enumerate(where) if lo <= a and b <= hi]
+    if not inside:
+        return "", 0
+    words = pt[inside[0] : inside[-1] + 1].strip()
+    nth, k = 0, pt.find(words)
+    while 0 <= k < inside[0]:
+        if where[k][0] >= block:
+            nth += 1
+        k = pt.find(words, k + 1)
+    return words, nth
 
 
 def make_selector(text: str, quote: str) -> Selector:

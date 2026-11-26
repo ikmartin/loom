@@ -212,7 +212,7 @@ def _marks_by_node(result: ScanResult, records: Records, gone: list[Gone] | None
 
 
 def _marks_by_file(result: ScanResult, records: Records) -> dict[str, list[MarkEntry]]:
-    """Mark entries for the annotations on Markdown files, by path: each on its words' place in the file, with the words as the page prints them (`mdtext.printed`), placed by the blocks' `data-src` (`files.attach_files`)."""
+    """Mark entries for the annotations on Markdown files, by path: each on its words' place in the file, placed by the blocks' `data-src`, which give the words as the page prints them and which occurrence of them it is (`files.attach_files`)."""
     from loom.records.mdtext import is_markdown, printed, text_of
 
     out: dict[str, list[MarkEntry]] = {}
