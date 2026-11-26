@@ -109,6 +109,7 @@ FUNCTIONS = {
     "reshape/canon.py:plan_draft": "a temporary stage",
     "reshape/importer.py:_mirror_quilt": "a temporary stage",
     "scan/quilt.py:save_author": "the machine's own config",
+    "notes.py:set_command": "the person's own new-note commands, `notes.toml` beside the machine's own config, written whole through a temporary file beside it",
     "upgrade.py:upgrade": "the annotation types, `.loom/records/annotation-types.toml`, written only where there are none",
 }
 
