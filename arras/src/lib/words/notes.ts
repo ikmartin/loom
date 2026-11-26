@@ -72,7 +72,7 @@ export const notes = {
 		/** The section's name in the Settings panel. */
 		section: 'Notes',
 		/** Under the section's title: where each of its two settings is kept. */
-		where: "The folder is saved in this quilt's config.toml and shared with everyone who has the quilt. The command is yours alone, kept on this computer for this quilt; it never travels with the quilt, and an agent cannot set it.",
+		where: "The folder is saved in this quilt's config.toml and shared with everyone who has the quilt. The command is yours alone, kept on this computer for this quilt; it never travels with the quilt, and a new one is set only when you confirm it in a dialog loom opens outside the browser, which an agent cannot answer.",
 		/** The folder's row. */
 		dir: 'Notes folder',
 		/** What the folder does. */
@@ -89,8 +89,8 @@ export const notes = {
 		commandPlaceholder: 'emacsclient -n -e \'(my-new-note "{request}")\'',
 		/** Saving the command. */
 		save: 'Save command',
-		/** While it saves. */
-		saving: 'Saving…',
+		/** While it saves: a new or changed command waits for the person's Set in loom's own dialog, outside the browser. */
+		saving: 'Confirm in loom’s dialog…',
 		/** After it saved. */
 		saved: 'Saved for you, for this quilt.',
 		/** Where it is kept, after its path. */

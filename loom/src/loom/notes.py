@@ -78,10 +78,50 @@ def check_command(command: str) -> list[str]:
     return argv
 
 
+#: How long the confirmation stays up before it counts as Cancel, in seconds.
+CONFIRM_WAIT = 120
+
+#: The dialog that confirms a new command, given the command and the quilt as data (`on run argv`), never spliced into the script: Cancel is the default button and the answer to Escape, closing it or letting it time out.
+_DIALOG = (
+    "on run argv",
+    'set msg to "Set the command loom runs when you choose New note?" & return & return & "Quilt: " & item 2 of argv & return & return & "Command: " & item 1 of argv & return & return & "Choose Cancel unless you have just set this in loom\'s Settings."',
+    f'set answer to display dialog msg with title "loom: New note" buttons {{"Cancel", "Set"}} default button "Cancel" cancel button "Cancel" with icon caution giving up after {CONFIRM_WAIT}',
+    'if gave up of answer then return "no"',
+    "return button returned of answer",
+    "end run",
+)
+
+
+def ask_in_dialog(command: str, quilt: Path) -> bool:
+    """Whether the person chose Set in a native dialog showing the exact command and the quilt; Cancel, Escape, closing it or `CONFIRM_WAIT` passing is no.
+
+    Raises NoteRefused (`no-dialog`) where loom has no dialog to show (no `osascript`): the command is then set in `notes.toml` by hand.
+    """
+    import shutil
+
+    if shutil.which("osascript") is None:
+        raise NoteRefused(
+            "no-dialog",
+            f"loom cannot ask you outside the browser on this system; set the command in {commands_path()} yourself",
+        )
+    argv = ["osascript", *(part for line in _DIALOG for part in ("-e", line)), command, str(Path(quilt).resolve())]
+    try:
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=CONFIRM_WAIT + 30, check=False)
+    except subprocess.TimeoutExpired:
+        return False
+    except OSError as exc:
+        raise NoteRefused("no-dialog", f"loom could not show its dialog: {exc}") from exc
+    return done.returncode == 0 and done.stdout.strip() == "Set"
+
+
+#: What a new or changed command must pass before it is kept: the person's Set in a dialog the browser cannot answer (`ask_in_dialog`). Replaced by the tests, which never raise a real dialog.
+confirm = ask_in_dialog
+
+
 def set_command(root: Path, command: str, *, actor: str | None) -> None:
     """Keep `command` as the person's new-note command for the quilt at `root`; '' removes it.
 
-    Refused (`author-only`) to an agent (`identity.agents_act`): a command run at the person's click is set by the person alone. The file is written whole, by loom, closed to others.
+    Refused (`author-only`) to an agent (`identity.agents_act`): a command run at the person's click is set by the person alone. A command that is new or changed is kept only once the person chooses Set in loom's dialog (`confirm`), outside the browser, where an agent holding the server's write token cannot answer; NoteRefused (`not-confirmed`) otherwise. Removing it, or saving it unchanged, asks nothing. The file is written whole, by loom, closed to others.
     """
     from loom.identity import agents_act
 
@@ -94,6 +134,10 @@ def set_command(root: Path, command: str, *, actor: str | None) -> None:
         check_command(command)
     table = _read()
     key = _key(root)
+    if command and command != command_for(root) and not confirm(command, root):
+        raise NoteRefused(
+            "not-confirmed", "The command was not set: it is set only when you choose Set in the dialog loom opens"
+        )
     if command:
         table[key] = {**table.get(key, {}), "command": command}
     else:

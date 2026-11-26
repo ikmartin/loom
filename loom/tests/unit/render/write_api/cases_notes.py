@@ -16,9 +16,15 @@ STAND_IN = "import json, sys; from pathlib import Path; Path(sys.argv[0]).with_n
 
 
 @case("notes-settings")
-def _notes_settings(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+def _notes_settings(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from loom import notes
+
     s, q, _sid = on_demo(serve, tmp_path)
     assert succeeds(s, "notes-settings", {})["command"] == ""
+    # with no Set in loom's dialog (the suite's default answer is Cancel), a write naming no author, as one with the server's token can send, saves nothing
+    refuses(s, "notes-settings", {"command": "sh -c 'touch pwned'"}, 409, "not-confirmed", "choose Set")
+    assert succeeds(s, "notes-settings", {})["command"] == ""
+    monkeypatch.setattr(notes, "confirm", lambda command, quilt: command == "emacsclient -n {request}")
     assert (
         succeeds(s, "notes-settings", {"command": "emacsclient -n {request}", "author": WHO})["command"]
         == "emacsclient -n {request}"
@@ -35,9 +41,10 @@ def _notes_settings(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
 
 @case("new-note")
 def _new_note(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from loom import files
+    from loom import files, notes
 
     monkeypatch.setattr(files, "launch", lambda argv: None)
+    monkeypatch.setattr(notes, "confirm", lambda command, quilt: True)
     s, q, _sid = on_demo(serve, tmp_path)
     wrote = succeeds(s, "new-note", {"link": "quilt:main.tex", "title": "Main", "author": WHO})
     assert wrote["how"] == "wrote" and (q / wrote["path"]).read_text(encoding="utf-8").endswith(

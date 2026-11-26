@@ -74,7 +74,15 @@ def test_new_note_neither_holds_the_publication_lock_nor_rebuilds() -> None:
     assert {"new-note", "notes-settings"} <= set(NO_REBUILD)
 
 
-def test_the_command_runs_with_no_shell_and_is_handed_the_request_file(tmp_path: Path) -> None:
+@pytest.fixture
+def set_chosen(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Path]]:
+    """The person chooses Set in the dialog each time it is raised; what it was raised with."""
+    asked: list[tuple[str, Path]] = []
+    monkeypatch.setattr(notes, "confirm", lambda command, quilt: asked.append((command, quilt)) is None)
+    return asked
+
+
+def test_the_command_runs_with_no_shell_and_is_handed_the_request_file(tmp_path: Path, set_chosen: list) -> None:
     q = demo(tmp_path)
     command, ran = stand_in(tmp_path)
     with at_the_viewer():
@@ -94,7 +102,7 @@ def test_the_command_runs_with_no_shell_and_is_handed_the_request_file(tmp_path:
     assert not any(tmp_path.rglob("pwned*")), "nothing in the quoted words ran"
 
 
-def test_a_failing_command_says_so(tmp_path: Path) -> None:
+def test_a_failing_command_says_so(tmp_path: Path, set_chosen: list) -> None:
     q = demo(tmp_path)
     with at_the_viewer():
         notes.set_command(
@@ -108,7 +116,9 @@ def test_a_failing_command_says_so(tmp_path: Path) -> None:
             notes.run(q, notes.request(q, "quilt:main.tex"), actor=None)
 
 
-def test_the_command_is_kept_for_the_person_by_quilt_and_never_read_from_the_quilt(tmp_path: Path, home: Path) -> None:
+def test_the_command_is_kept_for_the_person_by_quilt_and_never_read_from_the_quilt(
+    tmp_path: Path, home: Path, set_chosen: list
+) -> None:
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
     a, b = demo(tmp_path / "a"), demo(tmp_path / "b")
@@ -173,3 +183,68 @@ def test_a_notes_folder_outside_the_quilt_is_not_taken(tmp_path: Path) -> None:
         f.write('\n[notes]\ndir = "../elsewhere"\n')
     config = load_quilt(q).config
     assert config.notes_dir == "notes" and any("outside the quilt" in w for w in config.warnings)
+
+
+def test_a_new_command_is_kept_only_when_the_person_chooses_set_in_the_dialog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An agent holding the server's write token can raise the dialog, never answer it: Cancel, Escape and a timeout all keep nothing."""
+    q = demo(tmp_path)
+    asked: list[tuple[str, Path]] = []
+    answer = {"set": False}
+    monkeypatch.setattr(
+        notes, "confirm", lambda command, quilt: asked.append((command, quilt)) is None and answer["set"]
+    )
+    with at_the_viewer():
+        with pytest.raises(NoteRefused, match="choose Set") as got:
+            notes.set_command(q, "sh -c 'touch pwned'", actor=None)
+        assert got.value.code == "not-confirmed" and notes.command_for(q) == ""
+        assert asked == [("sh -c 'touch pwned'", q)]
+        answer["set"] = True
+        notes.set_command(q, "ed {link}", actor=None)
+        assert notes.command_for(q) == "ed {link}"
+        # a change is asked again; saving it unchanged, or removing it, asks nothing
+        answer["set"] = False
+        with pytest.raises(NoteRefused, match="choose Set"):
+            notes.set_command(q, "ed2 {link}", actor=None)
+        assert notes.command_for(q) == "ed {link}"
+        asked.clear()
+        notes.set_command(q, "ed {link}", actor=None)
+        notes.set_command(q, "", actor=None)
+        assert asked == [] and notes.command_for(q) == ""
+
+
+def test_the_dialog_shows_the_command_and_quilt_as_data_and_only_set_is_yes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    calls: list[list[str]] = []
+    said = {"code": 0, "out": "Set\n", "hang": False}
+
+    def run(argv: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        if said["hang"]:
+            raise subprocess.TimeoutExpired(argv, 1)
+        return subprocess.CompletedProcess(argv, said["code"], said["out"], "")
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/osascript")
+    monkeypatch.setattr(subprocess, "run", run)
+    command = 'ed "{request}" & do shell script "touch pwned"'
+    assert notes.ask_in_dialog(command, tmp_path) is True
+    argv = calls[0]
+    # the command and the quilt are the script's arguments, never part of its text
+    assert argv[0] == "osascript" and argv[-2:] == [command, str(tmp_path.resolve())]
+    script = "\n".join(argv[2:-2:2])
+    assert command not in script and 'default button "Cancel"' in script and 'cancel button "Cancel"' in script
+    assert f"giving up after {notes.CONFIRM_WAIT}" in script
+    said.update(code=1, out="")  # Cancel or Escape: osascript stops with user canceled
+    assert notes.ask_in_dialog(command, tmp_path) is False
+    said.update(code=0, out="no\n")  # it gave up: the time ran out
+    assert notes.ask_in_dialog(command, tmp_path) is False
+    said.update(hang=True)  # osascript itself never answered
+    assert notes.ask_in_dialog(command, tmp_path) is False
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    with pytest.raises(NoteRefused, match="set the command in") as got:
+        notes.ask_in_dialog(command, tmp_path)
+    assert got.value.code == "no-dialog"

@@ -55,7 +55,7 @@ test("Settings › Notes: the folder is the quilt's, saved with its settings; th
 	const sent = await publisher(page, ['settings-save', 'notes-settings', 'new-note']);
 	await page.goto('/master/drafting/main');
 	await settings(page, 'notes');
-	await expect(page.getByTestId('settings-window')).toContainText('it never travels with the quilt, and an agent cannot set it');
+	await expect(page.getByTestId('settings-window')).toContainText('a dialog loom opens outside the browser, which an agent cannot answer');
 	// the command the person keeps for this quilt is read, and where it is kept said
 	const command = page.getByTestId('notes-command');
 	await expect(command).toHaveValue('emacsclient -n {request}');

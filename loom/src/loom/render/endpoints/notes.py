@@ -13,7 +13,7 @@ def _refused(exc: Exception) -> ApiError:
     from loom.writes import WriteRefused
 
     if isinstance(exc, NoteRefused):
-        status = {"author-only": 403, "bad-field": 400, "bad-command": 400}.get(exc.code, 409)
+        status = {"author-only": 403, "bad-field": 400, "bad-command": 400, "no-dialog": 501}.get(exc.code, 409)
         return ApiError(exc.code, exc.message, status=status)
     assert isinstance(exc, WriteRefused)
     return ApiError(exc.code, exc.message, status=exc.status)
@@ -36,7 +36,7 @@ def _new_note(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _notes_settings(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`notes-settings`: the person's new-note command for this quilt, saved first when `command` is sent ('' removes it); refused to an agent, which neither reads nor sets it here."""
+    """`notes-settings`: the person's new-note command for this quilt, saved first when `command` is sent ('' removes it) and, when new or changed, only once the person confirms it in loom's dialog (`notes.set_command`); refused to an agent, which neither reads nor sets it here."""
     from loom.identity import agents_act
     from loom.notes import NoteRefused, command_for, commands_path, set_command
 
