@@ -434,6 +434,23 @@ def test_the_person_s_compile_numbers_a_compared_node_and_its_check_holds(tmp_pa
     assert status == "proposed", "an agent's correction of it waits for the person, as of any node they compared"
 
 
+def test_the_persons_compile_alone_numbers_what_awaits_it(
+    tmp_path: Path, pdf_text: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`library-compile`'s job: the compile, then each anchor awaiting its number filled, and nothing else digested."""
+    from loom.library.digest import compile_work, of_work
+
+    result, smith, lemma = _waiting(tmp_path)
+    root = result.quilt.root
+    held = {n.id for n in of_work(root, smith)}
+    monkeypatch.setattr(survey, "complete", lambda *_a, **_k: _compiled(result, smith))
+    s = compile_work(root, smith, online=False)
+    assert s is not None and s.compiled
+    filled = read(root, lemma)
+    assert filled is not None and (filled.anchors, filled.awaiting) == (((f"{lemma}-eq00", "1.1"),), ())
+    assert {n.id for n in of_work(root, smith)} == held, "no result digested that was not asked for"
+
+
 def test_a_corrected_node_is_numbered_alike(tmp_path: Path, pdf_text: list[str]) -> None:
     """A node an agent corrected, and one the person corrected by hand, are kept by digest as another hand's and numbered alike: the corrected words stay, and how they were made reads through the numbers."""
     for hand in ("agent", "person"):

@@ -711,6 +711,15 @@ class NodeIndex:
         found = self.db.execute(f"SELECT {_ROW} FROM nodes WHERE id = ?", (node_id,)).fetchone()
         return _row(found) if found else None
 
+    def hashed(self, digest: str) -> str | None:
+        """The node whose file has the hash `digest`, the first by id where two files are the same bytes, or None."""
+        found = self.db.execute("SELECT id FROM nodes WHERE hash = ? ORDER BY id LIMIT 1", (digest,)).fetchone()
+        return str(found[0]) if found else None
+
+    def hashes(self) -> set[str]:
+        """Every node's hash, for the sweep's keeping of what is drawn from them."""
+        return {str(h) for (h,) in self.db.execute("SELECT hash FROM nodes")}
+
     def reference(self, citekey: str) -> Row | None:
         """The reference whose entry's key is `citekey`, compared ignoring case, or None."""
         found = self.db.execute(

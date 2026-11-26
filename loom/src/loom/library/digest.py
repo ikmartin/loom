@@ -176,7 +176,7 @@ def digest_works(
 ) -> Asked:
     """`library-digest`: the person digests works by a scope, each as what it holds allows.
 
-    From a TeX source loom writes the nodes now, from its survey (`digest`); where the work holds no PDF to confirm its numbers by and no compile has judged it, the compile is started first as a job, the person's own act (`survey.complete`), and the nodes are written when it is done. A work held only as a PDF gets one ask of an agent, which waits in Review.
+    From a TeX source loom writes the nodes now, from its survey (`digest`); where the work holds no PDF to confirm its numbers by and no compile has judged it, the compile is started first as a job, the person's own act (`survey.complete`), and the nodes are written when it is done; their word for it is kept on this machine, and covers drawing the work's nodes after (`drawn`). A work held only as a PDF gets one ask of an agent, which waits in Review.
 
     Parameters
     ----------
@@ -203,6 +203,7 @@ def digest_works(
         `no-such-ref`; `no-document` for a work named that holds neither document; `no-reviewer` where an agent must be asked and the person has no name to ask by.
     """
     from loom.evidence.asks import ask
+    from loom.library.drawn import give
     from loom.library.jobs import jobs_of
     from loom.library.reads import surveyed
     from loom.library.store import read
@@ -230,7 +231,10 @@ def digest_works(
                 out.waiting[ref] = {"": f"its source's survey is {s.state if s else 'missing'}: {s.why if s else ''}"}
                 continue
             if s.why == "no-pdf" and not s.compiled:
-                out.job = jobs_of(root).submit(partial(_compiled, root, ref, scope, chosen, online))
+                give(root, ref, work.tex)
+                out.job = jobs_of(root).submit(
+                    partial(compile_work, root, ref, online=online, scope=scope, chosen=chosen)
+                )
                 continue
             done = digest(result, ref, scoped(result, ref, s, scope, chosen), s, closure=scope == "used", numbers=True)
             out.made += len(done.made) + len(done.filled) + len(done.rewritten)
@@ -318,8 +322,29 @@ def _read(root: Path, node: str) -> Node | None:
     return read(root, node)
 
 
-def _compiled(root: Path, ref: str, scope: str, chosen: list[str] | None, online: bool) -> None:
-    """The job a digest starts for a work whose numbers nothing confirms: its source compiled, the person's own act, and then the scope digested from that survey, on a scan made under the id lock."""
+def compile_work(
+    root: Path, ref: str, *, online: bool, scope: str = "chosen", chosen: list[str] | None = None
+) -> Survey | None:
+    """The person's compile of a work's source, run as their job (`library-compile`, or `library-digest` compiling first): the source compiled (`survey.complete`), then the scope digested from that survey, with every result whose anchors await the compile's numbers (`scoped`), on a scan made under the id lock.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    ref : str
+        The work.
+    online : bool
+        Whether the compile may fetch what the source's text names and loom's TeX lacks.
+    scope : str, default 'chosen'
+        What the digest takes besides (`SCOPES`); `chosen` with nothing chosen takes only what awaits the compile.
+    chosen : list of str, optional
+        For `chosen`, as `digest_works` takes it.
+
+    Returns
+    -------
+    Survey or None
+        The survey the compile answered; None where the work holds no source with a main file.
+    """
     from loom.library import documents, survey
     from loom.library.citations import resolve
     from loom.library.gather import writing
@@ -329,19 +354,20 @@ def _compiled(root: Path, ref: str, scope: str, chosen: list[str] | None, online
 
     work = read(root, ref)
     if work is None or not work.tex:
-        return
+        return None
     src = documents.source_dir(root, work.tex)
     main = documents.main_file(src)
     if main is None:
-        return
+        return None
     pdf = documents.path_of(root, work.pdf, "pdf") if work.pdf else None
     s = survey.complete(root, work.tex, src, main.relative_to(src).as_posix(), work.pdf, pdf, online=online)
     if s.state != "ready":
-        return
+        return s
     with writing(root):
         result = scan(load_quilt(root))
         resolve(result)
         digest(result, ref, scoped(result, ref, s, scope, chosen), s, closure=scope == "used", numbers=True)
+    return s
 
 
 def used(result: ScanResult, ref: str, s: Survey) -> list[str]:

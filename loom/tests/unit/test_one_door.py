@@ -70,6 +70,7 @@ MODULES = {
     "library/log.py": "the library's log, `.loom/records/library/`",
     "library/tags.py": "the tag log, `.loom/records/tags/`",
     "library/thumbs.py": "the stored PDFs' first pages as pictures, `.loom/cache/library/thumbs/`",
+    "library/drawn.py": "a node drawn by TeX and TeX's failure to draw it, `.loom/cache/library/drawn/`, with the run folder it compiles in there; and the person's word for a work's compile, one file a quilt in the machine's own place",
     "library/survey.py": "the kept surveys, `.loom/cache/library/survey/`, and a compile's marked copy in its run folder there or a temporary one: loom's own place, as the index's and the thumbnails' (ruled 2026-11-25)",
     "evidence/log.py": "the evidence log, `.loom/records/evidence/`",
     "cli/library/add.py": "a folder's source, packed into a drop in `.loom/local/incoming/`",

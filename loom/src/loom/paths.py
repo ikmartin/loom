@@ -163,6 +163,10 @@ SURVEY_RUN = f"{LIBRARY_SURVEYS}/run"
 LIBRARY_SOURCES = f"{LIBRARY_CACHE}/sources"
 #: A stored PDF's first page, `<hex>.png`, made when first asked for (`library.thumbs`).
 LIBRARY_THUMBS = f"{LIBRARY_CACHE}/thumbs"
+#: A node drawn by TeX with its work's macros, `<node-hex>-<macros-hex>.svg`, made when first asked for once the person has given their word for its work, a `.failed` beside it where TeX could not (`library.drawn`).
+LIBRARY_DRAWN = f"{LIBRARY_CACHE}/drawn"
+#: Where a node is drawn, emptied by the next drawing.
+DRAWN_RUN = f"{LIBRARY_DRAWN}/run"
 #: What a delete took, kept on this machine for its one undo (`library.acts.delete`).
 LIBRARY_UNDO = f"{LOCAL}/library-undo"
 #: The undo of a delete under way, named from before anything is removed until its last node is (`library.acts.finish`).

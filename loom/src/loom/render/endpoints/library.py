@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -259,6 +260,32 @@ def _library_digest(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         "tasks": done.tasks,
         **({"job": done.job} if done.job else {}),
     }
+
+
+def _library_compile(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-compile` (library-views.md §3.4): the person compiles a work's source, their own act, after the viewer's sentence, numbering what awaits it (`digest.compile_work`); their word is kept on this machine and covers drawing the work's nodes after (`library.drawn`); the author's."""
+    from loom.library import ids
+    from loom.library.digest import compile_work
+    from loom.library.drawn import give
+    from loom.library.jobs import jobs_of
+    from loom.library.reads import surveyed
+    from loom.library.store import read
+    from loom.scan.quilt import load_quilt
+
+    _author(root, body)
+    ref = _str(body, "ref", required=True) or ""
+    work = read(root, ref) if ids.kind_of(ref) == ids.REFERENCE else None
+    if work is None:
+        raise ApiError("no-such-ref", f"the library has no work {ref[:80]}", status=404)
+    if not work.tex:
+        raise ApiError("no-source", f"{ref} holds no TeX source to compile", status=409)
+    give(root, ref, work.tex)
+    s = surveyed(root, work, make=False)
+    if s is not None and s.compiled:
+        return {"ok": True, "result": "compiled already"}
+    config = load_quilt(root).config
+    job = jobs_of(root).submit(partial(compile_work, root, ref, online=bool(config.online_asked and config.online)))
+    return {"ok": True, "result": "compiling", "job": job}
 
 
 def _library_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -545,6 +572,7 @@ HANDLERS: dict[str, Handler] = {
     "library-node": plain(_finishing(_library_node)),
     "library-find": plain(_finishing(_library_find)),
     "library-digest": plain(_library_digest),
+    "library-compile": plain(_library_compile),
     "library-receive": plain(_library_receive),
     "library-take": _intake,
     "library-answer": _intake,
@@ -563,8 +591,8 @@ READS: tuple[str, ...] = (
     "library-node",
     "library-find",
 )
-#: The ones the publisher does not rebuild after: the reads, a file received and not yet taken, and the upgrade, after which a waiting publisher builds as it starts (`ServeSession.bring_forward`).
-NO_REBUILD: tuple[str, ...] = (*READS, "library-receive", "library-upgrade")
+#: The ones the publisher does not rebuild after: the reads, a compile, which writes nothing before its job does, a file received and not yet taken, and the upgrade, after which a waiting publisher builds as it starts (`ServeSession.bring_forward`).
+NO_REBUILD: tuple[str, ...] = (*READS, "library-compile", "library-receive", "library-upgrade")
 #: The ones that change records alone, so the publication builds from the last scan.
 RECORD_WRITES: tuple[str, ...] = ("library-check", "library-correction-decline", "library-mention")
 #: The ones that take the library's lock themselves, once every lookup has answered, and so run outside the publication's lock: a slow service holds up no rebuild and no other write.

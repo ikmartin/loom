@@ -34,6 +34,7 @@ from loom.paths import (
     KINDS,
     LIBRARY_CACHE,
     LIBRARY_DOCUMENTS,
+    LIBRARY_DRAWN,
     LIBRARY_NODES,
     LIBRARY_PAGES,
     LIBRARY_SOURCES,
@@ -446,6 +447,7 @@ _FOLDERS = (
             LIBRARY_SOURCES,
             LIBRARY_SURVEYS,
             LIBRARY_THUMBS,
+            LIBRARY_DRAWN,
             MARKS,
             MARK_BOXES,
             REFOUND,
@@ -466,6 +468,7 @@ _NODE_INDEX = within(LIBRARY_CACHE, NODE_INDEX)
 _SOURCES = within(LIBRARY_CACHE, LIBRARY_SOURCES)
 _SURVEYS = within(LIBRARY_CACHE, LIBRARY_SURVEYS)
 _THUMBS = within(LIBRARY_CACHE, LIBRARY_THUMBS)
+_DRAWN = within(LIBRARY_CACHE, LIBRARY_DRAWN)
 _PAGES = within(LIBRARY_CACHE, LIBRARY_PAGES)
 
 
@@ -481,6 +484,7 @@ class _Rules:
         self._keys: set[str] | None = None
         self._marks: set[tuple[str, int]] | None = None
         self._pictures: set[str] | None = None
+        self._hashes: set[str] | None = None
 
     def keeps(self, rel: str, mtime: float) -> bool:
         """Whether the file at `rel`, relative to the cache and last written at `mtime`, stays."""
@@ -509,6 +513,15 @@ class _Rules:
             if first == _THUMBS:
                 # a stored PDF's first page, while the store holds the PDF
                 return (self.root / LIBRARY_DOCUMENTS / f"{PurePosixPath(name).stem}.pdf").is_file() if name else True
+            if first == _DRAWN:
+                # a node drawn by TeX, or TeX's failure to, while the store holds the node and the macros node it was drawn with; the folder a drawing compiles in, which the next empties
+                part = PurePosixPath(name).parts[0] if name else ""
+                if part in ("", "run"):
+                    return True
+                node_hex, _, macros_hex = PurePosixPath(part).stem.partition("-")
+                return f"sha256:{node_hex}" in self.hashes and (
+                    macros_hex == "none" or f"sha256:{macros_hex}" in self.hashes
+                )
             if first == _SOURCES:
                 # a stored source unpacked, while the store holds its tar
                 return (
@@ -553,6 +566,21 @@ class _Rules:
             # the rendered sides of an incorporation's preview, while its saved preview waits to be applied
             return (self.root / INCORPORATION_PREVIEWS / f"{name.split('-', 1)[0]}.json").is_file()
         return False
+
+    @property
+    def hashes(self) -> set[str]:
+        """Every node's hash, from the node index; none where the library has no nodes or the index cannot be made."""
+        if self._hashes is None:
+            from loom.library.index import IndexUnavailable, NodeIndex
+
+            self._hashes = set()
+            if (self.root / LIBRARY_NODES).is_dir():
+                try:
+                    with NodeIndex.open(self.root) as index:
+                        self._hashes = index.hashes()
+                except IndexUnavailable:
+                    pass  # a machine with no FTS5 draws nothing, so nothing drawn is kept
+        return self._hashes
 
     @property
     def documents(self) -> set[str]:
