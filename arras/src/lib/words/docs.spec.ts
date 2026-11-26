@@ -14,4 +14,8 @@ describe("a draft that has not compiled since it changed", () => {
 		expect(docs.notCompiled('main.tex', 'a command it uses is not defined', '12')).toBe('main.tex has not compiled since it last changed: a command it uses is not defined (line 12). The PDF is the one from before.');
 		expect(docs.notCompiled('main.tex', '', '')).toBe('main.tex has not compiled since it last changed. The PDF is the one from before.');
 	});
+	it('says a compile that finished with errors made a PDF anyway, with the file, the error and the line', () => {
+		expect(docs.compiledWithErrors('talk.tex', 'a command it uses is not defined', '12')).toBe('talk.tex compiled with errors: a command it uses is not defined (line 12). The PDF was made anyway and may be wrong there.');
+		expect(docs.compiledWithErrors('talk.tex', '', '')).toBe('talk.tex compiled with errors. The PDF was made anyway and may be wrong there.');
+	});
 });
