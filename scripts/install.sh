@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install or update loom, for this user only, with no password:
 #
-#   curl -LsSf https://github.com/ikmartin/loom-arras/releases/latest/download/install.sh | sh
+#   curl -LsSf https://github.com/ikmartin/loom/releases/latest/download/install.sh | sh
 #
 # It installs uv (which installs Python programs) and a Python of its own, then loom from the release's wheel, then loom's own TeX with Ghostscript and poppler beside it, then Loom in ~/Applications, and opens loom's home page. It touches no shell file and nothing outside the person's home. Running it again updates loom and keeps loom's TeX when it is current; a home page already running restarts itself and the quilts open in it.
 #
@@ -14,7 +14,7 @@
 
 set -eu
 
-RELEASE="${LOOM_RELEASE_URL:-https://github.com/ikmartin/loom-arras/releases/latest/download}"
+RELEASE="${LOOM_RELEASE_URL:-https://github.com/ikmartin/loom/releases/latest/download}"
 case "$(uname -s)" in
   Darwin) DATA="$HOME/Library/Application Support/loom" ;;
   *) DATA="${XDG_DATA_HOME:-$HOME/.local/share}/loom" ;;

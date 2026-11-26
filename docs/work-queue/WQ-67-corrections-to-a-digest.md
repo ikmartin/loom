@@ -1,6 +1,6 @@
 # WQ-67 · Corrections to a digest's results
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 

@@ -1,0 +1,189 @@
+// The viewer's own preferences: the body typeface, the body size, the line width, the theme, how a document is set, and whether an item's toolbar fades.
+// They are the viewer's and never the corpus's, so they live in this browser and are written nowhere else. Every storage access is guarded: a private window, cleared site data, or a thumbnail capture can make localStorage throw or come back empty, and the viewer must render anyway.
+
+
+export type Face = 'serif' | 'sans';
+export type Size = 's' | 'm' | 'l';
+export type Width = 'narrow' | 'mid' | 'wide';
+export type Theme = 'light' | 'dark' | 'system';
+/**
+ * How a document and its results are set. Four, named for how they are chosen rather than described, so all four fit one row of the settings panel.
+ *
+ * `p1` and `p2` are the compiled page: justified text, run-in theorem heads, numbers, and no colour on a result at all — the paper as `amsart` sets it, with the viewer's machinery intact. `p2` adds the page boundaries of the real compiled PDF, taken from the numbers loom publishes, so a divider falls exactly where a page ended. `b1` is the measured column with a taxon accent at the edge; `b2` is the wider setting a website reads, with sans heads and a tinted panel.
+ *
+ * It applies to the read view and to a node's own page alike, because a result should not change character depending on which page it is standing on.
+ */
+export type Format = 'p1' | 'p2' | 'b1' | 'b2';
+/**
+ * Where an annotation stands when it is opened (plan 0.13 §7).
+ *
+ * `floating` opens a box over the text, anchored to the mark and inset from the window; `inline` opens it in place, pushing the text apart, and is the Authoring View's alone. A click opens one and hovering never does — the box a pointer brought up could not be read without holding the pointer still, and could not be clicked into at all.
+ */
+
+const KEY = 'viewer.prefs';
+
+export interface Prefs {
+	/** The workspace's ratio: how much of the frame the left pane takes, 0.2 to 0.8, half by default since neither pane is primary. One ratio — a reader sets the shape of their screen once. */
+	divider: number;
+	/** How much of the Docs column the documents take, 0.15 to 0.85, the rest the outline beneath its divider; stored at the drop, as the pane divider is. */
+	outline: number;
+	/** How wide the left column is, in pixels, from `COLUMN_MIN` to `COLUMN_MAX`; set by dragging its edge and stored at the drop, as the outline's divider is. */
+	column: number;
+	/** Whether the left column is showing. It collapses independently of the split and goes first, because on a narrow window it is the column the reader needs least (plan 0.13 §7). */
+	panel: boolean;
+	/** The zoom a newly opened rendered page starts at, per renderer kind (`pdf` today): the last zoom given any paper, since each open paper keeps its own (`PdfView.zoom`). A second renderer gets its own entry rather than the PDF's number. */
+	zoom: Record<string, number>;
+	/** Whether each result's id and state stand in the left gutter. Off by default: a reader reading the paper does not need every key beside it, and the reader who does is working on the corpus rather than reading it. */
+	ids: boolean;
+	/** Whether a document's right margin draws an icon beside each annotation and pending change (`fragments/gutter.ts`). On by default; off, the marks in the text remain and open their popups as before. */
+	marginMarks: boolean;
+	/** Whether the project's tree leaves out LaTeX's auxiliary files (`shell/aux.ts`). On by default: a compile writes them for its own next run, and they crowd the documents they sit beside. */
+	hideAux: boolean;
+	/** Whether the project's tree leaves out the agents' config documents, which an agent's app reads its instructions from (`AGENTS.md`, `CLAUDE.md` and the like; `shell/aux.ts`). Off by default: they are the project's files, which the tree shows as they are. */
+	hideAgentConfig: boolean;
+	/** The colour a PDF mark is drawn in next, '' for the neutral; it stays until another is chosen, as a highlighter stays in the hand. */
+	face: Face;
+	/** The body size everywhere text is read, Settings' S, M or L. */
+	size: Size;
+	/** The text size, in px, a newly opened HTML draft starts at: Settings' size sets it, and so does a size given any draft in its pane; a draft already open keeps its own. */
+	textSize: number;
+	width: Width;
+	theme: Theme;
+	format: Format;
+}
+
+export const DEFAULTS: Prefs = { divider: 0.5, outline: 0.55, column: 252, panel: true, ids: false, marginMarks: true, hideAux: true, hideAgentConfig: false, zoom: { pdf: 1.4 }, face: 'serif', size: 'm', textSize: 16, width: 'mid', theme: 'system', format: 'p1' };
+
+/** Settings' sizes in px, as theme.css sets `--body-size` for each. */
+export const SIZE_PX: Record<Size, number> = { s: 13.5, m: 16, l: 19 };
+/** A draft's text size, smallest and largest, in px. */
+export const TEXT_MIN = 10;
+export const TEXT_MAX = 32;
+/** A text size as a draft keeps it: within the bounds, to the half px. */
+export const clampText = (v: number): number => Math.min(TEXT_MAX, Math.max(TEXT_MIN, Math.round(v * 2) / 2));
+
+/** The left column's narrowest and widest: below the first a document's name no longer fits beside its marks, past the second the column takes the room a pane reads in. */
+export const COLUMN_MIN = 200;
+export const COLUMN_MAX = 480;
+
+const FACES: Face[] = ['serif', 'sans'];
+const SIZES: Size[] = ['s', 'm', 'l'];
+const WIDTHS: Width[] = ['narrow', 'mid', 'wide'];
+const THEMES: Theme[] = ['light', 'dark', 'system'];
+const FORMATS: Format[] = ['p1', 'p2', 'b1', 'b2'];
+
+/** A stored blob narrowed to valid values; anything unrecognised falls back to the default for that field. */
+export function coerce(raw: unknown): Prefs {
+	const o = (raw ?? {}) as Partial<Record<keyof Prefs, unknown>>;
+	const pick = <T extends string>(v: unknown, allowed: T[], fallback: T): T =>
+		typeof v === 'string' && (allowed as string[]).includes(v) ? (v as T) : fallback;
+	const ratio = typeof o.divider === 'number' && Number.isFinite(o.divider) ? o.divider : DEFAULTS.divider;
+	const stored = typeof o.zoom === 'object' && o.zoom ? o.zoom : {};
+	const zoom: Record<string, number> = { ...DEFAULTS.zoom };
+	for (const [kind, v] of Object.entries(stored as Record<string, unknown>)) {
+		if (typeof v === 'number' && Number.isFinite(v)) zoom[kind] = Math.min(3, Math.max(0.5, v));
+	}
+	return {
+		divider: Math.min(0.8, Math.max(0.2, ratio)),
+		outline: typeof o.outline === 'number' && Number.isFinite(o.outline) ? Math.min(0.85, Math.max(0.15, o.outline)) : DEFAULTS.outline,
+		column: typeof o.column === 'number' && Number.isFinite(o.column) ? Math.round(Math.min(COLUMN_MAX, Math.max(COLUMN_MIN, o.column))) : DEFAULTS.column,
+		panel: o.panel !== false,
+		ids: o.ids === true,
+		marginMarks: o.marginMarks !== false,
+		hideAux: o.hideAux !== false,
+		hideAgentConfig: o.hideAgentConfig === true,
+		zoom,
+		face: pick(o.face, FACES, DEFAULTS.face),
+		size: pick(o.size, SIZES, DEFAULTS.size),
+		// a browser that kept no text size starts drafts at Settings' size
+		textSize: typeof o.textSize === 'number' && Number.isFinite(o.textSize) ? clampText(o.textSize) : SIZE_PX[pick(o.size, SIZES, DEFAULTS.size)],
+		width: pick(o.width, WIDTHS, DEFAULTS.width),
+		theme: pick(o.theme, THEMES, DEFAULTS.theme),
+		format: pick(o.format, FORMATS, DEFAULTS.format)
+	};
+}
+
+export function read(): Prefs {
+	try {
+		const raw = globalThis.localStorage?.getItem(KEY);
+		return coerce(raw ? JSON.parse(raw) : {});
+	} catch {
+		return { ...DEFAULTS };
+	}
+}
+
+export function write(p: Prefs): void {
+	try {
+		globalThis.localStorage?.setItem(KEY, JSON.stringify(p));
+	} catch {
+		// a viewer that cannot store its preferences still uses them for this session
+	}
+}
+
+/** The attributes the stylesheet keys off. `theme: 'system'` sets none, leaving the media query in charge. */
+export function attributes(p: Prefs): Record<string, string | null> {
+	return {
+		'data-face': p.face,
+		'data-size': p.size,
+		'data-width': p.width,
+		'data-theme': p.theme === 'system' ? null : p.theme,
+		'data-format': p.format,
+		'data-ids': p.ids ? 'yes' : null,
+		'data-margin-marks': p.marginMarks ? null : 'off',
+	};
+}
+
+class PrefsState {
+	divider = $state<number>(DEFAULTS.divider);
+	outline = $state<number>(DEFAULTS.outline);
+	column = $state<number>(DEFAULTS.column);
+	panel = $state<boolean>(DEFAULTS.panel);
+	ids = $state<boolean>(DEFAULTS.ids);
+	marginMarks = $state<boolean>(DEFAULTS.marginMarks);
+	hideAux = $state<boolean>(DEFAULTS.hideAux);
+	hideAgentConfig = $state<boolean>(DEFAULTS.hideAgentConfig);
+	zoom = $state<Record<string, number>>({ ...DEFAULTS.zoom });
+	face = $state<Face>(DEFAULTS.face);
+	size = $state<Size>(DEFAULTS.size);
+	textSize = $state<number>(DEFAULTS.textSize);
+	width = $state<Width>(DEFAULTS.width);
+	theme = $state<Theme>(DEFAULTS.theme);
+	format = $state<Format>(DEFAULTS.format);
+
+	get current(): Prefs {
+		return { divider: this.divider, outline: this.outline, column: this.column, panel: this.panel, ids: this.ids, marginMarks: this.marginMarks, hideAux: this.hideAux, hideAgentConfig: this.hideAgentConfig, zoom: this.zoom, face: this.face, size: this.size, textSize: this.textSize, width: this.width, theme: this.theme, format: this.format };
+	}
+
+	load(override?: Partial<Prefs>): void {
+		const p = coerce({ ...read(), ...(override ?? {}) });
+		this.divider = p.divider;
+		this.outline = p.outline;
+		this.column = p.column;
+		this.panel = p.panel;
+		this.ids = p.ids;
+		this.marginMarks = p.marginMarks;
+		this.hideAux = p.hideAux;
+		this.hideAgentConfig = p.hideAgentConfig;
+		this.zoom = { ...p.zoom };
+		this.face = p.face;
+		this.size = p.size;
+		this.textSize = p.textSize;
+		this.width = p.width;
+		this.theme = p.theme;
+		this.format = p.format;
+	}
+
+	/** Apply to <html> and persist. Called from one effect in the layout. */
+	apply(): void {
+		const el = globalThis.document?.documentElement;
+		if (el) {
+			for (const [k, v] of Object.entries(attributes(this.current))) {
+				if (v === null) el.removeAttribute(k);
+				else el.setAttribute(k, v);
+			}
+		}
+		write(this.current);
+	}
+}
+
+export const prefs = new PrefsState();

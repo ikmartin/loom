@@ -1,6 +1,6 @@
 # WQ-68 · UI changes to the toolbar
 
-**Repo:** arras
+**Repo:** viewer
 
 ## Trigger
 
@@ -12,7 +12,7 @@ The author decided on 2026-11-12 that changes to the pane's toolbar are workshop
 
 ## Rough design
 
-A demo of the toolbar in its states, at desktop width, revised with the author until it is right, then a plan. It starts from the interim layout the author chose on 2026-11-12, when the annotating tools were clipped off a PDF's toolbar in any pane narrower than the window: two rows, the first for what reads and **Annotate**, which shows or puts away the second, the annotation row, with the tools that write and the hint (`arras/src/lib/workspace/ItemToolbar.svelte`, `annotationRow.svelte.ts`). What is waiting for it, found while fixing the annotation engine's states after plan 0.30:
+A demo of the toolbar in its states, at desktop width, revised with the author until it is right, then a plan. It starts from the interim layout the author chose on 2026-11-12, when the annotating tools were clipped off a PDF's toolbar in any pane narrower than the window: two rows, the first for what reads and **Annotate**, which shows or puts away the second, the annotation row, with the tools that write and the hint (`viewer/src/lib/workspace/ItemToolbar.svelte`, `annotationRow.svelte.ts`). What is waiting for it, found while fixing the annotation engine's states after plan 0.30:
 
 - **A pane with its annotations turned off says so in the pane.** Today the only sign is a dot on **view ▾**; a reader who turned them off and forgot sees a clean document and no reason. A strip in the pane ("Annotations off · Turn on") was proposed and held back for want of room.
 - **Settled annotations shown or hidden** is a second mode with the same dot and no other sign.
@@ -24,7 +24,7 @@ A demo of the toolbar in its states, at desktop width, revised with the author u
 
 ## Blast radius
 
-`arras/src/lib/workspace/ItemToolbar.svelte`, `ToolbarMenu.svelte`, `ToolbarItem.svelte`, the kinds' controls (`DocumentControls`, `NodeControls`, `FileControls`, `WorkControls`), `arras/src/lib/review/AnnotateBar.svelte`, and the e2e tests that read the toolbar (`workspace.e2e.ts`, `annotations.e2e.ts`).
+`viewer/src/lib/workspace/ItemToolbar.svelte`, `ToolbarMenu.svelte`, `ToolbarItem.svelte`, the kinds' controls (`DocumentControls`, `NodeControls`, `FileControls`, `WorkControls`), `viewer/src/lib/review/AnnotateBar.svelte`, and the e2e tests that read the toolbar (`workspace.e2e.ts`, `annotations.e2e.ts`).
 
 ## Related
 

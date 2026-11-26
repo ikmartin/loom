@@ -9,7 +9,7 @@ A set is a section `## X · What it governs`; a principle is a heading `### Xn. 
 - every principle heading sits in the section of its own letter, and a set's numbers run 1, 2, 3 ... without a gap or a repeat (a retired principle keeps its heading);
 - no two sets share a letter;
 - the two generated tables are what the headings say;
-- every principle name cited in the design, the specifications, the contributor guide, AGENTS.md, CLAUDE.md, or the source or tests of loom or arras exists.
+- every principle name cited in the design, the specifications, the contributor guide, AGENTS.md, CLAUDE.md, or the source or tests of loom or its viewer exists.
 
 Exit 0 when all hold, 1 otherwise.
 """
@@ -37,9 +37,9 @@ CITING = [
     *(ROOT / "docs" / "specs").rglob("*.md"),
     ROOT / "AGENTS.md",
     ROOT / "CLAUDE.md",
-    *(ROOT / "arras" / "src").rglob("*.ts"),
-    *(ROOT / "arras" / "src").rglob("*.svelte"),
-    *(ROOT / "arras" / "tests").rglob("*.ts"),
+    *(ROOT / "viewer" / "src").rglob("*.ts"),
+    *(ROOT / "viewer" / "src").rglob("*.svelte"),
+    *(ROOT / "viewer" / "tests").rglob("*.ts"),
     *(ROOT / "loom" / "tests").rglob("*.py"),
     *(p for p in (ROOT / "loom" / "src" / "loom").rglob("*.py") if "assets" not in p.parts),
 ]

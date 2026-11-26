@@ -1,10 +1,10 @@
 # WQ-13 · Graph layout precomputed by the publisher
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
-A quilt's graph exceeds roughly 2000 nodes, or the force layout takes more than a second to settle — measurable in the viewer, and the end-to-end timing assertions already in `arras/tests/e2e/` would catch the second.
+A quilt's graph exceeds roughly 2000 nodes, or the force layout takes more than a second to settle — measurable in the viewer, and the end-to-end timing assertions already in `viewer/tests/e2e/` would catch the second.
 
 ## Why deferred
 
@@ -18,7 +18,7 @@ Distinguish from [[WQ-05]]: that decides *what* is drawn (results, or papers con
 
 ## Blast radius
 
-`loom/src/loom/render/manifest.py`, `docs/specs/manifest.md` (additive), `arras/src/lib/` graph components.
+`loom/src/loom/render/manifest.py`, `docs/specs/manifest.md` (additive), `viewer/src/lib/` graph components.
 
 ## Related
 

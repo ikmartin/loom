@@ -19,9 +19,9 @@ from tests.unit.render._serve import get
 def test_serve_static_routes(session) -> None:  # type: ignore[no-untyped-def]
     s, d = session
     status, headers, body = get(s.url)
-    assert status == 200 and b"<title>arras</title>" in body
+    assert status == 200 and b"<title>viewer</title>" in body
     status, _, body = get(s.url + "node/dm-0003")
-    assert status == 200 and b"<title>arras</title>" in body  # SPA fallback
+    assert status == 200 and b"<title>viewer</title>" in body  # SPA fallback
     status, _, body = get(s.url + "_app/x.js")
     assert status == 200 and body == b"console.log(1)"
     status, headers, body = get(s.url + "build/manifest.json")
@@ -132,19 +132,21 @@ def test_serve_no_notification_sent(session, monkeypatch: pytest.MonkeyPatch) ->
     assert calls == []
 
 
-def test_serve_refuses_a_loom_arras_bundle_that_names_no_bundle(
+def test_serve_refuses_a_loom_viewer_bundle_that_names_no_bundle(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The variable is the person's choice of viewer: serving another one instead would hide the mistake, and a suite pointed at a fresh build would pass against the old one."""
     d = tmp_path / "demo"
     ok("init", str(d), "--demo")
-    monkeypatch.setenv("LOOM_ARRAS_BUNDLE", str(tmp_path / "nowhere"))
-    refused("serve", "--port", "0", cwd=d, code=2, match=f"LOOM_ARRAS_BUNDLE={tmp_path / 'nowhere'} is not a directory")
+    monkeypatch.setenv("LOOM_VIEWER_BUNDLE", str(tmp_path / "nowhere"))
+    refused(
+        "serve", "--port", "0", cwd=d, code=2, match=f"LOOM_VIEWER_BUNDLE={tmp_path / 'nowhere'} is not a directory"
+    )
 
 
 def test_serve_exit_2_without_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     d = demo(tmp_path)
-    monkeypatch.delenv("LOOM_ARRAS_BUNDLE", raising=False)
+    monkeypatch.delenv("LOOM_VIEWER_BUNDLE", raising=False)
     monkeypatch.setattr("loom.render.serve.find_bundle", lambda: None)
     refused("serve", "--port", "0", cwd=d, code=2, match="bundle")
 

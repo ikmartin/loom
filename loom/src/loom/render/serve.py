@@ -1,6 +1,6 @@
 """`loom serve`: one loop with three jobs, watch, serve, compile.
 
-Serves the arras bundle at / (with index.html as the fallback for any path that is not a file of the bundle or an asset, so the viewer's routes work, dots in keys included) and .loom/cache/site/ at /build/, the compile folders of .loom/cache/tex/ under it at /build/tex/. The manifest carries an ETag so the viewer's poll costs nothing while unchanged, and `/_api/stream` says each time a new one is published, so a viewer that listens fetches it at once rather than on its next poll.
+Serves the viewer's bundle at / (with index.html as the fallback for any path that is not a file of the bundle or an asset, so the viewer's routes work, dots in keys included) and .loom/cache/site/ at /build/, the compile folders of .loom/cache/tex/ under it at /build/tex/. The manifest carries an ETag so the viewer's poll costs nothing while unchanged, and `/_api/stream` says each time a new one is published, so a viewer that listens fetches it at once rather than on its next poll.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from typing import Any
 from urllib.parse import unquote
 
 from loom import layout
-from loom.arras_bundle import find_bundle
 from loom.files import FILES_URL, Shown
 from loom.paths import COMPILES, LIBRARY_NODES, SERVE_JSON, SITE, TEX, TEX_ADDRESS, document_build, document_page
 from loom.presence import Watch
@@ -33,6 +32,7 @@ from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult
 from loom.tex.runner import CompileResult, compile_document, normalise_engine
 from loom.version import code_stamp
+from loom.viewer_bundle import find_bundle
 
 DEFAULT_PORT = 8791
 ASSET_SUFFIXES = {
@@ -1634,6 +1634,6 @@ class ServeSession:
 
 
 def locate_bundle() -> Path | None:
-    """The bundle to serve, or None; raises BundleEnvError for a LOOM_ARRAS_BUNDLE that names none."""
+    """The bundle to serve, or None; raises BundleEnvError for a LOOM_VIEWER_BUNDLE that names none."""
     info = find_bundle()
     return info.path if info else None

@@ -41,7 +41,7 @@ Prefixes: `change-` and `history-` belong to the safe write path; `library-` to 
 
 ## The manifest
 
-Loom writes none of these, so `manifest.md`, which says loom writes every top-level section, does not list them; the top-level ones are optional and untyped in `arras/src/lib/manifest/types.ts`.
+Loom writes none of these, so `manifest.md`, which says loom writes every top-level section, does not list them; the top-level ones are optional and untyped in `viewer/src/lib/manifest/types.ts`.
 
 | field | holds | owner |
 |---|---|---|
@@ -67,4 +67,4 @@ Code prefixes: `loom:formal-` for formalization; `loom:markdown-` for the checks
 
 ## The viewer
 
-Routes: `/activity`, what agents did; `/notes`, every note. In Review's list of proposals, the card kind `formal`; the badge `formalized`. What the column draws is under `arras/src/lib/shell/column/`, and the window's drop target is `arras/src/lib/components/DropZone.svelte`.
+Routes: `/activity`, what agents did; `/notes`, every note. In Review's list of proposals, the card kind `formal`; the badge `formalized`. What the column draws is under `viewer/src/lib/shell/column/`, and the window's drop target is `viewer/src/lib/components/DropZone.svelte`.

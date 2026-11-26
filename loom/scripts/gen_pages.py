@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write the pages TeX makes of a committed quilt's documents, for the viewer's served suites, which run with no TeX.
 
-Each document of `tests/quilts/<name>/` is compiled with `loom compile --html` on a copy, in an environment that reads nothing outside the copy and TeX Live, and the copy is built with TeX; under `arras/tests/pages/<name>/`, which `arras/tests/served-setup.ts` lays into each served copy's `.loom/cache/`, are kept each document's page directory in its compile folder (`tex/<stem>-<hash>/html/`), its aux and bibliography, which number it, and the snippets the build made (`blocks/snippets/`: digests, landmarks, comparisons), which a build with `--no-compile` reads and makes no more of. A page names the sources it was made from, so one left behind by a change to the quilt is read as edited since; a snippet is keyed by the code that makes it, so one left behind by a change to that code is never read, and its text shows as source.
+Each document of `tests/quilts/<name>/` is compiled with `loom compile --html` on a copy, in an environment that reads nothing outside the copy and TeX Live, and the copy is built with TeX; under `viewer/tests/pages/<name>/`, which `viewer/tests/served-setup.ts` lays into each served copy's `.loom/cache/`, are kept each document's page directory in its compile folder (`tex/<stem>-<hash>/html/`), its aux and bibliography, which number it, and the snippets the build made (`blocks/snippets/`: digests, landmarks, comparisons), which a build with `--no-compile` reads and makes no more of. A page names the sources it was made from, so one left behind by a change to the quilt is read as edited since; a snippet is keyed by the code that makes it, so one left behind by a change to that code is never read, and its text shows as source.
 
     python scripts/gen_pages.py [synthetic|showcase|all] [--check]
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 QUILTS = REPO / "tests" / "quilts"
-PAGES = REPO.parent / "arras" / "tests" / "pages"
+PAGES = REPO.parent / "viewer" / "tests" / "pages"
 SERVED = ("synthetic", "showcase")
 #: What a page directory keeps: the page, its stylesheet, its pictures, and what it was made from.
 KEPT = (".html", ".css", ".svg", ".png", ".jpg", ".jpeg", ".json")
@@ -51,7 +51,7 @@ def pages(name: str, out: Path) -> list[str]:
         shutil.copytree(QUILTS / name, q)
         home = Path(tmp) / "home"
         (home / ".config" / "loom").mkdir(parents=True)
-        # the author the served suites run as (arras/tests/served.ts), whose perspective decides which comparisons a build asks for
+        # the author the served suites run as (viewer/tests/served.ts), whose perspective decides which comparisons a build asks for
         author = "The synthetic quilt" if name == "synthetic" else "The loom showcase"
         (home / ".config" / "loom" / "config.toml").write_text(f'[author]\nname = "{author}"\n')
         masters = scan(load_quilt(q)).masters

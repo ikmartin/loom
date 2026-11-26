@@ -1,13 +1,13 @@
 # loom
 
-A tool for atomized mathematical development. loom turns a LaTeX paper into a *quilt*: every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref` and `\uses` you already write, acceptances are recorded with content hashes so you are told exactly what went stale and why, review comments are anchored to quoted text, and the whole is published to the [arras](https://github.com/ikmartin/arras) viewer. The paper compiles exactly as before, with plain `pdflatex`, from the same files, on Overleaf.
+A tool for atomized mathematical development. loom turns a LaTeX paper into a *quilt*: every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref` and `\uses` you already write, acceptances are recorded with content hashes so you are told exactly what went stale and why, review comments are anchored to quoted text, and the whole is published to loom's viewer. The paper compiles exactly as before, with plain `pdflatex`, from the same files, on Overleaf.
 
-Status: alpha. The design, the interface specification and the example quilts live in the [loom-arras workspace](https://github.com/ikmartin/loom-arras).
+Status: alpha. The design, the interface specification and the example quilts live in [the repository](https://github.com/ikmartin/loom) beside it.
 
 ## Install
 
 ```
-curl -LsSf https://github.com/ikmartin/loom-arras/releases/latest/download/install.sh | sh
+curl -LsSf https://github.com/ikmartin/loom/releases/latest/download/install.sh | sh
 ```
 
 installs loom with its own TeX, Ghostscript and poppler, for this user, with no password; the same line updates it. Loom uses its own TeX first; `use = "mine"` under `[tex]` in `~/.config/loom/config.toml` keeps yours, and then you need TeX Live with `latexmk`, `make4ht` and `dvisvgm`, and poppler and Ghostscript for figures and page text. git is optional.
@@ -15,13 +15,13 @@ installs loom with its own TeX, Ghostscript and poppler, for this user, with no 
 For development, from a clone:
 
 ```
-git clone https://github.com/ikmartin/loom-arras
-cd loom-arras/loom
+git clone https://github.com/ikmartin/loom
+cd loom/loom
 uv sync
 uv run loom doctor
 ```
 
-`loom doctor` names anything missing and how to get it. The arras viewer ships inside this repository as a built bundle, so `loom serve` needs no Node. An agent attaches to a quilt through `loom mcp`, and the MCP SDK it needs installs with loom.
+`loom doctor` names anything missing and how to get it. The viewer ships inside this repository as a built bundle, so `loom serve` needs no Node. An agent attaches to a quilt through `loom mcp`, and the MCP SDK it needs installs with loom.
 
 ## Quickstart
 
@@ -58,16 +58,16 @@ An ordinary LaTeX project loom can read: the documents you are working on, laid 
 - `src/loom/scan/` reads a quilt (files, macros, environments, sections, ids, edges, lint, hashing).
 - `src/loom/records/` holds the acceptance ledger, snapshots, annotations, and the computed states.
 - `src/loom/history/` holds the history: the ledger of steps, the versions of every key, and the checks over them.
-- `src/loom/render/` publishes the build directory arras reads (fragments, manifest, threads, serve).
+- `src/loom/render/` publishes the build directory the viewer reads (fragments, manifest, threads, serve).
 - `src/loom/tex/` wraps latexmk, reads `.aux` files, builds bundles, and runs the identity test.
 - `src/loom/reshape/` is `id`, `import`, `atomize`, `linearize` and `deloom`; `src/loom/library/` is the library, its nodes, the intake and gathering; `src/loom/ai/` is the AI layer.
-- `src/loom/assets/` ships `loom.sty`, the demo quilt, the AI-layer templates, and the built arras viewer.
+- `src/loom/assets/` ships `loom.sty`, the demo quilt, the AI-layer templates, and the built viewer.
 
 ## Development
 
 - `uv run pytest` runs the unit tier against a fake TeX toolchain in seconds; `uv run pytest -m tex` runs the TeX tier against your real TeX Live in an isolated environment; `LOOM_PAPER_FIXTURES=... uv run pytest -m paper` runs the paper tier.
 - `uv run ruff check src tests` and `uv run mypy` must be clean.
-- `scripts/vendor_arras.py ../arras/build` refreshes the vendored viewer after building arras; `scripts/gen_cli_reference.py` regenerates `docs/cli-reference.md` (a test fails when it is stale).
+- `scripts/vendor_viewer.py ../viewer/build` refreshes the vendored viewer after building it; `scripts/gen_cli_reference.py` regenerates `docs/cli-reference.md` (a test fails when it is stale).
 - `docs/RELEASE.md` is the release checklist; it stops before publishing.
 
 ## License

@@ -1,4 +1,4 @@
-"""Nothing loom or arras ships may be ignored by git or left untracked: CI checks out only what is committed, so such a file passes every local run and is missing everywhere else."""
+"""Nothing loom or its viewer ships may be ignored by git or left untracked: CI checks out only what is committed, so such a file passes every local run and is missing everywhere else."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 WORKSPACE = Path(__file__).resolve().parents[3]
-SHIPPED = ("loom/src", "loom/tests/quilts", "arras/src")
+SHIPPED = ("loom/src", "loom/tests/quilts", "viewer/src")
 
 
 def _git(*args: str) -> list[str]:

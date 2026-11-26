@@ -1,0 +1,71 @@
+// A document as it is drawn: inclusions expanded in place, headings and equation references that lead where they say, and formulas that neither scroll nor drop out of the accessibility tree. Each test is named for the rule it holds.
+import { expect, test } from '@playwright/test';
+
+test('a document expands its inclusions in place', async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	await expect(page.locator('.fragment .included[data-file="drafting/nodes/sy-0002.tex"]')).toBeVisible();
+	await expect(page.locator('.fragment section[data-id="sy-0300"] h2')).toBeVisible();
+});
+
+test('a heading links to its node, and an equation reference lands on the equation', async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	const head = page.locator('#sy-0200 > h1');
+	await expect(head.locator('a.heading-link')).toHaveAttribute('href', '/node/sy-0200');
+	const eq = page.locator('a.ref-eq').first();
+	await expect(eq).toHaveAttribute('href', /^#sy-\d+/);
+	const target = await eq.getAttribute('href');
+	await expect(page.locator(target!)).toHaveCount(1);
+});
+
+test('a display block never scrolls vertically', async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	await page.waitForSelector('.fragment .math.display');
+	// every formula typeset, since MathJax's output is what could overflow
+	await page.waitForFunction(() => document.querySelectorAll('.fragment .math:not(:has(mjx-container))').length === 0);
+	const r = await page.evaluate(() => {
+		const els = [...document.querySelectorAll('.fragment .math.display')] as HTMLElement[];
+		return {
+			n: els.length,
+			// naming one axis makes the browser compute the other to `auto`, and MathJax's hidden accessibility copy is taller than the box, which grew a scrollbar beside a formula that fitted
+			axes: [...new Set(els.map((el) => getComputedStyle(el).overflowY))],
+			bars: els.filter((el) => el.offsetWidth > el.clientWidth).length
+		};
+	});
+	expect(r.n).toBeGreaterThan(0);
+	expect(r.axes).toEqual(['hidden']);
+	expect(r.bars).toBe(0);
+});
+
+test('a formula is never skipped off screen, so typesetting a document again never moves the reader', async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	await page.waitForSelector('.fragment mjx-container mjx-assistive-mml');
+	const cv = await page.evaluate(() => {
+		const c = document.querySelector('.fragment mjx-container')!;
+		return [c, c.querySelector(':scope > svg')!, c.querySelector('mjx-assistive-mml')!].map((e) => getComputedStyle(e).contentVisibility);
+	});
+	// a skipped formula is laid out at a placeholder size, and growing to its real one above the browser's scroll anchor carried a reader to the end of the page
+	expect(cv).toEqual(['visible', 'visible', 'visible']);
+});
+
+test('a document drawn again leaves nothing of the old one in MathJax', async ({ page }) => {
+	// MathJax lists every formula it typesets and each entry holds its output, so a document replaced stayed alive whole until the viewer forgot the entries whose output had left the page (plan 0.19.1)
+	const typeset = () => page.waitForFunction(() => !!document.querySelector('.fragment mjx-container') && document.querySelectorAll('.fragment .math:not(:has(mjx-container))').length === 0);
+	await page.goto('/master/drafting/main');
+	await typeset();
+	// away to a page that typesets nothing of its own, the graph, reached from the local graph, and back
+	for (let i = 0; i < 2; i++) {
+		// the local graph stays open once opened, so the second time round it is open already
+		const open = page.getByTestId('local-graph-open');
+		if (await open.isVisible()) await open.click();
+		await page.getByTestId('local-graph-expand').click();
+		await page.getByTestId('open-graph').click();
+		await page.locator('svg g.node').first().waitFor();
+		await page.getByTestId('primary-docs').click();
+		await typeset();
+	}
+	const { gone, shown } = await page.evaluate(() => {
+		const list = [...(window.MathJax as { startup: { document: { math: Iterable<{ start: { node: Node } }> } } }).startup.document.math];
+		return { gone: list.filter((m) => !m.start.node.isConnected).length, shown: document.querySelectorAll('.fragment mjx-container').length };
+	});
+	expect(gone, `${gone} entries for formulas no longer on the page, ${shown} on it`).toBeLessThan(shown);
+});

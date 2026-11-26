@@ -1,0 +1,237 @@
+<script lang="ts">
+	// A document (plan 0.13.3 D1–D4): a master or a landmark rendered as a document in a measured column, with each result's id and state in the left gutter behind Show ids. No chrome of its own: its controls are drawn by the pane, and only while the pane is focused.
+	// The gutters use the site generator's algebra, so a corpus page and a note page are laid out alike; the environment's taxon accent stands on the boundary between the left gutter and the text.
+	import { untrack } from 'svelte';
+	import { guttersHost } from './gutters';
+	import { store } from '$lib/manifest/client.svelte';
+	import DraftActions from '$lib/components/DraftActions.svelte';
+	import ReviewPanel from '$lib/review/ReviewPanel.svelte';
+	import Prose from '$lib/math/Prose.svelte';
+	import Fragment from '$lib/fragments/Fragment.svelte';
+	import FragmentNotes from '$lib/fragments/FragmentNotes.svelte';
+	import SideHost from '$lib/review/SideHost.svelte';
+	import LeanMarks from '$lib/views/docs/LeanMarks.svelte';
+	import NotCompiled from '$lib/views/docs/NotCompiled.svelte';
+	import { anchorId, keyUrl } from '$lib/nav';
+	import { followNodes, followReading, reading, sectionIds } from '$lib/reading.svelte';
+	import { contentsOf } from '$lib/contents';
+	import LocalGraphPanel from '$lib/graph/LocalGraphPanel.svelte';
+	import Icon from '$lib/components/Icon.svelte';
+	import NoDrafts from '$lib/components/NoDrafts.svelte';
+	import { typeName } from '$lib/review/annotationTypes';
+	import { slotsFor } from '$lib/fragments/slots';
+	import { isLandmark, itemKey, pathFor, type Item } from '../item';
+	import { documentState, getPane } from '../state.svelte';
+	import { workspace } from '../store.svelte';
+
+	let { item }: { item: Item } = $props();
+
+	const m = $derived(store.manifest!);
+	const pane = getPane();
+	const landmark = $derived(isLandmark(m, item.id));
+	const master = $derived(landmark ? undefined : m.masters.find((x) => x.path === item.id));
+	const doc = $derived(landmark ? m.canon?.find((c) => c.path === item.id) : undefined);
+	const reviewKey = $derived(item.params?.review ?? '');
+	const causeIndex = $derived(Number(item.params?.cause ?? '0'));
+	const reviewCause = $derived(m.keys[reviewKey]?.acceptance?.causes?.[causeIndex]);
+	const hasComparison = $derived(!!(reviewKey && m.keys[reviewKey]));
+	/** Closing a comparison is the document without it, at the same place. */
+	const plain = $derived(pathFor(m, { kind: 'document', id: item.id, ...(item.anchor ? { anchor: item.anchor } : {}) }));
+
+	const slots = slotsFor(() => m, () => master?.path ?? null);
+	const notes = $derived(documentState(item).notes);
+	/** Only the current item moves the panel's position bar and the local graph: two documents open at once would otherwise fight over one. */
+	const current = $derived(workspace.current ? itemKey(workspace.current) === itemKey(item) : false);
+	/** A context on screen already draws a local graph; a second one beside it, of whatever result the reading position has reached, would be one graph twice, and of a different result. */
+	const contextShown = $derived([0, 1].some((i) => workspace.active(i)?.kind === 'context'));
+
+	// The local graph follows the result being read. Whether it is open is a per-reader convenience kept in this browser, so a reader who put it away is not shown it on every document.
+	const GRAPH_KEY = 'viewer.localGraph';
+	let docRoot = $state<HTMLElement | null>(null);
+	let graphOpen = $state(false);
+	$effect(() => {
+		try {
+			graphOpen = localStorage.getItem(GRAPH_KEY) === 'open';
+		} catch {
+			graphOpen = false;
+		}
+	});
+	function setGraph(open: boolean) {
+		graphOpen = open;
+		try {
+			localStorage.setItem(GRAPH_KEY, open ? 'open' : 'closed');
+		} catch {
+			// the panel still opens for this visit
+		}
+	}
+	$effect(() => {
+		const root = docRoot;
+		// untracked: the follower reads the position it writes, and an effect that subscribed to that would restart itself on every result the reader passes
+		if (root && current && master) return untrack(() => followNodes(root, pane.scroller()));
+	});
+	// from the moment the document is current, not once it is typeset: the first entry is marked before any scrolling, and the ids are looked up in the pane as they arrive
+	$effect(() => {
+		const scroller = pane.scroller();
+		if (!scroller || !current || !master) return;
+		const ids = sectionIds(contentsOf(m, master.path));
+		return untrack(() => followReading(scroller, ids, scroller));
+	});
+	$effect(() => {
+		const root = docRoot;
+		const citation = reviewCause?.kind === 'dependency-changed' ? reviewCause.citation : null;
+		const target = citation && root ? root.querySelector(`[id="${CSS.escape(citation)}"]`) : null;
+		if (!target) return;
+		target.classList.add('review-citation-target');
+		return () => target.classList.remove('review-citation-target');
+	});
+	// a result this document holds is a jump within it; anything else opens its page
+	const hrefFor = (id: string) => (master && m.nodes[id]?.reached_by.includes(master.path) ? '#' + anchorId(id) : keyUrl(m, id));
+
+	/** The draft's column, which the Lean marks are laid over, and a count raised each time the draft is drawn, which lays them again. */
+	let columnBox = $state<HTMLElement | null>(null);
+	let drawnSeq = $state(0);
+
+	function fill(root: HTMLElement) {
+		drawnSeq++;
+		docRoot = root;
+	}
+
+	/** Put a floating panel against the pane rather than inside what scrolls, so it stays put while the document moves under it. */
+	function onPane(node: HTMLElement) {
+		(pane.frame() ?? node.parentElement)?.appendChild(node);
+		return { destroy: () => node.remove() };
+	}
+</script>
+
+<!-- the draft's own text size, which its fragments read as the body size -->
+<div class="page item document" style:--body-size="{documentState(item).size}px" data-text-size={documentState(item).size}>
+	{#if landmark && doc}
+		<div class="gutters-host" use:guttersHost>
+			<div class="gutters" class:beside={!!notes.side}>
+				<div class="column">
+					<Fragment path={doc.fragment} macroSet={doc.macros ?? ''} standalone anchor={item.anchor ?? ''} jump={item.seq} note={item.note} quote={item.quote} arrival={documentState(item).arrival} />
+				</div>
+			</div>
+		</div>
+	{:else if master?.closed || master?.context_only}
+		<div class="gutters-host" use:guttersHost><div class="gutters" class:beside={!!notes.side}><div class="column">
+		{#if master.closed}<p>Closed agent document · saved {master.closed_at?.slice(0, 10)}. Its text and annotations are preserved.</p><DraftActions {master}/>{:else}<p>Paper context saved when this section draft was created or refreshed.</p>{/if}
+		<Fragment path={master.fragment} macroSet={master.macros ?? ''} standalone anchor={item.anchor ?? ''} jump={item.seq}/>
+		{#each master.closed_annotations ?? [] as a}<section id={a.id}><h3>{a.author.id} · {a.created}</h3><p>{typeName(m, a)} · {a.status}</p>{#if a.quote}<blockquote>{a.quote}</blockquote>{/if}<Prose html={a.body_html} macroSet={master.macros}/></section>{/each}
+		</div></div></div>
+	{:else if !m.masters.length}
+		<h1>Read</h1>
+		<NoDrafts what="documents to read" />
+	{:else if !master}
+		<h1>Unknown document</h1>
+		<p class="muted">No document in this corpus is <code>{item.id}</code>.</p>
+	{:else}
+		{#if master.copy_of}<DraftActions {master}/>{/if}
+		<div class:with-comparison={hasComparison} class="review-layout">
+			<div class="gutters-host" use:guttersHost>
+				<div class="gutters" class:beside={!!notes.side}>
+					<div class="column" bind:this={columnBox}>
+						<NotCompiled path={master.path} />
+						<LeanMarks doc={master.path} host={columnBox} drawn={drawnSeq} />
+						<FragmentNotes {notes} fallback={master.path} in={master.path}>
+							{#key hasComparison}<Fragment
+									path={master.fragment}
+									master={master.path}
+									macroSet={master.macros ?? ''}
+                                    isolatedMacros={!!master.macros}
+									headingLinks
+									annotations={notes}
+									margins={!hasComparison}
+									comments={slots}
+									anchor={item.anchor ?? ''}
+									jump={item.seq}
+									note={item.note}
+									quote={item.quote}
+									arrival={documentState(item).arrival}
+									onmounted={fill}
+								/>{/key}
+						</FragmentNotes>
+					</div>
+				</div>
+			</div>
+			{#if reviewKey && m.keys[reviewKey] && master}
+				<aside class="review-comparison" data-testid="review-panel" aria-label="Why this block waits for review">
+					<ReviewPanel {reviewKey} {causeIndex} master={master.path} {plain} causeHref={(i) => pathFor(m, { ...item, params: { ...item.params, cause: String(i) } })} />
+				</aside>
+			{/if}
+		</div>
+		<SideHost {notes} />
+		{#if current && !contextShown && !notes.side}
+			{#if graphOpen && reading.node}
+				<div class="local-float" use:onPane>
+					<LocalGraphPanel center={reading.node} master={master.path} {hrefFor} height={240} onclose={() => setGraph(false)} />
+				</div>
+			{:else if !graphOpen}
+				<button class="local-toggle" use:onPane onclick={() => setGraph(true)} aria-label="Show the local graph" title="local graph" data-testid="local-graph-open"><Icon name="graph" size={16} /></button>
+			{/if}
+		{/if}
+	{/if}
+</div>
+
+<style>
+	/* the pane's head is the top edge of the view: the document runs flush to it, full width, no gutter above */
+	.item.document {
+		padding-top: 0;
+		padding-left: 0;
+		padding-right: 0;
+	}
+	.review-comparison {
+		position: sticky;
+		top: var(--gap-wide);
+		max-height: calc(100% - 2 * var(--gap-wide));
+		min-width: 0;
+		overflow-y: auto;
+		overflow-x: hidden;
+		padding: var(--gap-tight);
+		background: var(--sheet);
+		border: 1px solid var(--rule);
+	}
+	.review-layout.with-comparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 390px); gap: var(--gap-wide); align-items: start; padding-right: var(--gap-wide); }
+	.review-layout > .gutters-host { min-width: 0; }
+	.review-comparison :global(header) { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: var(--gap-tight); }
+	.review-comparison :global(mark.review-changed) { background: var(--state-stale-wash); color: inherit; }
+	.review-comparison :global(.math.review-changed) { background-color: var(--state-stale-wash); outline: 2px solid var(--state-stale); }
+	.review-comparison :global(.review-change-point) { border-left: 2px solid var(--state-stale); }
+	.review-comparison :global(.math.display) { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+	.review-layout :global(.review-citation-target) { background: var(--state-stale-wash); outline: 2px solid var(--state-stale); outline-offset: 2px; scroll-margin-top: var(--gap-wide); }
+	/* Against the pane, not the window: in two panes a float at the window's corner would stand over the other one. */
+	.local-float {
+		position: absolute;
+		right: var(--gap-wide);
+		bottom: var(--gap-wide);
+		z-index: 30;
+		width: 300px;
+		padding: var(--gap-tight);
+		background: var(--sheet);
+		border: 1px solid var(--rule);
+		border-radius: var(--rad-card);
+		box-shadow: 0 6px 20px rgb(0 0 0 / 12%);
+	}
+	.local-toggle {
+		position: absolute;
+		right: var(--gap-wide);
+		bottom: var(--gap-wide);
+		z-index: 30;
+		width: 34px;
+		height: 34px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--ink-soft);
+		background: var(--sheet);
+		border: 1px solid var(--rule);
+		border-radius: 999px;
+		box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+		cursor: pointer;
+	}
+	.local-toggle:hover {
+		color: var(--link);
+		border-color: var(--link);
+	}
+	@container pane (max-width: 900px) { .review-layout.with-comparison { display: flex; flex-direction: column; padding-right: 0; } .review-layout > .gutters-host, .review-comparison { width: 100%; } .review-comparison { position: static; max-height: none; } }
+</style>

@@ -22,30 +22,30 @@ Several triggers below are numbers loom already prints. That is the property to 
 |---|---|---|---|
 | [WQ-08](WQ-08-nest-sectioning-classes.md) | `\nest` under `\part` and class-specific sectioning | loom | a fixture uses memoir, KOMA-Script or `\part` |
 | [WQ-10](WQ-10-locator-normalization.md) | locator normalization beyond English | loom | a citation's locator in another language that the postnote matcher does not match |
-| [WQ-13](WQ-13-graph-at-scale.md) | graph layout precomputed by the publisher | loom, arras | a quilt's graph exceeds roughly 2000 nodes, or the force layout takes over a second |
+| [WQ-13](WQ-13-graph-at-scale.md) | graph layout precomputed by the publisher | loom, viewer | a quilt's graph exceeds roughly 2000 nodes, or the force layout takes over a second |
 | [WQ-16](WQ-16-overleaf.md) | the Overleaf procedure | — | cutting the first tagged release |
 | [WQ-17](WQ-17-external-user.md) | acceptance criterion 10: an external user | — | someone outside the project has a paper to bring in |
-| [WQ-19](WQ-19-publishing.md) | publishing to PyPI and npm | loom, arras | the author decides to release |
+| [WQ-19](WQ-19-publishing.md) | publishing to PyPI and npm | loom, viewer | the author decides to release |
 | [WQ-22](WQ-22-extraction-node-model.md) | digest extraction shares the node model | loom | extraction and atomize disagree about what a node is |
-| [WQ-28](WQ-28-annotated-export.md) | an annotated view exported as LaTeX and PDF | loom, arras | a review has to reach someone who cannot run arras |
-| [WQ-29](WQ-29-node-manager.md) | the node manager: fork from history, retire, merge, rename | loom, arras | ten or more forks, or a fork or rename by hand goes wrong once |
+| [WQ-28](WQ-28-annotated-export.md) | an annotated view exported as LaTeX and PDF | loom, viewer | a review has to reach someone who cannot run the viewer |
+| [WQ-29](WQ-29-node-manager.md) | the node manager: fork from history, retire, merge, rename | loom, viewer | ten or more forks, or a fork or rename by hand goes wrong once |
 | [WQ-30](WQ-30-history-gc.md) | `loom history gc` | loom | `.loom/records/history/texts/` exceeds a few thousand files or fifty megabytes |
-| [WQ-36](WQ-36-annotation-bodies-beside-the-manifest.md) | annotation bodies and PDF geometry beside the manifest rather than inside it | loom, arras | a manifest crosses a few megabytes because of annotation prose, or one megabyte because of the rectangles and strokes of annotations on PDF pages |
+| [WQ-36](WQ-36-annotation-bodies-beside-the-manifest.md) | annotation bodies and PDF geometry beside the manifest rather than inside it | loom, viewer | a manifest crosses a few megabytes because of annotation prose, or one megabyte because of the rectangles and strokes of annotations on PDF pages |
 | [WQ-39](WQ-39-mechanical-version-check.md) | a mechanical version check for extracted digests | loom | the author cites, with a locator, a result in a flagged digest that the cited version numbers differently |
 | [WQ-42](WQ-42-the-gradient-with-orientation-held.md) | measure the gradient with orientation held fixed | — | before the layer is claimed to make later questions cheaper outside the project |
-| [WQ-51](WQ-51-macro-sets-leak.md) | a view's macros stay its own: no page-wide `\renewcommand` leaking between documents | arras | a real quilt has two macro sets defining one name differently |
-| [WQ-52](WQ-52-simultaneous-agent-copies.md) | agent documents of overlapping scopes | loom, arras | a person wants two agent versions of one section side by side and `loom draft --ai` refuses the second as overlapping |
-| [WQ-54](WQ-54-annotations-follow-adopted-text.md) | open annotations follow the text a person adopts | loom, arras | an adoption leaves an open annotation on the copy, and the person files it again on the adopted node |
+| [WQ-51](WQ-51-macro-sets-leak.md) | a view's macros stay its own: no page-wide `\renewcommand` leaking between documents | viewer | a real quilt has two macro sets defining one name differently |
+| [WQ-52](WQ-52-simultaneous-agent-copies.md) | agent documents of overlapping scopes | loom, viewer | a person wants two agent versions of one section side by side and `loom draft --ai` refuses the second as overlapping |
+| [WQ-54](WQ-54-annotations-follow-adopted-text.md) | open annotations follow the text a person adopts | loom, viewer | an adoption leaves an open annotation on the copy, and the person files it again on the adopted node |
 | [WQ-56](WQ-56-figures-cold-build.md) | a cold build's snippets: a preamble format, and the cited papers' statements TeX refuses | loom | `scripts/bench` shows a cold build over three minutes once cold builds are common, or a cited paper's statement shows as its source with TeX's complaint |
-| [WQ-58](WQ-58-lazy-digests.md) | lazy digests: the extraction as an index, a result a node only when used | loom, arras | after a persistent token cache and a linear `unmatched_cites`, lint or status still spends over about 1 s on digest nodes no document reaches |
-| [WQ-60](WQ-60-annotation-anchors.md) | annotation anchors: a mark placed from the source span, re-anchoring, where a mark landed | loom, arras | an annotation drawn at block level that its writer meant for a phrase, or one deleted and filed again only to move its quote |
-| [WQ-64](WQ-64-html-file-reach.md) | what an HTML file in a quilt can reach: loom's records, lasting state, and a list of open boxes in loom itself | loom, arras | an HTML file the author keeps opening has to export loom's records by hand or loses state they wanted kept, or a second quilt builds a list of open boxes |
+| [WQ-58](WQ-58-lazy-digests.md) | lazy digests: the extraction as an index, a result a node only when used | loom, viewer | after a persistent token cache and a linear `unmatched_cites`, lint or status still spends over about 1 s on digest nodes no document reaches |
+| [WQ-60](WQ-60-annotation-anchors.md) | annotation anchors: a mark placed from the source span, re-anchoring, where a mark landed | loom, viewer | an annotation drawn at block level that its writer meant for a phrase, or one deleted and filed again only to move its quote |
+| [WQ-64](WQ-64-html-file-reach.md) | what an HTML file in a quilt can reach: loom's records, lasting state, and a list of open boxes in loom itself | loom, viewer | an HTML file the author keeps opening has to export loom's records by hand or loses state they wanted kept, or a second quilt builds a list of open boxes |
 | [WQ-66](WQ-66-documents-that-need-shell-escape.md) | a document that needs shell escape or its own build rules, approved per machine | loom | a document the author wants loom to compile needs `-shell-escape`, or a build rule only a `latexmkrc` can add |
-| [WQ-67](WQ-67-corrections-to-a-digest.md) | corrections to a digest's results: annotations while a digest stays read-only, or edits the author keeps | loom, arras | the author asks for an ingest correction to be made in a digest, or edits a digest's file by hand to make one |
-| [WQ-68](WQ-68-toolbar-changes.md) | UI changes to the toolbar, workshopped through a demo the author revises | arras | the author starts the toolbar workshop, or a control that must be visible at rest has no room on a pane's toolbar at the width two panes leave it |
-| [WQ-70](WQ-70-note-renderer-hook.md) | a hook that renders notes in other formats, org among them | loom, arras | a person asks to read a non-Markdown note rendered rather than as text |
-| [WQ-71](WQ-71-wikilinks.md) | `[[wikilinks]]` between Markdown notes | loom, arras | a quilt holds Markdown notes that link each other with `[[Note name]]` |
-| [WQ-72](WQ-72-quote-links-into-markdown.md) | a note's link carrying quoted words into a Markdown file | loom, arras | T033 (annotations on Markdown) has landed |
+| [WQ-67](WQ-67-corrections-to-a-digest.md) | corrections to a digest's results: annotations while a digest stays read-only, or edits the author keeps | loom, viewer | the author asks for an ingest correction to be made in a digest, or edits a digest's file by hand to make one |
+| [WQ-68](WQ-68-toolbar-changes.md) | UI changes to the toolbar, workshopped through a demo the author revises | viewer | the author starts the toolbar workshop, or a control that must be visible at rest has no room on a pane's toolbar at the width two panes leave it |
+| [WQ-70](WQ-70-note-renderer-hook.md) | a hook that renders notes in other formats, org among them | loom, viewer | a person asks to read a non-Markdown note rendered rather than as text |
+| [WQ-71](WQ-71-wikilinks.md) | `[[wikilinks]]` between Markdown notes | loom, viewer | a quilt holds Markdown notes that link each other with `[[Note name]]` |
+| [WQ-72](WQ-72-quote-links-into-markdown.md) | a note's link carrying quoted words into a Markdown file | loom, viewer | T033 (annotations on Markdown) has landed |
 
 Twenty-eight active, seventeen slots of headroom.
 

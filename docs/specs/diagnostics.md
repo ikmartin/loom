@@ -73,7 +73,7 @@ Source and structure:
 - `loom:unexpected-proof` (info, model): a proof attached to a block explicitly classified as definition, assumption, or open claim.
 - `loom:missing-proof` (warning, model): a local-proof block with no proof and no `\incomplete`, regardless of TeX style.
 
-Arras displays this diagnostic on the block with a link to its row in a working-document Review tab. It does not change the recorded acceptance state.
+The viewer displays this diagnostic on the block with a link to its row in a working-document Review tab. It does not change the recorded acceptance state.
 - `loom:needs-classification` (warning, model): a live theorem-like block whose basis is unknown or whose signals conflict; add `% !LOOM basis:` inside it after deciding what the block asserts.
 - `loom:misplaced-basis` (warning, model): a `% !LOOM basis:` directive outside a theorem-like block; it cannot classify a whole file or a proof.
 - `loom:equation-in-proof-referenced` (warning, model): another node references an equation inside this node's proof.
@@ -137,7 +137,7 @@ Links in Markdown files: each link and image source of a shown Markdown file, re
 
 Interface:
 
-- `arras:manifest-unreadable` (error, fixed): emitted by the viewer when `manifest.json` is not valid JSON.
+- `viewer:manifest-unreadable` (error, fixed): emitted by the viewer when `manifest.json` is not valid JSON.
 
 It is listed here so the code is reserved, and it is in the **viewer's** namespace rather than a publisher's: a diagnostic a viewer raises about a manifest is the viewer speaking, and naming it `loom:` said that loom had complained about something loom never saw. So loom emits `loom:interface-version` (error, internal, fixed) nowhere; it stays registered so that the code is never reused.
 

@@ -4,11 +4,11 @@ Applied to every tagged release of loom (`docs/contributing.md`). Publishing is 
 
 1. `uv run pytest` (unit tier on the fake toolchain), `uv run pytest -m tex` (real TeX Live, isolated), and `LOOM_PAPER_FIXTURES=... uv run pytest -m paper` (the arXiv fixtures) all green; `uv run ruff check src tests`, `uv run mypy`, and `uv run python scripts/gen_cli_reference.py --check` clean.
 2. `loom check` passes on the demo (`loom init /tmp/demo --demo`), on the synthetic quilt (`tests/quilts/synthetic`), and locally on the Manolache and ACGS imports (`demos/man12`, `demos/acgs` in the workspace).
-3. The conformance fixture regenerated (`docs/specs/tools/refresh-fixture.sh` in the workspace) and both vendored snapshots (`tests/fixture/` here, `tests/fixture/` in arras) equal to it; `docs/specs/tools/validate-dialect.py` passes on every fragment.
-4. The viewer's reference figures regenerated (`npm run shots` in `arras/`, which writes `docs/design/figures/*.png` in the workspace) whenever the chrome changed since the last release, and the new images committed.
-5. The arras bundle re-vendored from an arras build at the commit the release notes name (`uv run python scripts/vendor_arras.py ../arras/build`), and `loom doctor` reports that bundle as current.
+3. The conformance fixture regenerated (`docs/specs/tools/refresh-fixture.sh` in the workspace) and both vendored snapshots (`tests/fixture/` here, `tests/fixture/` in the viewer) equal to it; `docs/specs/tools/validate-dialect.py` passes on every fragment.
+4. The viewer's reference figures regenerated (`npm run shots` in `viewer/`, which writes `docs/design/figures/*.png` in the workspace) whenever the chrome changed since the last release, and the new images committed.
+5. The viewer's bundle re-vendored from a viewer build at the commit the release notes name (`uv run python scripts/vendor_viewer.py ../viewer/build`), and `loom doctor` reports that bundle as current.
 6. Every command in `README.md` and `docs/cli-reference.md` exists in this release (`scripts/gen_cli_reference.py --check`).
 7. The Overleaf manual test on the demo quilt: zip its `drafting/`, the main document's own directory, which holds everything the document reads; upload; set `main.tex` as the main document; compile; compare with the local PDF; record Overleaf's TeX Live version and the result in the release notes.
 8. `loom doctor` on a clean machine with a fresh TeX Live, following `README.md` literally (`pipx install git+...` and the `uv sync` path).
-9. Versions: bump `src/loom/version.py` and `pyproject.toml` together (semantic versioning, independent of arras); tag `vX.Y.Z`.
+9. Versions: bump `src/loom/version.py` and `pyproject.toml` together (semantic versioning, independent of the viewer's); tag `vX.Y.Z`.
 10. Publish: `uv build && uv publish` for `loomtex`. This step is the maintainer's; nothing before it publishes anything.

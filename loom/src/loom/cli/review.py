@@ -1820,7 +1820,7 @@ def _facts(e: dict[str, Any]) -> list[str]:
     return facts
 
 
-#: A stale acceptance's causes in the viewer's words (`arras/src/lib/review/evidence.ts`), so the two say one thing (K7).
+#: A stale acceptance's causes in the viewer's words (`viewer/src/lib/review/evidence.ts`), so the two say one thing (K7).
 CAUSE_WORDS = {
     "own-text-changed": "edited",
     "transcription-changed": "its transcription changed",

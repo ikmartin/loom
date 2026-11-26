@@ -1,6 +1,6 @@
 # WQ-72 · Quote links into Markdown files
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
@@ -16,7 +16,7 @@ A note's `quilt:` link carries the quoted words to a document place, a project P
 
 ## Blast radius
 
-The link resolver (`loom/src/loom/links.py`, `arras/src/lib/workspace/links.ts`), `docs/specs/dialect.md`, the Markdown file item.
+The link resolver (`loom/src/loom/links.py`, `viewer/src/lib/workspace/links.ts`), `docs/specs/dialect.md`, the Markdown file item.
 
 ## Related
 
