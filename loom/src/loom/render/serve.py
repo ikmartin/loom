@@ -1247,6 +1247,8 @@ class ServeSession:
         #: When the last sweep began, by the clock; None before the first.
         self._swept_at: float | None = None
         self.httpd: ThreadingHTTPServer | None = None
+        #: Whether this server asked the library's listener for its quilt (`library.listen`), which `stop` gives back once.
+        self._listening = False
         self.frames: ThreadingHTTPServer | None = None
         self.shown = Shown.of(quilt)
         self.watcher: Watcher | None = None
@@ -1536,6 +1538,11 @@ class ServeSession:
         except OSError as exc:
             raise CannotBind(self.port, exc.strerror or str(exc)) from exc
         self.port = self.httpd.server_address[1]
+        from loom.library.listen import listen
+
+        # the library's index then reads again only the node files heard changing, and scans them all after a gap
+        listen(self.quilt.root)
+        self._listening = True
         from loom.machine import quilt_id
 
         handler.token = write_serve_json(self.quilt.root, self.port)  # type: ignore[attr-defined]
@@ -1714,6 +1721,11 @@ class ServeSession:
         forget_token(self.quilt.root)
         if self.held:
             self.held.close()
+        if self._listening:
+            from loom.library.listen import unlisten
+
+            self._listening = False
+            unlisten(self.quilt.root)
         from loom.render.api import forget_place
 
         forget_place(self.quilt.root)
