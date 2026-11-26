@@ -360,7 +360,7 @@ The **id** is minted once and is the address; the **title** is the author's and 
 
 ## 9.2 Suggested edits
 
-**[decided]** `suggested_edits` holds every suggested edit, oldest first, by an id of `e-`, the day it was written and a token, as an annotation's is (plan 0.30, decision 10). An edit replaces old words with new on a key; it is a record of its own, and an annotation carries no proposed text.
+**[decided]** `suggested_edits` holds every suggested edit, oldest first, by an id of `e-`, the day it was written and a token, as an annotation's is (plan 0.30, decision 10). An edit replaces old words with new on a key, or in a Markdown file the viewer draws (T033), whose `target.key` is the file's path with its suffix and whose `quote`, never null there, is words of the file as written, standing once in it; it is a record of its own, and an annotation carries no proposed text. In `changes` such an edit's `path` is the file and its `key` null, and its `with_html` and `new_html` are its new words drawn as Markdown, as the file's page draws them.
 
 ```json
 "e-2026-09-16-q4hd2r": {

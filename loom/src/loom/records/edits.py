@@ -204,6 +204,8 @@ def home(result: ScanResult, edit: Edit) -> NodeRec | None:
     """
     from loom.records.locate import follow
 
+    if on_file(edit):
+        return None
     return follow(
         result,
         edit.target_key,
@@ -215,6 +217,98 @@ def home(result: ScanResult, edit: Edit) -> NodeRec | None:
         quote=edit.selector.exact if edit.selector else "",
         context=edit.context,
     )
+
+
+def on_file(edit: Edit) -> bool:
+    """Whether `edit` is on a Markdown file by its path rather than on a key: its text is the whole file's, and it has no block (`home` is None)."""
+    from loom.records.mdtext import is_markdown
+
+    return is_markdown(edit.target_key)
+
+
+def file_text(result: ScanResult, rel: str) -> str | None:
+    """A file's text as the scan reads it (`writes.scan_reading`): a scanned file's from the scan, any other read now; None when it is not there."""
+    if rel in result.files:
+        return result.files[rel].text
+    from loom.writes import scan_reading
+
+    try:
+        return scan_reading((result.quilt.root / rel).read_bytes())
+    except OSError:
+        return None
+
+
+def file_encoding(result: ScanResult, rel: str) -> str:
+    """The encoding a file's bytes decode in (`scan.source.decode`): a scanned file's from the scan, any other read now; `utf-8` for one that is not there."""
+    if rel in result.files:
+        return result.files[rel].encoding
+    from loom.scan.source import decode
+
+    try:
+        return decode((result.quilt.root / rel).read_bytes())[1]
+    except OSError:
+        return "utf-8"
+
+
+def _place_on_file(result: ScanResult, edit: Edit) -> Placed:
+    """Where an edit on a Markdown file (`on_file`) goes in the file now: its quote, once, as written, with the words recorded beside it standing as `place` asks of a block's. Unplaced as `place` says."""
+    from loom.scan.hashing import hash_text
+
+    rel = edit.target_key
+    text = file_text(result, rel)
+    if text is None:
+        raise Unplaced(f"{rel}, which {edit.id} is on, is no longer in the quilt")
+    if edit.selector is None:
+        raise Unplaced(f"{edit.id} quotes no words of {rel}, so where it goes is not known")
+    found = find_written(text, edit.selector.exact)
+    if not found:
+        raise Unplaced(f"the text {edit.id} quotes no longer stands in {rel}")
+    if len(found) > 1:
+        raise Unplaced(f"the text {edit.id} quotes now stands {len(found)} times in {rel}, so where it goes is not known")
+    a, b = found[0]
+    changed = _beside(edit, text, (a, b))
+    if changed is not None:
+        raise Unplaced(f"{changed} in {rel}, so it is not written in blind")
+    if edit.placement == "replace" and not _one_side_stands(edit.selector, text, (a, b)):
+        raise Unplaced(
+            f"the words either side of the text {edit.id} quotes have both changed since it was suggested, in {rel}, so where it goes is not known"
+        )
+    new = edit.with_text
+    if edit.placement == "after":
+        span, put = (b, b), _joined(text, b, new, before=False) if new else ""
+    elif edit.placement == "before":
+        span, put = (a, a), _joined(text, a, new, before=True) if new else ""
+    else:
+        span, put = (a, b), new
+    return Placed(rel, rel, text, span, span, put, edit.target_hash != hash_text(text))
+
+
+def _taken_on_file(result: ScanResult, edit: Edit) -> tuple[str | None, list[tuple[int, int]]]:
+    """How a Markdown file reads as `edit` taken (`taken_how`), and where its new text stands (`where_taken`), judged as a block's are with the whole file for its text."""
+    text = file_text(result, edit.target_key)
+    if text is None or edit.selector is None:
+        return None, []
+    quote = _flat(edit.selector.exact)
+    if not edit.with_text.strip():
+        return ("as-written" if quote and quote not in _flat(text) else None), []
+    added = _added(edit)
+    if added is not None:
+        found = find_written(text, edit.selector.exact)
+        at = None
+        if len(found) == 1:
+            (a, b), (lead, tail) = found[0], added
+            left = _standing(text, a, lead, edit.selector.prefix, after=False) if lead.strip() else (a, a)
+            right = _standing(text, b, tail, edit.selector.suffix, after=True) if tail.strip() else (b, b)
+            at = (left[0], right[1]) if left is not None and right is not None else None
+        if at is not None:
+            return "as-written", [at]
+        return ("edited" if _written_since(" ".join(added), text) else None), []
+    if find_written(text, edit.selector.exact):
+        return None, []
+    spans = [m.span() for m in _words(edit.with_text).finditer(text)]
+    if spans:
+        return "as-written", spans
+    return ("edited" if _written_since(edit.with_text, text) else None), []
 
 
 def _delimiters(own: str) -> tuple[int, int] | None:
@@ -512,6 +606,8 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     """
     from loom.scan.owntext import key_hash
 
+    if on_file(edit):
+        return _place_on_file(result, edit)
     node = home(result, edit)
     if node is None or node.file not in result.files:
         there = node_of(result, edit.target_key)
@@ -668,7 +764,7 @@ def _file_point(node: NodeRec, pieces: list[tuple[int, int, int]], at: int, end:
 
 def taken_file(result: ScanResult, placed: Placed) -> str:
     """The text of the node's file with the edit in place."""
-    text = result.files[placed.file].text
+    text = file_text(result, placed.file) or ""
     a, b = placed.at
     return text[:a] + placed.text + text[b:]
 
@@ -677,7 +773,7 @@ def patch(result: ScanResult, placed: Placed) -> str:
     """The edit in place, as a unified diff of the node's file against the quilt root."""
     from loom.reshape.ids import unified_diff
 
-    return unified_diff(result.files[placed.file].text, taken_file(result, placed), placed.file)
+    return unified_diff(file_text(result, placed.file) or "", taken_file(result, placed), placed.file)
 
 
 def _flat(text: str) -> str:
@@ -775,6 +871,8 @@ def where_taken(result: ScanResult, edit: Edit) -> list[tuple[int, int]]:
     --------
     taken_how : whether the edit reads as taken at all.
     """
+    if on_file(edit):
+        return _taken_on_file(result, edit)[1] if edit.with_text.strip() else []
     node = home(result, edit)
     if node is None or node.file not in result.files or not edit.with_text.strip():
         return []
@@ -791,6 +889,8 @@ def taken_how(result: ScanResult, edit: Edit) -> str | None:
 
     An insertion, and a replacement whose new text holds its quote, are judged at their own place (`_at_place`): their text must stand right where Keep writes it, and the words recorded beside that place when they were suggested must stand beyond it or be gone, so that a phrase already beside the quote is not read as the edit. Any other replacement is taken only once its quote no longer stands whole in the block's own text, as `place` would find it: a replacement that trims its quote leaves the new text standing inside it, and is not in. It is then taken when its new text stands anywhere in the block's whole text, its children's included, or, edited, when most of it does; a deletion when its quote is gone from the own text. Whitespace is compared normalised, as a quote is.
     """
+    if on_file(edit):
+        return _taken_on_file(result, edit)[0]
     node = home(result, edit)
     if node is None or node.file not in result.files:
         return None

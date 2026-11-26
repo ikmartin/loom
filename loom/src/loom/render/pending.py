@@ -492,7 +492,7 @@ def attach_pending(
     """
     from loom.looks import read_look
     from loom.pending import in_place, look_texts, patch_of, reviewer, suggested
-    from loom.records.edits import replay
+    from loom.records.edits import on_file, replay
     from loom.records.store import render_markdown
 
     who = reviewer(result)
@@ -531,6 +531,13 @@ def attach_pending(
         record["with_html"] = None
         record["comment_html"] = render_markdown(edit.comment) if edit.comment else None
         records_out[edit.id] = record
+        if on_file(edit):
+            # a Markdown file's new words are Markdown, drawn as its page draws them
+            made = render_markdown(edit.with_text) if edit.with_text.strip() else None
+            record["with_html"] = made
+            if edit.id in rows:
+                rows[edit.id]["new_html"] = made
+            continue
         _ask_new(
             result,
             renderer,

@@ -1,4 +1,4 @@
-"""`loom suggest`: file a suggested edit on a key, or withdraw one of your own. The person keeps or discards it with `loom changes`, which also prints its patch."""
+"""`loom suggest`: file a suggested edit on a key or a Markdown file, or withdraw one of your own. The person keeps or discards it with `loom changes`, which also prints its patch."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from loom.records.edits import EditRefused, find, replay
     "--quote",
     default=None,
     metavar="OLD",
-    help="The words it replaces, once in the key's own text and inside the block, short of its \\begin and \\end; without it, the key's body.",
+    help="The words it replaces, once in the key's own text and inside the block, short of its \\begin and \\end, or once in a Markdown file as written; without it, the key's body.",
 )
 @click.option(
     "--before", is_flag=True, help="Put the new text right before the quoted words, or at the head of the body."
@@ -63,7 +63,7 @@ def suggest_command(
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """File a suggested edit on KEY: --with NEW in place of --quote OLD, or beside it with --before or --after; without --quote, of the key's body.
+    """File a suggested edit on KEY, or on a Markdown file by its path: --with NEW in place of --quote OLD, or beside it with --before or --after; without --quote, of the key's body, which a Markdown file has none of.
 
     The person keeps or discards it with `loom changes`: keeping writes it into the file, discarding leaves the text as it is, and `loom changes ID` prints the patch that takes it. An edit that names the annotation it --answers resolves that annotation when it is kept. `--before` with no quote puts the text at the head of the body, which is how a `\\uses{…}` is proposed. `--withdraw EDIT` takes back one of your own while it is open; `loom changes --by NAME` lists the edits NAME suggested, in every state.
     """
@@ -88,6 +88,11 @@ def suggest_command(
     placement = "before" if before else "after" if after else "replace"
     result = open_scan(quilt_path)
     root = result.quilt.root
+    from loom.records.mdtext import markdown_file
+
+    if (md := markdown_file(result, key)) is not None:
+        _on_file(result, md, with_text, quote, placement, answers, comment, author, dry_run, as_json)
+        return
     target = resolve_key(result, key)
     node_key = result.assembly.regions[target].container if target in result.assembly.regions else target
     node = result.nodes[node_key]
@@ -166,6 +171,72 @@ def suggest_command(
         f"would file {said}" if dry_run else said,
         dry_run=dry_run,
         data={"edit": edit_id, "target": target, "placement": placement},
+    ).emit(as_json)
+
+
+def _on_file(
+    result: Any,
+    rel: str,
+    with_text: str,
+    quote: str | None,
+    placement: str,
+    answers: str | None,
+    comment: str | None,
+    author: str | None,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """File a suggested edit on a Markdown file the viewer draws, by its path: its quote words of the file as written, once, which it replaces or stands beside; the file's text is frozen as the version it was written against."""
+    from loom.cli.review import _annotator, _snapshot
+    from loom.clock import stamp, today
+    from loom.records.annotations import find_annotation, load_records
+    from loom.records.edits import append_new, file_text
+    from loom.records.ids import draw
+    from loom.records.selectors import CONTEXT, Selector, find_written
+
+    root = result.quilt.root
+    if not quote:
+        raise EnvError(f"an edit on a Markdown file says where it goes by its --quote, words of {rel} as written")
+    if answers and find_annotation(load_records(root)[0], answers) is None:
+        raise NotFoundError("annotation", f"--answers {answers}: no annotation {answers}")
+    text = file_text(result, rel) or ""
+    spans = find_written(text, quote)
+    if not spans:
+        raise NotFoundError("quote", f"quote not found in {rel}; quote its words as the file has them")
+    if len(spans) > 1:
+        raise EnvError(f"quote is ambiguous ({len(spans)} occurrences); give a longer quote")
+    if placement == "replace" and with_text.strip() == quote.strip():
+        raise EnvError("--with is the quoted text itself, so the edit changes nothing")
+    if not with_text and placement != "replace":
+        raise EnvError("an empty --with deletes the quoted words, so it goes with neither --before nor --after")
+    a, b = spans[0]
+    selector = Selector(text[a:b], text[max(0, a - CONTEXT) : a], text[b : b + CONTEXT])
+    akind, aid = _annotator(root, author)
+    if comment and akind == "agent":
+        from loom.links import refuse_bad_links
+
+        refuse_bad_links(result, root, comment)
+    event: dict[str, Any] = {
+        "event": "created",
+        "when": stamp(),
+        "author": aid,
+        "kind": akind,
+        "target": rel,
+        "against": _snapshot(root, text, result.quilt.history_dir, dry_run)[0],
+        "anchor": selector.to_dict(),
+        "with": with_text,
+        "placement": placement,
+    }
+    if comment:
+        event["comment"] = comment
+    if answers:
+        event["answers"] = answers
+    edit_id = draw(f"e-{today()}-", {e.id for e in replay(root)[0]}) if dry_run else append_new(root, event, today())
+    said = f"{edit_id}  {placement} “{_short(quote)}” {rel}  ({aid})"
+    Report(
+        f"would file {said}" if dry_run else said,
+        dry_run=dry_run,
+        data={"edit": edit_id, "target": rel, "placement": placement},
     ).emit(as_json)
 
 
