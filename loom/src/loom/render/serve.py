@@ -915,6 +915,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
 
             # the home page, so a page whose server stopped can send the person back to it
             home = home_url()
+            # the quilt's folder, for the viewer to name where an agent's app should open: answered only to a request carrying the token, which the viewer asks again with, so the place never reaches a caller without it
+            carries = bool(self.token) and self.headers.get("X-Loom-Token") == self.token
             self._json(
                 HTTPStatus.OK,
                 {
@@ -924,8 +926,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     **({"quilt": self.quilt_id} if self.quilt_id else {}),
                     # the home stops a server it found at the pid the server gives here, never at one a file names
                     "pid": os.getpid(),
-                    # the quilt's folder, for the viewer to name where an agent's app should open; the viewer's alone, as the token is
-                    "root": str(Path(self.quilt_root).resolve()),
+                    **({"root": str(Path(self.quilt_root).resolve())} if carries else {}),
                     "stream": self.publications is not None,
                     **connected,
                     **frames,

@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { copyText } from '$lib/clipboard';
-	import { can, capabilities, write } from '$lib/write';
+	import { can, quiltRoot, write } from '$lib/write';
 	import { agents as words } from '$lib/words/agents';
 	import { presence } from './presence.svelte';
 	import { OFFERED, setup, wroteWords, type Offered } from './setup.svelte';
@@ -26,7 +26,7 @@
 	onMount(() => {
 		void can('agents-setup').then((ok) => (writes = ok));
 		void can('open').then((ok) => (opens = ok));
-		void capabilities().then((caps) => (root = caps?.root ?? ''));
+		void quiltRoot().then((r) => (root = r));
 		const t = setInterval(() => presence.tick(), 5000);
 		return () => clearInterval(t);
 	});

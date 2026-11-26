@@ -93,7 +93,10 @@ def test_api_answers_from_the_last_look(
 
 
 def test_api_names_the_quilt_s_folder(serve: Callable[[Path], ServeSession], tmp_path: Path) -> None:
-    """The viewer says which folder to choose in an agent's app from `/_api`'s `root`, the quilt's folder resolved."""
+    """The viewer says which folder to choose in an agent's app from `/_api`'s `root`, the quilt's folder resolved, which only a request carrying the token is given."""
     q = demo(tmp_path)
     s = serve(q)
-    assert json.loads(get(s.url + "_api")[2])["root"] == str(q.resolve())
+    bare = json.loads(get(s.url + "_api")[2])
+    assert "root" not in bare
+    assert json.loads(get(s.url + "_api", {"X-Loom-Token": bare["token"]})[2])["root"] == str(q.resolve())
+    assert "root" not in json.loads(get(s.url + "_api", {"X-Loom-Token": "not-the-token"})[2])
