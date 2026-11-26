@@ -56,22 +56,6 @@ def last_of(res: CompileResult, ended: str) -> Last:
     return Last("errors" if res.pdf is not None else "failed", ended, res.first_error[:300], at)
 
 
-def _unwrapped(text: str) -> str:
-    """The log with the lines TeX broke at its 79th byte joined again, so that a long path reads whole."""
-    out: list[str] = []
-    held = ""
-    for line in text.split("\n"):
-        held += line
-        if len(line.encode("utf-8")) != WRAP:
-            out.append(held)
-            held = ""
-    return "\n".join([*out, held] if held else out)
-
-
-#: Where TeX breaks a log line, `max_print_line`.
-WRAP = 79
-
-
 def error_place(res: CompileResult, root: Path) -> dict[str, Any] | None:
     """Where the log's first error is: the file TeX was reading, the line of that file it stopped at, and for an undefined control sequence the macro.
 
@@ -84,15 +68,13 @@ def error_place(res: CompileResult, root: Path) -> dict[str, Any] | None:
     except OSError:
         return None
     at = text.find(res.errors[0])
-    whole = _unwrapped(text)
-    upto = whole.find(res.errors[0])
-    if at < 0 or upto < 0:
+    if at < 0:
         return None
     stack: list[str | None] = []
-    for i in range(upto):
-        c = whole[i]
+    for i in range(at):
+        c = text[i]
         if c == "(":
-            m = _OPENED.match(whole, i)
+            m = _OPENED.match(text, i)
             stack.append(m.group(1) if m else None)
         elif c == ")" and stack:
             stack.pop()

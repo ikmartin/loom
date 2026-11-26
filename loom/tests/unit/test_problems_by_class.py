@@ -95,14 +95,11 @@ def test_tex_s_line_is_a_line_of_the_file_it_was_reading_never_of_the_document(t
     (d,) = _linted(q, code=1)
     assert (d["code"], d["locations"]) == ("loom:compile-failed", [])
     assert d["message"] == "drafting/main.tex did not compile: Undefined control sequence \\y, in x.tex, line 3"
-    # the bibliography, in the run's folder, whose path TeX breaks at its 79th byte
-    run = "(./main.tex (" + str(q / ".loom/cache/tex/.main-0a1b2c3d.run-x1y2z3") + "/" + "b" * 40
-    # a last piece of 79 bytes would join the error's line to it
-    line = run + ("b/main.bbl" if len(run + "/main.bbl") % 79 == 0 else "/main.bbl")
-    wrapped = "\n".join(line[i : i + 79] for i in range(0, len(line), 79))
+    # the bibliography, in the run's folder, its long path on one line, as every TeX loom starts writes its log (`runner.LOG_WIDTH`)
+    line = "(./main.tex (" + str(q / ".loom/cache/tex/.main-0a1b2c3d.run-x1y2z3") + "/" + "b" * 80 + "/main.bbl"
     _log(
         q,
-        f"{wrapped}\n! Misplaced alignment tab character &.\nl.5 \\newblock Rings &\n                      modules.\n",
+        f"{line}\n! Misplaced alignment tab character &.\nl.5 \\newblock Rings &\n                      modules.\n",
     )
     (d,) = _linted(q, code=1)
     assert d["locations"] == []
