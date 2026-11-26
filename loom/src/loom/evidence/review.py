@@ -531,7 +531,7 @@ def _attest_body(
     manifest: dict[str, Any],
     doc: str | None,
 ) -> dict[str, Any]:
-    """What a row to attest opens on (`docs/specs/evidence.md` §7, `review-row`): the Lean record to attest, the statement, its notation, what it uses that the person attested and when, and the declarations that only serve its proof; the agent's account of its parts and of a difference is formalization's, null until an agent's record gives it."""
+    """What a row to attest opens on (`docs/specs/evidence.md` §7, `review-row`): the Lean record to attest, the statement, the Lean that states it and each definition of the project that Lean's statement names, mapped to the result it stands for, all as loom's check read them; its notation, what it uses that the person attested and when, and the declarations that only serve its proof. The agent's account of its parts and of a difference is null until an agent's record gives it."""
     record = next((r for r in evidence.of_kind("lean") if r.id == found.lean_record), None)
     if here.kind == "block":
         statement: dict[str, Any] = {"fragment": manifest.get("nodes", {}).get(here.name, {}).get("fragment")}
@@ -561,16 +561,71 @@ def _attest_body(
         there = web.holder((kind, name), here) if kind == "label" else Here("node", name)
         key = there.name if there is not None else name
         uses.append({"result": key, "name": _name(manifest, key, doc) if kind == "label" else name, "at": said[-1].at})
-    supporting = [d["name"] for d in (record.get("declarations", []) if record else []) if d.get("role") == "supports"]
+    decls = {d["name"]: d for d in (record.get("declarations", []) if record else [])}
+    on = record.on if record else None
+    states = [n for n, d in decls.items() if on is not None and d.get("role") == "states" and d.get("names") == {on.kind: on.name}]  # fmt: skip
+    supporting = [n for n, d in decls.items() if d.get("role") == "supports"]
     return {
         "observation": found.lean_record,
         "statement": statement,
+        "lean": [{"name": n, "kind": decls[n]["kind"], "shown": decls[n].get("shown")} for n in states],
+        "definitions": _definitions(evidence, web, library, here, decls, states, manifest, doc),
         "parts": None,
         "notation": notation,
         "uses_attested": uses,
         "supporting": supporting,
         "difference": None,
     }
+
+
+def _definitions(
+    evidence: Evidence,
+    web: Web,
+    library: LibraryWeb,
+    here: Here,
+    rows: dict[str, dict[str, Any]],
+    states: list[str],
+    manifest: dict[str, Any],
+    doc: str | None,
+) -> list[dict[str, Any]]:
+    """Each declaration of the project the stating declarations' statements name, and what those name in turn, as the Lean record has them, each beside the result its marker says it stands for, or none.
+
+    One that stands for a result carries that result's statement and when the person attested its own Lean on its text now; one that stands for none is the Lean's alone, and the person's word on this result covers it, since its statement hash takes it in (`formal/check._statement_hashes`).
+    """
+    out: list[dict[str, Any]] = []
+    closure = web.closure(here)
+    seen, todo = set(states), [m for n in states for m in rows[n].get("means", [])]
+    while todo:
+        name = todo.pop(0)
+        if name in seen or name not in rows:
+            continue
+        seen.add(name)
+        d = rows[name]
+        todo.extend(d.get("means", []))
+        stands: dict[str, Any] | None = None
+        names = d.get("names")
+        if isinstance(names, dict) and names:
+            kind, target = next(iter(names.items()))
+            digest = closure.get((kind, target))
+            said = [r for r in evidence.about(kind, target, of="attested") if r.by.kind == "person" and digest is not None and r.on is not None and r.on.hash == digest]  # fmt: skip
+            if kind == "label":
+                there = web.holder((kind, target), here)
+                key = there.name if there is not None else None
+                stands = {
+                    "result": key,
+                    "name": _name(manifest, key, doc) if key else target,
+                    "statement": {"fragment": manifest.get("nodes", {}).get(key, {}).get("fragment")} if key else None,
+                }
+            else:
+                held = library.file(target)
+                stands = {
+                    "result": target,
+                    "name": node_name(held[1]) if held else target,
+                    "statement": {"body": held[1].body, "macros": library.macros(held[1].source)} if held else None,
+                }
+            stands["attested"] = said[-1].at if said else None
+        out.append({"name": name, "kind": d["kind"], "shown": d.get("shown"), "stands_for": stands})
+    return out
 
 
 def _edits(result: ScanResult, reviewer: str | None, manifest: dict[str, Any]) -> list[Row]:
