@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from loom.ai.clients import Client
 
 #: The modes loom ships, in the order the index lists them, read through `modes` alone. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/agents/instructions/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
-MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft"]
+MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft", "formalize"]
 RULES = "rules.md"  # `.loom/agents/instructions/rules.md`: not a mode, and no longer filed among them
 # The one list: every loom command an agent may run, by its full path in the command tree. Everything else loom offers is the author's, so a command added later is denied until it is named here -- which an enumeration of forbidden commands could never promise, and did not: twelve mutating commands were missing from it (DR-173).
 AGENT_COMMANDS = frozenset(

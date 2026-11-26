@@ -151,7 +151,7 @@ def test_an_agent_is_never_allowed_to_delete(tmp_path: Path) -> None:
 def test_modes_templates_present_and_contracts_listed(tmp_path: Path) -> None:
     """Every mode says in one line when it fits, names its report's blocks from the catalogue, and carries none of the ceremony the contract cut removed (plan 0.21.1)."""
     q = bare(tmp_path)
-    assert len(MODES) == 8 and "flow" in MODES and "brainstorm" not in MODES  # rules.md is not a mode
+    assert len(MODES) == 9 and "flow" in MODES and "formalize" in MODES and "brainstorm" not in MODES  # rules.md is not a mode
     assert not (q / ".loom/agents/instructions" / "modes" / "blocks.md").exists()
     rules = (q / ".loom/agents/instructions" / "rules.md").read_text()
     assert rules.startswith("# Standing rules, contracts, and blocks") and "## Never" in rules

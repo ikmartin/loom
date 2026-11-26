@@ -59,7 +59,6 @@ None is registered, so help, the command reference and the agent's tools are unc
 |---|---|
 | `loom library suggest REF --why`, an agent's command and tool | the library |
 | `loom formal attest KEY`, the author's | formalization |
-| the mode `formalize` | formalization |
 
 ## Diagnostics and doctor
 

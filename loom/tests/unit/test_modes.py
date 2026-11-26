@@ -38,3 +38,16 @@ def test_every_listing_follows_the_one_function(tmp_path: Path, monkeypatch: pyt
     ]
     assert {m for named in modes_using(q).values() for m in named} <= {"quick", "referee"}
     refused("ai", "mode", "audit", cwd=q, code=2, match="the modes are quick, referee")
+
+
+def test_the_formalize_mode_says_how_to_work_in_lean_and_that_loom_runs_the_check(tmp_path: Path) -> None:
+    """The mode a `formalize` or `restate` task is worked in: listed with the others, written into a quilt, and telling the agent the marker, the project's place and what it must not edit, and that loom's own check, not the agent, records what Lean said."""
+    from loom.ai.orient import mode_index
+
+    q = demo(tmp_path)
+    assert "formalize" in layout.modes(q)
+    text = layout.tracked_docs(q)[".loom/agents/instructions/modes/formalize.md"]
+    assert text.startswith("# Mode: formalize\n\nWhen it fits:")
+    for said in ('@[loom "LABEL"]', "`lean/Formal/`", "`loom formal check`", "lean/Loom.lean", "Loom checks the Lean itself"):
+        assert said in text, said
+    assert re.search(r"^- \*\*formalize\*\*", mode_index(q), re.M)
