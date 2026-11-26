@@ -1,0 +1,1 @@
+import{r as e}from"./CYMJy2Fi.js";var t=new Map,n=``;function r(r,i){i!==n&&(t.clear(),n=i);let a=r,o=t.get(a);return o||(o=fetch(e(r),{cache:`no-cache`}).then(e=>{if(!e.ok)throw Error(`${r}: ${e.status}`);return e.text()}),t.set(a,o)),o}export{r as t};
