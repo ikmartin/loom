@@ -28,55 +28,73 @@
     "edited": false,
     "fits": "a question asked in passing whose answer is worth finding again — a definition recalled, a step explained, a constant checked (\"what is $W_\\chi$ a subscheme of?\").",
     "name": "quick",
-    "path": ".loom/agents/instructions/modes/quick.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/quick.md",
+    "text": "# Mode: quick\n\nWhen it fits: a question asked in passing whose answer is worth finding again — a definition recalled, a step explained, a constant checked (\"what is $W_\\chi$ a subscheme of?\").\n\n## What it is for\n\nA short, durable answer. Prioritize brevity, clarity and accuracy, in that order, and check the answer once against the source or a work's own text before writing it.\n\nIf the answer needs worked examples, edge cases or a stress test, that is `question`. If it turns up a fault, record it as `.loom/agents/instructions/rules.md` says (on an agent document, fix it) and say so.\n\n## Report\n\nCore: [answer]. Optional: [follow-up].\n\nThe report is the message itself, with no [summary]: a summary of a quick answer is longer than the answer.\n"
    },
    {
     "edited": false,
     "fits": "a question that wants understanding — definitions, examples, edge cases, what breaks without a hypothesis (\"how does the procedure change if a type is fixed first?\").",
     "name": "question",
-    "path": ".loom/agents/instructions/modes/question.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/question.md",
+    "text": "# Mode: question\n\nWhen it fits: a question that wants understanding — definitions, examples, edge cases, what breaks without a hypothesis (\"how does the procedure change if a type is fixed first?\").\n\n## What it is for\n\nA thorough answer, built from definitions and computed cases rather than asserted. Read the closure of what the question concerns (`loom source KEY --closure`), or `loom status --json` for a question about the quilt. Compute the cases before concluding, report every trial (standing rule 7), and label every claim.\n\nOpen with the conceptual core: one or two exact sentences a reader can keep, which is what shows while a long message is folded.\n\n## Report\n\nCore: [intuition], [definition], [worked-examples], [answer]. Optional: [edge-cases], [stress-test], [follow-up], [open-questions].\n\nAnnotations only where the question exposed a fault in a key, recorded as `.loom/agents/instructions/rules.md` says.\n"
    },
    {
     "edited": false,
     "fits": "what a result actually uses — which hypotheses are needed, whether a citation covers its use, whether a statement stands alone (\"what are the needed hypotheses on the target?\").",
     "name": "audit",
-    "path": ".loom/agents/instructions/modes/audit.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/audit.md",
+    "text": "# Mode: audit\n\nWhen it fits: what a result actually uses — which hypotheses are needed, whether a citation covers its use, whether a statement stands alone (\"what are the needed hypotheses on the target?\").\n\n## What it is for\n\nA load-bearing audit. Assume the mathematics is correct; do not hunt for errors (that is referee). Hunt for mismatch between what is stated and what is used. If an error surfaces incidentally, flag it in [summary] and as a {type:revision}, and continue the audit; do not switch into refereeing.\n\nRead the closure once completely (`loom source KEY --closure`). For a hypothesis that is a node, `loom downstream ID --proofs` lists the proofs that consume it. Read each proof sentence by sentence and ask what fact it invokes; one that no `\\ref`, `\\uses` or citation names is a finding. Search the person's quilt, the works its library holds among it, before declaring anything unlocated, and then the web, saying which you used.\n\n## Report\n\nCore: the ledgers the question asks for, and for an audit asked for whole, [hypothesis-ledger], [citation-ledger] and [self-containedness]. Optional: [uses-ledger], [sharpenings], [patch-list].\n\n## Where changes go\n\nEvery item of [uses-ledger], [self-containedness] and [patch-list] that needs a change is an annotation on the author's text — a {type:suggestion}, a {type:revision} for an incidental error, a {type:question} where you could not decide — and on an agent document it is fixed where the fix is yours to make. A choice between hypotheses is the author's either way: annotate it.\n"
    },
    {
     "edited": false,
     "fits": "whether the mathematics is right, before anyone relies on it — new or changed mathematics, a computation to check (\"run it through referee\").",
     "name": "referee",
-    "path": ".loom/agents/instructions/modes/referee.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/referee.md",
+    "text": "# Mode: referee\n\nWhen it fits: whether the mathematics is right, before anyone relies on it — new or changed mathematics, a computation to check (\"run it through referee\").\n\n## What it is for\n\nA hostile review. You are a referee at a top-tier journal looking for any possible opportunity to reject. Find gaps, test the equations, look for counterexamples, and render a verdict. Do not soften: a wrong step is a {type:revision} even if it is fixable.\n\nRead the closure. Check every computation by a route independent of the text's own — a second derivation, a known special case, a script — and report each trial (standing rule 7). If an earlier audit or referee report on the target is in the transcript, read it first and do not repeat its findings. On a re-check, `loom source KEY --at ID --diff` shows what changed since each finding.\n\n## Report\n\nCore: [gaps-and-ambiguities], [worked-examples], [counterexample], [decision]. Optional: [referee-review], [referee-revised].\n\n## Where changes go\n\nEvery gap, error or unjustified step is a {type:revision} anchored to the exact sentence, every improvement a {type:suggestion}, every doubt a {type:question}. On an agent document, a fault you can fix is fixed and listed in [referee-revised], with no annotation; a gap you cannot close is a {type:revision} there, for the author. The [decision] is yours to state and never touches the ledger.\n"
    },
    {
     "edited": false,
     "fits": "improving a text before someone else reads it — errors, citations, wording and clarity, every finding graded, drop-in text for each (\"provide annotations on the document text\").",
     "name": "review",
-    "path": ".loom/agents/instructions/modes/review.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/review.md",
+    "text": "# Mode: review\n\nWhen it fits: improving a text before someone else reads it — errors, citations, wording and clarity, every finding graded, drop-in text for each (\"provide annotations on the document text\").\n\n## What it is for\n\nA referee aiming to improve the source rather than to reject it. Where referee hunts for a reason the result is wrong, review reads for everything that would make the text better. Read the closure, then work through the source in order, and look for each of these in turn:\n\n- **new citations**: an argument that a citation could replace. Verify the source. Citing from memory, say so in the finding and mark the ledger entry `memory-grade`; propose a work the bibliography lacks as a {type:suggestion} naming it.\n- **bad citations**: a citation that is wrong, or that does not cover the use made of it.\n- **unnecessary hypotheses**: a hypothesis no step consumes.\n- **merge-or-delete**: redundant lemmas, duplicated arguments, scaffolding.\n- **sharpenings**: a proof that gives more than the statement claims, or a hypothesis that weakens without touching the argument.\n- **self-containedness**: a theorem, lemma or definition that does not parse standalone.\n- **mathematical errors**: a false statement or an incorrect claim. Always say *why* it is false, and attempt a fix.\n- **grammar and wording**: grammar, punctuation, awkward phrasing.\n- **clarity**: unclear writing, with a suggested fix.\n\n**Every finding says how serious it is**, by how bad the fault is, and a fault you can fix is a {type:revision} and a suggested edit that `--answers` it with the fix: drop-in text for every change you propose. Errors and prose both go in [referee-review], which already groups by how serious each is and carries a location, a fix and an annotation id per item. There is no compiled LaTeX or PDF pair: the annotations carry the findings, and the viewer draws them in place.\n\n## Report\n\nCore: [referee-review]. Optional: [citation-ledger], [self-containedness], [sharpenings].\n\n## Where changes go\n\nA review is for the author to read, so it files findings on an agent document too, rather than making the changes, unless the author asks for them to be made.\n"
    },
    {
     "edited": false,
     "fits": "shorter text with the same mathematics (\"simplify\", \"tighten this\").",
     "name": "simplify",
-    "path": ".loom/agents/instructions/modes/simplify.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/simplify.md",
+    "text": "# Mode: simplify\n\nWhen it fits: shorter text with the same mathematics (\"simplify\", \"tighten this\").\n\n## What it is for\n\nRevise the text to be simpler and shorter while preserving its mathematical content exactly. Assume the mathematics is correct; do not perform in-depth verification (that is referee).\n\n- **A new citation** replaces an argument only when you have read the result in the work, at the locator you give, `file-verified`; otherwise the argument stays and the candidate goes in [rejected].\n- **An unnecessary hypothesis** is removed only with a demonstration that no step consumes it (`loom downstream ID --proofs` where it is a node). If removing it would need a new argument, propose it in [rejected] instead.\n- **An error** that surfaces incidentally is flagged in [summary] and as a {type:revision}, and its passage is left unsimplified rather than propagated.\n- **What earlier passes added stays**: every justification a referee added, and the exact words an open annotation quotes, so it stays anchored — unless the annotation asks for those words to change, when the change answers it and you resolve it.\n\nIf an audit of the target is in the transcript, its [patch-list] is where you start.\n\n## Report\n\nCore: [simplifications], [rejected], [meaning-drift-check]. Optional: [revised].\n\n## Where changes go\n\nOn the author's text, one suggested edit per simplification, its quote exactly the old text and `--with` the new. A merge-or-delete across results is an agent document of the passage (`.loom/agents/instructions/rules.md`, Proposed text or agent document).\n"
    },
    {
     "edited": false,
     "fits": "reading order and clarity for a named reader, with the same mathematics (\"edit for clarity and flow\", \"write it so it is clear to me\").",
     "name": "flow",
-    "path": ".loom/agents/instructions/modes/flow.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/flow.md",
+    "text": "# Mode: flow\n\nWhen it fits: reading order and clarity for a named reader, with the same mathematics (\"edit for clarity and flow\", \"write it so it is clear to me\").\n\n## What it is for\n\nRevise a passage for the order it is read in and the clarity of each sentence, for the reader the author names — \"someone who knows the paper's earlier sections\", \"me\". With nobody named, the reader is the author.\n\n**The mathematics does not change.** No hypothesis is added, dropped or weakened; no argument is replaced by a citation; no statement changes (those are simplify and referee). An error that surfaces is flagged at the top and its passage left untouched. Every original sentence is kept or its removal recorded, and the exact words an open annotation quotes stay as they are, so it stays anchored, unless the annotation asks for them to change, when the change answers it and you resolve it.\n\n**Structure before sentences.** When the passage's organization is in question, settle [structure-map] and the structural changes first, then polish sentences once, in their final place. `loom status --master DOC --in-order` lists a document's results in order; `loom downstream ID` gives each one's consumers.\n\nThe changes, by type — name a new one in the same style and define it in one clause:\n\n- **hypothesis-placement**: a hypothesis moved to its first consumer; standing assumptions stated once in prose, never in a theorem environment; a numbered remark holds only the consequences later proofs cite.\n- **essence-first**: a proof reopened with the two to four sentences an expert would give as the reason it is true, then the checks under italic headings, every original sentence kept under one.\n- **lead-in**: one or two sentences opening a block, saying what it establishes and why the next block needs it.\n- **forward-reference**: a citation of a later result removed, by reordering or by citing the external source directly.\n- **one-symbol-one-meaning**: overloaded notation split; a reference's own symbol used only where its object is imported.\n- **dissolve**: a numbered result with a single consumer absorbed into that consumer's proof, as a labelled claim if it has its own argument; a result with several consumers stays numbered.\n- **condensation**: wording tightened, old → new where meaning could shift.\n\n**For a large pass, or when asked, a [rubric]**: criteria for this text, each with a good and a bad example taken from it, and the text graded before and after. Criteria that have served: answer first; the reader's own sequence; each step's output first; compute, justify and check kept apart; special cases said once; one name per object; a running example; status visible in one place; a sentence budget; no unflagged forward reference.\n\n**At the end, a fresh reader**: one given only what the named reader knows reads the result and lists what still fails, and you act on it. A second agent, where your app can start one; otherwise your own reading, setting aside everything that reader would not know.\n\n## Report\n\nCore: [structure-map], [flow-edits], [rejected], [meaning-drift-check]. Optional: [rubric], [fresh-reader].\n\n## Where changes go\n\nOn the author's text, the sentence-level types are suggested edits carrying the new text, and the structural ones — dissolve, a reordering, a hypothesis moved between results — are an agent document of the passage.\n"
    },
    {
     "edited": false,
     "fits": "new mathematics or text from the author's plan or request (\"implement each example in section 8\", \"restate Section 7 for $M(X,\\tau)$, marking what still needs proof\").",
     "name": "draft",
-    "path": ".loom/agents/instructions/modes/draft.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/draft.md",
+    "text": "# Mode: draft\n\nWhen it fits: new mathematics or text from the author's plan or request (\"implement each example in section 8\", \"restate Section 7 for $M(X,\\tau)$, marking what still needs proof\").\n\n## What it is for\n\nWrite complete nodes from what the author asked: the intended statement, its role, and the proof plan, which the author's message is. You complete the local argument; you do not change the plan's strategy. Where the plan is wrong, say so and stop at that step with `\\incomplete{…}`.\n\nWrite the statement first and check it against the plan. Then the proof: cite each fact used by `\\ref{ID}`, list every dependency in `\\uses`, and mark every step you could not complete with `\\incomplete{…}`. `loom source DEP --closure` puts each intended dependency in front of you. Compile what you wrote (`loom compile DOC`) and fix what fails.\n\n## Report\n\nCore: [could-not-do]. Optional: [worked-examples].\n\n## Where changes go\n\n- **Into an agent document**, by default: `loom ai drafts` first, and if there is none to write in, make one — `loom draft DOC --ai NAME --as \"…\"`; a document of your own is a file you write where the quilt lets you. Each node you write takes the next free id with the suffix (`loom id --next`, then `-ai`).\n- **Into the author's text**, only when asked: one node is a suggested edit placed where it goes; several are an agent document.\n\nNever write a node file: `loom new TAXON \"Title\" --print` prints a skeleton in the quilt's environment names.\n"
    },
    {
     "edited": false,
     "fits": "stating a result of the quilt in Lean and proving it there, or stating again a Lean the person said gets something wrong (a `formalize` or `restate` task in `loom tasks`, or \"formalize Lemma 4.2\").",
     "name": "formalize",
-    "path": ".loom/agents/instructions/modes/formalize.md"
+    "newer": false,
+    "path": ".loom/agents/instructions/modes/formalize.md",
+    "text": "# Mode: formalize\n\nWhen it fits: stating a result of the quilt in Lean and proving it there, or stating again a Lean the person said gets something wrong (a `formalize` or `restate` task in `loom tasks`, or \"formalize Lemma 4.2\").\n\n## What it is for\n\nA Lean statement the person can attest says what they wrote, and a proof Lean accepts. Loom checks the Lean itself and records what Lean said; nothing you report about Lean counts, and you never write that record.\n\nWork only in the quilt's Lean project, `lean/`, which exists once the person turned formalization on (`loom formal` says whether it is on here and whether there is a project; turning it on is theirs alone). Your modules go under `lean/Formal/`, each imported from `lean/Formal.lean` so `lake build` builds it, and each importing `Loom` for the marker. Never edit `lean/Loom.lean`, `lakefile.toml`, `lean-toolchain` or `lake-manifest.json`, and never fetch: Mathlib is pinned by the person's switch, and loom refuses to check a project that names anything else.\n\nA `formalize` task names its `target` and its boundary: results to `state`, to `prove`, and to `assume`. Take it (`loom tasks take TASK`) and read the target's closure (`loom source KEY --closure`) before writing anything. For each result:\n\n1. **State it first**, faithful to its text in the quilt and to every definition it uses, and search Mathlib for each notion before defining your own. Mark the declaration that states it with `@[loom \"LABEL\"]`, LABEL its label in the quilt or a library node's id; a result with no label cannot be named, so ask the person to add one (`loom ask`) rather than inventing it. A helper with no marker only supports.\n2. **A result to assume** is an `axiom` with its marker: the proof rests on it and the person attests it like any statement.\n3. **Prove it**, building as you go with `lake build` or `lake env lean FILE` in `lean/`. No `sorry`, and no axiom of your own beyond the assumed ones.\n4. **Ask loom to check**: `loom formal check`, through loom's tool where your shell runs in a sandbox, in which loom cannot put up its own and refuses. It rebuilds the project from clean, replays it in Lean's kernel, and records each result a marker names; `loom evidence LABEL` says how it now stands. The task closes once that record shows Lean accepting the target, with no `loom tasks done`.\n\nA `restate` task carries what the person says the Lean gets wrong (`differs`): state it again to say what they wrote, and check again. Never change a statement to make a proof go through: where the text and the Lean cannot agree, ask the person.\n\n## Report\n\nCore: [could-not-do]. Optional: [notation], [gaps-and-ambiguities].\n\nFor each result, its declaration's name and how its Lean reads it, in a sentence of mathematics, so the person reads what they will attest; and each definition of yours that stands in for one of the quilt's.\n"
    }
   ]
  },
@@ -707,7 +725,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "ab1f632ded71f78def77a54b34c234b9fcef53cb63d5a3592e931baa120c02b1",
+   "hash": "3a1154ca2284bc68102ebc2d38d30b255b6b3c4f30e32e47eaac135d15ded1dc",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -722,7 +740,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "b32540948a82469815e2ee7d89e0a8a8a2abe35de696c9fd81cf98259316a5d3",
+   "hash": "f2eb723f8a3b2a9a83fc42356e63454a2344aaaf7d8f9077ffb706869c076dde",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -737,7 +755,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "2db8dd8ef2a6e9f28e1d859fadc82f46a9118b45354bfa3526004f3e31a0549e",
+   "hash": "d914ab512d991bdd58fa17f3c88ee7d12a1b22f1948ab372366c93788ccff54a",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",

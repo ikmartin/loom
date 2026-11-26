@@ -8,11 +8,11 @@ The author decides to release.
 
 ## Why deferred
 
-Publishing is the author's act and never an agent's — a standing rule in `AGENTS.md`. `docs/RELEASE.md` deliberately stops before `uv publish`.
+Publishing is the author's act and never an agent's — a standing rule in `AGENTS.md`. A release is a GitHub release, which the install line reads (`loom/docs/RELEASE.md`); nothing is published to a package index.
 
 ## Rough design
 
-Follow `loom/docs/RELEASE.md` to its last step, then the step it stops before. The checklist already requires the conformance fixture regenerated with both vendored snapshots equal, the viewer's bundle re-vendored from a named commit, `loom doctor` reporting that bundle as current, and the screenshots regenerated. [[WQ-16]] supplies the Overleaf result the release notes want.
+Follow `loom/docs/RELEASE.md`, then publish the wheel its release workflow built (`uv publish`). [[WQ-16]] supplies the Overleaf result the release notes want.
 
 The distribution is `loomtex` on PyPI; the viewer ships inside it as a vendored bundle, so end users need neither the viewer's sources nor Node.
 

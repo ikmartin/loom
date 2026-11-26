@@ -40,21 +40,23 @@ jobs:
         run: |
           cat loom/src/loom/assets/viewer/VERSION
           if grep -q -- '-dirty' loom/src/loom/assets/viewer/VERSION; then echo "the vendored viewer is stamped -dirty" >&2; exit 1; fi
-      - name: the version a tag names is the package's
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          want="${GITHUB_REF_NAME#v}"
-          have="$(sed -n 's/^version = "\(.*\)"/\1/p' loom/pyproject.toml)"
-          test "$want" = "$have" || { echo "tag $GITHUB_REF_NAME, package $have" >&2; exit 1; }
       - name: the wheel
         working-directory: loom
         run: uv build --wheel --out-dir "$GITHUB_WORKSPACE/dist"
       - name: the wheel runs and carries the viewer it was built with
         run: |
           uv tool install --managed-python --python 3.13 dist/*.whl
-          loom --version
+          "$(uv tool dir --bin)/loom" --version
           installed="$(uv tool dir)/loomtex"
           cmp loom/src/loom/assets/viewer/VERSION "$(find "$installed" -path '*loom/assets/viewer/VERSION' | head -1)"
+      - name: the version a tag names is the wheel's and the one loom says, which pyproject.toml and version.py give
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          wheel="$(basename dist/*.whl | cut -d- -f2)"
+          says="$("$(uv tool dir --bin)/loom" --version)"
+          test "$wheel" = "$want" || { echo "tag $GITHUB_REF_NAME, wheel $wheel (pyproject.toml)" >&2; exit 1; }
+          test "$says" = "loom $want" || { echo "tag $GITHUB_REF_NAME, but the installed loom says $says (src/loom/version.py)" >&2; exit 1; }
       - name: what the install line reads
         run: |
           wheel="$(basename dist/*.whl)"
@@ -75,7 +77,7 @@ jobs:
 
   tex:
     if: github.event_name == 'workflow_dispatch' && inputs.tex
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -98,9 +100,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: macos-14
+          - runner: macos-15
             arch: arm64
-          - runner: macos-13
+          - runner: macos-15-intel
             arch: x86_64
     runs-on: ${{ matrix.runner }}
     steps:

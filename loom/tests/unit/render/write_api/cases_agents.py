@@ -143,6 +143,40 @@ def _here(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     )
 
 
+@case("agents-mode-save")
+def _agents_mode_save(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom.ai.layout import VERSION_FILE, read_versions, sha, tracked_docs
+
+    s, q = synthetic(serve, tmp_path)
+    rel = ".loom/agents/instructions/modes/referee.md"
+    loom = tracked_docs(q)[rel]
+    refuses(s, "agents-mode-save", {"name": "referee", "text": "x", "author": WHO}, 409, "no-agent-layer", "set an")
+    succeeds(s, "agents-setup", {"app": "claude-code", "author": WHO})
+    mode = q / rel
+    edited = loom.replace("When it fits:", "When it fits: as this quilt referees;", 1)
+    said = succeeds(s, "agents-mode-save", {"name": "referee", "text": edited, "was": loom, "author": WHO})
+    assert said["result"] == "saved the referee mode" and mode.read_text() == edited
+    # what the person was shown is what the file must still hold, and an agent changes no mode
+    refuses(s, "agents-mode-save", {"name": "referee", "text": "y", "was": loom, "author": WHO}, 409, "changed", "look")
+    refuses(
+        s,
+        "agents-mode-save",
+        {"name": "referee", "loom": True, "author": "Referee (Agent)"},
+        403,
+        "author-only",
+        "only the author",
+    )
+    refuses(s, "agents-mode-save", {"name": "referee", "author": WHO}, 400, "missing-field", "loom: true")
+    refuses(s, "agents-mode-save", {"name": "nope", "text": "z", "author": WHO}, 404, "no-such-mode", "referee")
+    assert mode.read_text() == edited
+    # put back, with the newer version loom wrote beside the edit taken away and the file recorded as loom's again
+    (q / f"{rel}.new").write_text(loom)
+    said = succeeds(s, "agents-mode-save", {"name": "referee", "loom": True, "author": WHO})
+    assert said["result"] == "put the referee mode back to loom's" and mode.read_text() == loom
+    assert not (q / f"{rel}.new").exists() and read_versions(q)["referee.md"] == sha(loom)
+    assert (q / ".loom/agents/instructions" / VERSION_FILE).is_file()
+
+
 @case("agents-setup")
 def _agents_setup(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     from loom.ai.layout import MCP_LINE, variant

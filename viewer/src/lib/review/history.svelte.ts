@@ -1,6 +1,6 @@
 // The person's own annotation writes in this page's life, each kept with the write that undoes it and the write that does it again: Undo and Redo on the toolbar, ⌘Z and ⇧⌘Z. A new annotation or reply is undone by deleting it and done again by restoring what the delete took out; a delete by restoring and deleting again; an edit by an edit back to its type, look and words before; a resolve by reopening. Every annotation write in the viewer goes through here, so there is one record of what can be undone.
 //
-// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A Keep step names the quilt the server says it serves, and none is made where the server has said none; it is kept in the tab's session storage under that quilt, so a reload still offers its undo in that quilt and no other; loom says, when it is pressed, whether it still can be. A step loom says can no longer be undone leaves the history. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in History rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
+// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so from loom's answer, which comes once it has recorded them, while the page updates (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A Keep step names the quilt the server says it serves, and none is made where the server has said none; it is kept in the tab's session storage under that quilt, so a reload still offers its undo in that quilt and no other; loom says, when it is pressed, whether it still can be. A step loom says can no longer be undone leaves the history. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in History rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
 //
 // A delete also stands at the foot of the window (`DeletedBar`) while it is done, since its mark goes with the annotation; its Undo there undoes that delete, wherever it is in the history.
 
@@ -241,14 +241,13 @@ function idsOf(which: Which): string[] {
 	return (which.document ? changesIn(m, which.document) : pending(m)).filter((c) => c.state === 'ready').map((c) => c.id);
 }
 
-/** Act on `which`, shown so at once; what loom refuses, or the whole act when it refuses it, is shown pending again. `suggested` is which of the changes done were suggestions, as the manifest had them. */
+/** Act on `which`, each change loom did shown so from its answer, which comes once it is recorded, until the manifest no longer lists it; nothing is shown done before, and what loom refuses stays pending. `suggested` is which of the changes done were suggestions, as the manifest had them. */
 async function act(endpoint: 'change-keep' | 'change-discard', which: Which, extra: Record<string, unknown> = {}): Promise<{ res: ChangeAnswer; done: string[]; suggested: string[] }> {
 	const asked = idsOf(which);
 	const kinds = new Map(pending(store.manifest).map((c) => [c.id, c.kind]));
-	mark(asked, endpoint === 'change-keep' ? 'kept' : 'discarded');
 	const res = (await write(endpoint, { ...which, ...extra })) as ChangeAnswer;
 	const done = res.ok ? (Array.isArray(res.done) ? res.done : asked.filter((id) => !(res.refused ?? []).some((r) => r.id === id))) : [];
-	unmark(asked.filter((id) => !done.includes(id)));
+	mark(done, endpoint === 'change-keep' ? 'kept' : 'discarded');
 	if (res.ok) {
 		await store.refresh();
 		prune(store.manifest);

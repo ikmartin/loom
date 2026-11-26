@@ -171,8 +171,43 @@ def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: The longest text a mode may be saved with, in bytes: the shipped ones are a few thousand.
+MODE_LIMIT = 200_000
+
+
+def _mode_save(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`agents-mode-save` writes the quilt's copy of one mode from Settings › Modes, its whole `text`, or with `loom` loom's own put back (`layout.save_mode`); the author's act, refused to a declared agent, which works by the modes it is given."""
+    from loom.ai.layout import save_mode
+    from loom.identity import is_agent
+    from loom.scan.quilt import reviewer_identity
+    from loom.writes import WriteRefused
+
+    who = _str(body, "author") or reviewer_identity(root)[0]
+    if is_agent(who):
+        raise ApiError("author-only", "An agent works by the modes it is given; only the author changes one", 403)
+    name = _str(body, "name", required=True) or ""
+    text = body.get("text")
+    if body.get("loom") is True:
+        text = None
+    elif not isinstance(text, str) or not text.strip():
+        raise ApiError("missing-field", "text is the mode's whole text, or send loom: true to put loom's back")
+    elif len(text.encode("utf-8")) > MODE_LIMIT:
+        raise ApiError("bad-field", f"a mode's text is at most {MODE_LIMIT:,} bytes")
+    elif not text.endswith("\n"):
+        text += "\n"
+    was = body.get("was")
+    if was is not None and not isinstance(was, str):
+        raise ApiError("bad-field", "was must be the text the mode was shown with")
+    try:
+        said = save_mode(root, name, text, was=was, actor=who)
+    except WriteRefused as exc:
+        raise ApiError(exc.code, str(exc), status=exc.status) from exc
+    return {"ok": True, "result": said}
+
+
 HANDLERS: dict[str, Handler] = {
     "agents-setup": plain(_setup),
+    "agents-mode-save": plain(_mode_save),
     "session-use": said(_session),
     "session-rename": said(_session),
     "session-delete": said(_session),
@@ -188,6 +223,7 @@ READS: tuple[str, ...] = ("here",)
 NO_REBUILD: tuple[str, ...] = READS
 #: The ones that change records alone, so the publication builds from the last scan.
 RECORD_WRITES: tuple[str, ...] = (
+    "agents-mode-save",
     "session-new",
     "session-use",
     "session-rename",

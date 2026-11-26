@@ -53,6 +53,14 @@ export const frame = {
 		/** The column's message when an undo failed, with the publisher's reason. */
 		undoFailed: (why: string) => (why ? `It could not be undone. ${why}` : 'It could not be undone.')
 	},
+	updating: {
+		/** The line in the column's foot, and the folded dot's name, from a write's answer until the page carries it. */
+		on: 'Updating the page…',
+		/** The line in its place when the build that was to show a write failed: the write is done, the page is not up to date. */
+		failed: 'Done, but the page could not be brought up to date.',
+		/** The close button on that line. */
+		dismiss: 'Dismiss'
+	},
 	legend: {
 		/** The quiet link in the column's foot that opens the legend of the marks. */
 		open: 'what the marks mean',
@@ -136,6 +144,7 @@ export const frame = {
 		offline: 'This quilt keeps loom offline, so nothing was looked up.',
 		reading: 'Loom is still reading this work. Try again when it is done.',
 		'review-unavailable': 'Review could not be read just now.',
+		'state-refused': 'Loom will not write a research state that holds a link that names nothing or a character that is not text. Mend it, then try again.',
 		stub: 'Loom has no text of this result yet, so there is nothing to compare or correct.',
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
 		unreachable: 'The service that looks papers up could not be reached. Try again later.'
@@ -148,15 +157,17 @@ export const frame = {
 		/** Said after an upgrade that could not carry everything; the button then opens the quilt. */
 		problems: (n: number) => `The quilt is upgraded, but ${n === 1 ? 'one thing' : `${n} things`} could not be carried over.`,
 		open: 'open the quilt',
-		/** Why an upgrade did not happen, by the publisher's refusal; the button stays, to try again. */
+		/** Why an upgrade did not happen, by the publisher's refusal; the button stays, for once the cause is gone. */
 		failed: (code: string) =>
 			code === 'author-only'
 				? "Only the quilt's author can upgrade it."
 				: code === 'format-unknown'
 					? 'This quilt was made by a version of loom this one cannot upgrade from.'
-					: code === 'unreachable'
-						? 'Loom could not be reached, so the quilt was not upgraded.'
-						: 'The upgrade did not finish; try it again.'
+					: code === 'state-refused'
+						? 'The quilt was not upgraded: its research state holds a link that names nothing or a character that is not text, which loom will not write. Mend the research state, then upgrade the quilt again.'
+						: code === 'unreachable'
+							? 'Loom could not be reached, so the quilt was not upgraded.'
+							: 'The upgrade did not finish; try it again.'
 	},
 	open: {
 		/** The page `loom open` lands on, when the link it was given names nothing in this quilt. */

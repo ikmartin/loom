@@ -1,4 +1,4 @@
-// The changes Keep or Discard has just been pressed on, shown so at once: a kept one as its new words, a discarded one as its old, out of the stepper and the lists, until the manifest no longer lists it. A refused act takes its change back out of here.
+// The changes loom has just kept or discarded, shown so from its answer, which comes once it has recorded them and before the manifest carries them: a kept one as its new words, a discarded one as its old, out of the stepper and the lists, until the manifest no longer lists it. Nothing is marked before loom answers, and a change it refused is never marked.
 
 import type { Manifest } from '$lib/manifest/types';
 import { pending } from './changes';

@@ -68,3 +68,14 @@ it('carries the displayed reviewer through a request even when the view changes 
 	expect(sent.reviewer).toBe('Bob');
 	store.manifest = null;
 });
+
+it('marks the page updating from an answer naming the build that publishes it, by the server that answered', async () => {
+	const { updating } = await import('$lib/manifest/updating.svelte');
+	updating.listen();
+	vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
+		if (!init) return Response.json({ write_api: 1, capabilities: ['annotate'], token: 'token', pid: 4242 });
+		return Response.json({ ok: true, result: 'a-1', publication: 6 });
+	});
+	expect((await write('annotate', { target: 'k', message: 'm' })).publication).toBe(6);
+	expect(updating.awaited).toEqual({ server: 4242, n: 6 });
+});

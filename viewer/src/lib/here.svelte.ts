@@ -1,6 +1,6 @@
 // Where the reader is (plan 0.21.8): the focused pane's item, the block at its top, the words selected or the region of a page, the annotation whose popup is open, and the block under review, reported to the publisher's `here` so that `loom here` can tell an agent what "this" is.
 //
-// **The tab touched last wins.** Every tab reports when its place settles and again the moment it gains focus or comes back into view, and the publisher keeps only the last report. The publisher holds it in memory; nothing here or there writes it down.
+// **The tab touched last wins.** A visible tab reports when its place settles and again the moment it gains focus or comes back into view, and the publisher keeps only the last report; a hidden tab reports nothing. The publisher holds it in memory; nothing here or there writes it down.
 
 import { itemKey, type Item } from '$lib/workspace/item';
 import { workspace } from '$lib/workspace/store.svelte';
@@ -162,8 +162,9 @@ export function startReporting(route: () => Route, path: () => string): () => vo
 			review: here.review
 		});
 	};
+	// a tab in the background says nothing, so one that loads there never becomes the tab touched last; it reports on coming into view
 	const send = (force: boolean) => {
-		if (!served) return;
+		if (!served || document.visibilityState !== 'visible') return;
 		const said = JSON.stringify(body());
 		if (!force && said === last) return;
 		last = said;
@@ -173,9 +174,7 @@ export function startReporting(route: () => Route, path: () => string): () => vo
 		clearTimeout(timer);
 		timer = setTimeout(() => send(false), 300);
 	};
-	const touched = () => {
-		if (document.visibilityState === 'visible') send(true);
-	};
+	const touched = () => send(true);
 	const selecting = () => {
 		const current = workspace.current;
 		if (!current) return;

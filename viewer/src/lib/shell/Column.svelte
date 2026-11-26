@@ -1,13 +1,15 @@
 <script lang="ts">
-	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message and the agent's.
+	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: whether the page is updating after a write, the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message, one while the page updates, and the agent's.
 	//
-	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, its kinds and drafts (`ReviewColumn`) where the source serves its reads, else today's sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`) and the documents listed by name (`DocumentList`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs (`LibraryColumn`, `WebColumn`). At the foot, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
+	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, its kinds and drafts (`ReviewColumn`) where the source serves its reads, else today's sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`) and the documents listed by name (`DocumentList`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs (`LibraryColumn`, `WebColumn`). At the foot, `Updating`, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
 	import Contents from './Contents.svelte';
 	import HoverCard from './HoverCard.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import AgentStatus from './column/AgentStatus.svelte';
 	import Legend from './column/Legend.svelte';
 	import Message from './column/Message.svelte';
+	import Updating from './column/Updating.svelte';
+	import { updating } from '$lib/manifest/updating.svelte';
 	import LibraryColumn from './column/library/LibraryColumn.svelte';
 	import DocumentList from './column/DocumentList.svelte';
 	import FilesShelf from './column/FilesShelf.svelte';
@@ -191,6 +193,7 @@
 				{/each}
 			</nav>
 			{#if message.said}<button type="button" class="ib said" title={message.said.text} aria-label={message.said.text} data-testid="column-message-dot" onclick={fold}><span class="dot"></span></button>{/if}
+			<Updating folded />
 			<AgentStatus folded />
 		{:else}
 			<div class="head">
@@ -270,8 +273,9 @@
 					{/if}
 				{/if}
 			</div>
-			<!-- The foot, pinned outside the scroll in every view: what was just done, the legend of the marks, and whether an agent is connected. -->
+			<!-- The foot, pinned outside the scroll in every view: whether the page is updating, what was just done, the legend of the marks, and whether an agent is connected. -->
 			<div class="foot">
+				<Updating />
 				<Message />
 				<Legend />
 			</div>
@@ -299,7 +303,7 @@
 		{/if}
 	</div>
 
-	<div class="content">
+	<div class="content" aria-busy={updating.on}>
 		{@render children()}</div>
 	{#if rail}<aside class="right rail-scroll">{@render rail()}</aside>{/if}
 	{#if primary === 'docs' && docsState.picker}<Picker doc={currentDoc ?? null} left={panelBox?.getBoundingClientRect().right ?? 0} />{/if}

@@ -51,6 +51,8 @@ LINKS_REMOVED = f"{LIBRARY}/links-removed.jsonl"
 #: The old store of documents, a folder each work, and its ledger of what each copy was taken from.
 STORAGE = f"{LIBRARY}/storage"
 STORE_LEDGER = f"{STORAGE}/copied.json"
+#: The write API's refusal when the research state the carry rewrites holds a link that names nothing or a byte that is not text, which the door will not write.
+STATE_REFUSED = "state-refused"
 #: Who an overview's note is written by: a name `identity.is_agent` reads as no agent's.
 OVERVIEW_AUTHOR = "loom (carried overview)"
 #: A work's folder in the old store: its PDF, its source's files, and its overview.
@@ -150,7 +152,7 @@ def carry(root: Path, result: ScanResult, *, write: bool = True) -> Carried:
 
     Notes
     -----
-    Holds the door's lock, then the id lock and the library's lock, throughout, the annotation log's while it is rewritten. The research state is rewritten only through the door (`pages.write`); where the door refuses it, the carry stops there with a `ContentError` that says why, before the old library is removed, so the quilt keeps its old layout and an upgrade once the state is mended carries the rest. An entry whose key a reference already holds, ignoring case, makes none, so a second carry changes nothing; the old files are removed only after every reference and document is written, and a work's folder that could not be carried stays.
+    Holds the door's lock, then the id lock and the library's lock, throughout, the annotation log's while it is rewritten. The research state is rewritten only through the door (`pages.write`); where the door refuses it, the carry stops there with a `WriteRefused` that says why (`STATE_REFUSED` for a link that names nothing or a byte that is not text, else the door's own code), before the old library is removed, so the quilt keeps its old layout and an upgrade once the state is mended carries the rest. An entry whose key a reference already holds, ignoring case, makes none, so a second carry changes nothing; the old files are removed only after every reference and document is written, and a work's folder that could not be carried stays.
     """
     out = Carried()
     with _held(root, write):
@@ -701,8 +703,10 @@ def _overviews(root: Path, works: list[_Work], names: _Names, out: Carried, *, w
 
 
 def _state(root: Path, result: ScanResult, names: _Names, out: Carried, *, write: bool) -> None:
-    """Rewrite the research state's `cited:work:` links as `quilt:` links to their references, through the door as a page is written, and recorded as loom's. Where the door refuses (a link of the state's that names nothing, a byte that is not text, or the door's own refusal), the carry stops with a `ContentError` saying so, and the state is as it was: it is the person's file, which only the door writes."""
-    from loom.errors import ContentError
+    """Rewrite the research state's `cited:work:` links as `quilt:` links to their references, through the door as a page is written, and recorded as loom's.
+
+    Where the door refuses, the carry stops with a `WriteRefused` (409) saying so, `STATE_REFUSED` for a link of the state's that names nothing or a byte that is not text, else the door's own code; the state is as it was, being the person's file, which only the door writes.
+    """
     from loom.links import LinkError
     from loom.pages import state_page
     from loom.pages import write as write_page
@@ -721,8 +725,11 @@ def _state(root: Path, result: ScanResult, names: _Names, out: Carried, *, write
         write_page(result, state_page(result.quilt.config), new, actor="loom", session=None)
     except (LinkError, UnicodeEncodeError, WriteRefused) as exc:
         why = "it holds bytes that are not text" if isinstance(exc, UnicodeEncodeError) else str(exc)
-        raise ContentError(
-            f"the carry stopped at {rel}, whose links to works it rewrites, because loom could not write it: {why}. {rel} is as it was, and the old library and the quilt's layout are kept; once {rel} is mended, an upgrade carries the rest, and nothing twice"
+        code, status = (exc.code, exc.status) if isinstance(exc, WriteRefused) else (STATE_REFUSED, 409)
+        raise WriteRefused(
+            code,
+            f"the carry stopped at {rel}, whose links to works it rewrites, because loom could not write it: {why}. {rel} is as it was, and the old library and the quilt's layout are kept; once {rel} is mended, an upgrade carries the rest, and nothing twice",
+            status,
         ) from None
 
 

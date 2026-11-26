@@ -43,6 +43,7 @@ def test_api_and_the_stream_say_who_is_connected(serve: Callable[[Path], ServeSe
         following = events(resp)
         assert following() == ("compiles", b"{}")
         assert following() == ("connected", b"[]")
+        assert following()[0] == "built"
         here = Presence(q, "Claude Code Agent")
         try:
             here.begin({"name": "claude-code", "title": "Claude Code"}, "2026-07-28")
@@ -63,7 +64,7 @@ def test_a_record_written_republishes_nothing(serve: Callable[[Path], ServeSessi
     built = s.builds
     with urllib.request.urlopen(s.url + "_api/stream", timeout=PATIENCE) as resp:
         following = events(resp)
-        assert following()[0] == "compiles" and following()[0] == "connected"
+        assert following()[0] == "compiles" and following()[0] == "connected" and following()[0] == "built"
         here = Presence(q, "Test Agent")
         try:
             here.begin(None, None)

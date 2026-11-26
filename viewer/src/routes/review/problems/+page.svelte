@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import HelpDot from '$lib/components/HelpDot.svelte';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import type { Diagnostic, Fix } from '$lib/manifest/types';
 	import { forPerson, groupProblems, lineUrl, openUrl, partsOf, splitFixes, titleOf, type Group } from '$lib/diagnostics';
 	import { keyTarget, placeUrl } from '$lib/nav';
@@ -57,7 +58,7 @@
 		const done = await write(a.endpoint, a.body);
 		if (done.ok) {
 			text = typeof done.result === 'string' ? `Done: ${done.result}.` : 'Done.';
-			await store.refresh();
+			await landed();
 		} else [text, refused] = [done.error?.message ?? 'That was not done.', true];
 		answers = { ...answers, [id]: { text, refused } };
 		busy = '';

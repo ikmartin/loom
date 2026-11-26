@@ -109,3 +109,38 @@ test('the front door chosen in Settings is what the viewer opens on', async ({ p
 	await page.goto('/');
 	await expect(page).toHaveURL(/\/file\/notes\/intro\.md/);
 });
+
+test("Settings › Modes edits a mode and puts loom's text back, writing the quilt's copy each time, and keeps an edit while another mode is looked at", async ({ page, served }) => {
+	await served.api('agents-setup', { app: 'claude-code' });
+	const file = join(served.root, '.loom/agents/instructions/modes/referee.md');
+	const loom = readFileSync(file, 'utf8');
+	const tab = (name: string) => page.locator(`[data-testid="mode-tab"][data-mode="${name}"]`);
+	await page.goto('/');
+	await settings(page, 'modes');
+	await tab('referee').click();
+	await expect(page.getByTestId('mode-edit')).toBeVisible();
+	expect(await page.getByTestId('mode-text').textContent()).toBe(loom);
+	// loom's text has nothing to put back
+	await expect(page.getByTestId('mode-put-back')).toHaveCount(0);
+
+	await page.getByTestId('mode-edit').click();
+	const field = page.getByTestId('mode-field');
+	await expect(field).toHaveValue(loom);
+	await field.fill(`${loom}\nThis quilt asks for a second referee on every lemma.\n`);
+	await tab('quick').click();
+	await expect(tab('referee').getByTestId('mode-tab-unsaved')).toBeVisible();
+	await tab('referee').click();
+	await expect(field).toHaveValue(/second referee/);
+	await page.getByTestId('mode-save').click();
+	await expect.poll(() => readFileSync(file, 'utf8')).toContain('a second referee on every lemma');
+	await expect(page.getByTestId('mode-state')).toHaveText('edited here');
+	await expect(tab('referee').locator('.state')).toHaveText('edited here');
+	await expect(page.getByTestId('mode-text')).toContainText('a second referee on every lemma');
+
+	await page.getByTestId('mode-put-back').click();
+	await expect(page.getByTestId('mode-put-back-ask')).toContainText('referee mode');
+	await page.getByTestId('mode-put-back-yes').click();
+	await expect.poll(() => readFileSync(file, 'utf8')).toBe(loom);
+	await expect(page.getByTestId('mode-state')).toHaveText("loom's");
+	await expect(page.getByTestId('mode-put-back')).toHaveCount(0);
+});

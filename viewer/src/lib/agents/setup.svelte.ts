@@ -1,6 +1,6 @@
 // Setting an agent's app up from the viewer (specs/write-api.md, `agents-setup`), and what the card says after: the steps to connect, and how long it has waited for the app's first conversation. Kept here rather than in a card, so the chip's panel and Settings › Agents show one state.
 
-import { store } from '$lib/manifest/client.svelte';
+import { landed } from '$lib/manifest/updating.svelte';
 import { write } from '$lib/write';
 import { agents as words } from '$lib/words/agents';
 
@@ -37,7 +37,7 @@ class Setup {
 		if (answer.ok) {
 			this.said = { ...this.said, [app]: answer as unknown as SetupAnswer };
 			this.waitFor(app);
-			await store.refresh();
+			await landed();
 		} else {
 			this.error = { ...this.error, [app]: answer.error?.message ?? words.setup.failed };
 		}

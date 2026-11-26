@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Who you are on this computer, saved through the publisher into your own loom config and read by every quilt; the manifest is refreshed after. A viewer with no publisher shows the name it was published with.
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { write } from '$lib/write';
 	import Row from './Row.svelte';
 
@@ -17,7 +18,7 @@
 		busy = true;
 		error = '';
 		const answer = await write('reviewer-settings', { name });
-		if (answer.ok) await store.refresh();
+		if (answer.ok) await landed();
 		else error = answer.error?.message ?? 'Could not save your name';
 		busy = false;
 	}

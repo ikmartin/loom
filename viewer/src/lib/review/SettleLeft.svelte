@@ -1,6 +1,6 @@
 <script lang="ts">
 	// "Settle as it stands" on the notice of a write loom could neither finish nor undo (`loom:write-left`): the button asks `write-settle-preview`, which writes nothing, and draws what settling would leave and record; only the person's confirmation calls `write-settle`. Every sentence is the viewer's (`settle.ts`); the act's id is sent and never shown. The caller offers it only where the publisher serves both endpoints.
-	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { hovercard } from '$lib/shell/hovercards.svelte';
 	import { review } from '$lib/words/review';
 	import { write } from '$lib/write';
@@ -37,7 +37,7 @@
 		}
 		onsettled(doneSays(answer as unknown as SettleAnswer));
 		[phase, drawn] = ['idle', null];
-		await store.refresh();
+		await landed();
 	}
 
 	function cancel(): void {

@@ -4,6 +4,7 @@
 	import { shortDate } from '$lib/badges';
 	import { said } from '$lib/library/said';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import type { CanonDoc } from '$lib/manifest/types';
 	import { message } from '$lib/shell/message.svelte';
 	import { docs } from '$lib/words/docs';
@@ -58,7 +59,7 @@
 		naming = false;
 		label = '';
 		if (done.ok) {
-			await store.refresh();
+			await landed();
 			message.post(w.recorded(file(doc), named));
 		} else message.post(said({ code: done.error?.code ?? 'failed', message: '' }));
 	}

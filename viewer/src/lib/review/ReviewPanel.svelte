@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { can, write } from '$lib/write';
 	import { displayNode } from '$lib/nodes/display';
 	import { shortDate } from '$lib/badges';
@@ -53,7 +54,7 @@
 		const done = (await write('review-accept', { keys: [reviewKey] })) as Awaited<ReturnType<typeof write>> & { accepted?: string[]; refused?: { why: string }[] };
 		if (!done.ok) said = { text: done.error?.message ?? 'The publisher refused it.', refused: true };
 		else {
-			await store.refresh();
+			await landed();
 			said = done.accepted?.length ? { text: `Accepted ${name}.`, refused: false } : { text: done.refused?.[0]?.why ?? 'Not accepted.', refused: true };
 		}
 		busy = false;

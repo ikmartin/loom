@@ -181,6 +181,13 @@ test("a quilt an earlier loom made: the frame's head, one sentence and one butto
 	await expect(page.getByTestId('format-old-said')).toHaveText('This quilt was made by a version of loom this one cannot upgrade from.');
 	await expect(old).not.toContainText('.loom');
 	await expect(old).not.toContainText('loom upgrade');
+	// a research state the door will not write: why, and to mend it, never to try again as it is
+	next = () => ({ status: 409, json: { error: { code: 'state-refused', message: 'the carry stopped at research-state.md, whose links to works it rewrites, because loom could not write it: it holds bytes that are not text' } } });
+	await button.click();
+	await expect.poll(() => answers.length).toBe(1);
+	await answers.shift()!();
+	await expect(page.getByTestId('format-old-said')).toHaveText('The quilt was not upgraded: its research state holds a link that names nothing or a character that is not text, which loom will not write. Mend the research state, then upgrade the quilt again.');
+	await expect(old).not.toContainText('try it again');
 	// carried, but not all of it: said, and the button opens the quilt
 	next = () => ({ status: 200, json: { ok: true, result: 'brought the quilt forward', carried: { references: 3, documents: 1, notes_rekeyed: 0, overviews: 0, links_rewritten: 0, removed: [], problems: ['one entry could not be read'] } } });
 	await button.click();

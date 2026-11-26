@@ -354,7 +354,7 @@ def receive_stream(root: Path, name: str, stream: Any, length: int) -> dict[str,
 def _library_upgrade(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`library-upgrade`: bring a quilt an earlier loom made forward by the one function `loom upgrade` runs (`loom.upgrade.upgrade`): its library carried into the node store and this loom's number stamped, then the ignore files, the agents' layer and the client files made this loom's; the author's.
 
-    The carry holds the id lock and the library's lock itself and carries nothing a second time, and the rest writes only what differs, so a `loom upgrade` beside it does no harm. A quilt already in this loom's layout carries nothing, `carried` all zero; one in a layout this loom neither reads nor carries is refused `format-unknown`.
+    The carry holds the id lock and the library's lock itself and carries nothing a second time, and the rest writes only what differs, so a `loom upgrade` beside it does no harm. A quilt already in this loom's layout carries nothing, `carried` all zero; one in a layout this loom neither reads nor carries is refused `format-unknown`. A write the door refuses answers its code: `state-refused` (409) for a research state the carry rewrites that holds a link naming nothing or a byte that is not text.
     """
     from loom import layout
     from loom.identity import is_agent
