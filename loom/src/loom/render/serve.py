@@ -100,12 +100,22 @@ def addressed_here(request: SimpleHTTPRequestHandler) -> bool:
     return (request.headers.get("Host") or "").lower() in (f"127.0.0.1:{port}", f"localhost:{port}")
 
 
+def failure(exc: BaseException) -> str:
+    """Why a build failed, in one line, for the page that waited on it."""
+    return f"{type(exc).__name__}: {exc}".splitlines()[0]
+
+
 class Publications:
-    """Every publication the server makes, counted, how its compiles stand, who is connected and where the library's generation stands, so `/_api/stream` can say that any of them changed."""
+    """Every publication the server makes, counted, how its compiles stand, who is connected, where the library's generation stands and how its builds ended, so `/_api/stream` can say that any of them changed."""
 
     def __init__(self) -> None:
         self._cond = threading.Condition()
         self.count = 0
+        #: Builds ended, published or failed, counted; the number of the last build that published and of the last that failed, and why that one failed, which the stream's `built` event says.
+        self.ends = 0
+        self.last_published = 0
+        self.last_failed = 0
+        self.why: str | None = None
         self.compiles = 0
         self.compile_state = b"{}"
         self.connected = 0
@@ -114,10 +124,30 @@ class Publications:
         self.library_state = b""
         self._closed = False
 
-    def published(self) -> None:
+    def published(self, n: int = 0) -> None:
+        """Build `n` published a new manifest; 0 for a publication no build numbers."""
         with self._cond:
             self.count += 1
+            if n:
+                self.ends += 1
+                self.last_published = max(n, self.last_published)
             self._cond.notify_all()
+
+    def failed(self, n: int, why: str) -> None:
+        """Build `n` ended without publishing, for `why`: a write it was to publish is recorded, and the page that waits on it is told so."""
+        with self._cond:
+            self.ends += 1
+            self.last_failed = max(n, self.last_failed)
+            self.why = why
+            self._cond.notify_all()
+
+    @property
+    def built_state(self) -> bytes:
+        """The stream's `built` event: `{server, published, failed, why}`, `server` this process, so a page tells a server restarted under it."""
+        with self._cond:
+            return json.dumps(
+                {"server": os.getpid(), "published": self.last_published, "failed": self.last_failed, "why": self.why}
+            ).encode()
 
     def compiled(self, state: bytes) -> None:
         """How the compiles stand now, as one line of JSON."""
@@ -148,11 +178,11 @@ class Publications:
             self._closed = True
             self._cond.notify_all()
 
-    def counts(self) -> tuple[int, int, int, int]:
-        return (self.count, self.compiles, self.connected, self.library)
+    def counts(self) -> tuple[int, int, int, int, int]:
+        return (self.count, self.compiles, self.connected, self.library, self.ends)
 
-    def wait(self, seen: tuple[int, int, int, int], timeout: float) -> tuple[int, int, int, int] | None:
-        """The publication, compile, connection and library counts once any is past `seen`, or as they stand after `timeout`; None once closed."""
+    def wait(self, seen: tuple[int, int, int, int, int], timeout: float) -> tuple[int, int, int, int, int] | None:
+        """The publication, compile, connection, library and build-end counts once any is past `seen`, or as they stand after `timeout`; None once closed."""
         with self._cond:
             self._cond.wait_for(lambda: self._closed or self.counts() != seen, timeout)
             return None if self._closed else self.counts()
@@ -568,11 +598,10 @@ class LoomHandler(SimpleHTTPRequestHandler):
     #: The quilt to write into. `None` serves the corpus read-only and answers `/_api` with 404, which is the
     #: discovery mechanism working: a viewer that gets 404 shows no editing affordances.
     quilt_root: Path | None = None
-    #: Rebuild the manifest, set when the server owns one. Most writes rebuild before answering; pending review
-    #: decisions publish queue metadata only (DR-315-luisa). The original immediate-publish rule (plan 0.13.1): the
-    #: watcher's filesystem scan and the viewer's manifest poll are a second each, so a change that costs 40ms to
-    #: build took ~1.3s to appear, and the `refresh()` a viewer runs on the answer raced the rebuild and lost.
+    #: Rebuild the manifest, set when the server owns one. A write answers once it is recorded and then publishes, under the hold that wrote it, so the watcher never builds it first; the answer's `publication` is the number of that build (`upcoming`), and the stream's `built` event says when it published or failed. Pending review decisions publish queue metadata only (DR-315-luisa).
     rebuild: Callable[..., None] | None = None
+    #: The number the next build will have (`ServeSession.upcoming`); None outside a server.
+    upcoming: Callable[[], int] | None = None
     publication_lock: Any = None
     #: The server's publications, set when it owns a build: what `/_api/stream` reports.
     publications: Publications | None = None
@@ -751,22 +780,46 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 if self.publication_lock is not None and endpoint not in OWN_LOCK
                 else nullcontext()
             )
+            # reads need no rebuild, nor do review decisions, which publish queue metadata themselves
+            publishes = self.rebuild is not None and self.upcoming is not None and endpoint not in NO_REBUILD
             with lock:
                 answer = handle(self.quilt_root, endpoint, body)
-                # The viewer's refresh finds the write immediately. Reads need no rebuild; review decisions already published queue metadata without touching document renderings. Published under the hold that wrote it: a watcher that saw the write while the request held the lock would otherwise publish it first, and the request would build it a second time before it answered.
-                if self.rebuild is not None and endpoint not in NO_REBUILD:
-                    self.rebuild(records=endpoint in RECORD_WRITES)
                 # the quilt is in this loom's layout now, so the server stops waiting before it answers, and the viewer's next request is served
                 if endpoint == UPGRADE and self.brought_forward is not None:
                     self.brought_forward()
-            if endpoint in WRITES and self.library_gen is not None:
-                answer = answered(endpoint, answer, self.library_gen())
-            self._json(HTTPStatus.OK, answer)
+                # Answered as soon as it is recorded, then published under the hold that wrote it: a watcher that saw the write would otherwise publish it first, and the request would build it a second time. A write that takes its own lock takes the hold here, so the build it names is the next.
+                with self.publication_lock if publishes else nullcontext():
+                    n = self.upcoming() if publishes and self.upcoming is not None else 0
+                    if n:
+                        answer = {**answer, "publication": n}
+                    if endpoint in WRITES and self.library_gen is not None:
+                        answer = answered(endpoint, answer, self.library_gen())
+                    try:
+                        self._json(HTTPStatus.OK, answer)
+                    finally:
+                        # published even when the page went before its answer reached it
+                        if n:
+                            self._publish(n, records=endpoint in RECORD_WRITES)
         except ApiError as exc:
             self._json(exc.status, exc.answer())
         except Exception as exc:  # noqa: BLE001
             # A write that failed for a reason nobody anticipated is still the publisher's answer, not a dead socket.
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": {"code": "failed", "message": str(exc)}})
+
+    def _publish(self, n: int, records: bool) -> None:
+        """Build `n`, which publishes a write already answered; it ends published or failed, never unsaid, since a page marks itself updating until it hears which (`Publications.built_state`)."""
+        pubs = self.publications
+        assert self.rebuild is not None
+        try:
+            self.rebuild(records=records)
+        except Exception as exc:  # noqa: BLE001 -- the answer is sent; what failed is said on the stream
+            print(f"loom serve: a write is recorded, but its publication failed: {failure(exc)}", file=sys.stderr)
+            if pubs is not None and pubs.last_published < n and pubs.last_failed < n:
+                pubs.failed(n, failure(exc))
+            return
+        # a build that never began (the server stopping) is said as one that failed
+        if pubs is not None and pubs.last_published < n and pubs.last_failed < n:
+            pubs.failed(n, "the server stopped before it published")
 
     def _receive(self) -> None:
         """`library-receive`: a dropped file's bytes, streamed to the library's intake as they arrive (specs/write-api.md §6), the one write whose body is not JSON.
@@ -991,7 +1044,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
         self._json(HTTPStatus.OK, reading_place(self.quilt_root))
 
     def _stream(self) -> None:
-        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, and `connected`, carrying the agent servers alive, each on opening and each time it changes; and `library`, carrying `{"gen": N}`, each time the library's generation moves (`library-views.md` §2, "Freshness").
+        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, `connected`, carrying the agent servers alive, and `built`, carrying how the builds ended (`Publications.built_state`), each on opening and each time it changes; and `library`, carrying `{"gen": N}`, each time the library's generation moves (`library-views.md` §2, "Freshness").
 
         The viewer fetches the manifest as it would on a poll and learns nothing of what changed. Held open on its own thread; a comment every `HEARTBEAT` seconds keeps an idle one alive, and the server's stop ends it.
         """
@@ -1007,6 +1060,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
         try:
             self.wfile.write(b": open\n\nevent: compiles\ndata: " + pubs.compile_state + b"\n\n")
             self.wfile.write(b"event: connected\ndata: " + pubs.connected_state + b"\n\n")
+            self.wfile.write(b"event: built\ndata: " + pubs.built_state + b"\n\n")
             self.wfile.flush()
             while True:
                 now = pubs.wait(seen, HEARTBEAT)
@@ -1022,6 +1076,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     self.wfile.write(b"event: connected\ndata: " + pubs.connected_state + b"\n\n")
                 if now[3] != seen[3]:
                     self.wfile.write(b"event: library\ndata: " + pubs.library_state + b"\n\n")
+                if now[4] != seen[4]:
+                    self.wfile.write(b"event: built\ndata: " + pubs.built_state + b"\n\n")
                 seen = now
                 self.wfile.flush()
         except OSError:
@@ -1246,24 +1302,30 @@ class ServeSession:
             # a build that fails sweeps nothing, until one succeeds
             self._sweep_due = False
             self._begun += 1
-            if progress is None and changed is not None:
-                from loom.cli.report import Progress
+            n = self._begun
+            try:
+                if progress is None and changed is not None:
+                    from loom.cli.report import Progress
 
-                with Progress("rebuilding") as shown:
-                    report = build(self.quilt, reuse=reuse, progress=shown.told, tex=self.compile_masters)
-            else:
-                report = build(self.quilt, reuse=reuse, progress=progress, tex=self.compile_masters)
-            self._sweep_due = True
-            self.last_report = report = report.kept()
-            self.builds += 1
-            # the references and stubs the build itself wrote are no change to build again for
-            nodes = root / LIBRARY_NODES
-            if nodes.is_dir():
-                seen = {**seen, **{p: p.stat().st_mtime for p in nodes.glob("*.node")}}
-            self.published = seen
-            if self.watcher is not None:
-                self.watcher.rebaseline(seen)
-            self.publications.published()
+                    with Progress("rebuilding") as shown:
+                        report = build(self.quilt, reuse=reuse, progress=shown.told, tex=self.compile_masters)
+                else:
+                    report = build(self.quilt, reuse=reuse, progress=progress, tex=self.compile_masters)
+                self._sweep_due = True
+                self.last_report = report = report.kept()
+                self.builds += 1
+                # the references and stubs the build itself wrote are no change to build again for
+                nodes = root / LIBRARY_NODES
+                if nodes.is_dir():
+                    seen = {**seen, **{p: p.stat().st_mtime for p in nodes.glob("*.node")}}
+                self.published = seen
+                if self.watcher is not None:
+                    self.watcher.rebaseline(seen)
+            except Exception as exc:
+                # a page waiting on this build is told it ended, and why
+                self.publications.failed(n, failure(exc))
+                raise
+            self.publications.published(n)
             self.library_moved(report.result)
             if self.unasked is not None:
                 from loom.library.unasked import cited
@@ -1286,6 +1348,11 @@ class ServeSession:
             if due:
                 self.compiles.want(due)
         self._settle()
+
+    def upcoming(self) -> int:
+        """The number the next build will have, which a write answered under the publication's hold says it waits on: every build counts once it begins, published or failed."""
+        with self.lock:
+            return self._begun + 1
 
     def _settle(self) -> None:
         """Sweep what the last build no longer names (`sweep`) and give back what the builds left (`give_back`) once `SETTLE_AFTER` seconds pass with no rebuild, so neither a save nor a write through the API waits for it; nothing is set once the server is stopping, so a build that ends after `stop` leaves no timer behind."""
@@ -1439,6 +1506,7 @@ class ServeSession:
                 # The write API is served for the quilt being served, and only ever over this loopback socket.
                 "quilt_root": self.quilt.root,
                 "rebuild": self.rebuild,
+                "upcoming": self.upcoming,
                 "publication_lock": self.lock,
                 "publications": self.publications,
                 "older": self.older,

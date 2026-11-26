@@ -76,7 +76,7 @@ Every act gets a unique id. Ids made from an act's content would name a later ac
 
 What stops a write being made twice is a record read under the lock. The Keep of a suggested edit is named by `<edit id>:<generation>`, the generation being how many times the edit has been opened again; the journal's `wrote` holds every such name loom wrote, and no act writes one twice. An edit loom wrote whose `kept` line is missing (an act a crash left after its rename) is recorded kept, never written again. Every other act is either a state (a box, a setting, a version, a put-back: doing it twice leaves the same bytes) or is refused on repeat because its item, read under the lock, no longer waits (a discarded change).
 
-A request id, which would let a viewer that lost an answer send the request again and get the first answer back, is not built. It belongs to the write that answers before the rebuild (below), and goes in `begin` when that is built.
+A request id, which would let a viewer that lost an answer send the request again and get the first answer back, is not built; it would go in `begin`.
 
 ## Recovery
 
@@ -163,13 +163,13 @@ The undo is offered on the machine that wrote the Keep, because the journal is t
 
 ## What the rebuild may rely on
 
-Writes from the viewer are to answer before the rebuild that publishes them (not built yet: `docs/plans/0.32-v0.1.md`, decision 8). The rebuild then takes this same lock to scan, and may rely on the following.
+A write from the viewer answers once its act has committed, before the rebuild that publishes it, which follows under the server's `publication_lock` the request already holds, so no other build comes between; the answer names that build, and the page marks itself updating until it has published or failed (`docs/specs/write-api.md` §2). The rebuild may rely on the following.
 
 - A process holding `writes.lock` sees no other process's act between its `begin` and its `done`: a scan taken under the lock sees each act whole or not at all.
 - Recovery has run before any act, and any command that draws an id (`cli._quilt.drawing_ids`), holds the lock. An act still unsettled after it is one recovery could not settle, and is reported rather than hidden; the next step is numbered past every step folder there is, so it never shares a number with one such an act left (`History.next_step`).
 - An act never takes `publication_lock`, never rebuilds and never runs TeX. It holds the lock for its reads, its plan, its versions, its writes, its records and its follow-ups, which scan the quilt at most twice (three times when Keep plans again). A scan inside an act's thread may take `writes.lock` again, since it is reentrant.
 - An act's answer is final when it releases the lock, so the write API may answer then.
-- The rebuild takes `writes.lock` after `publication_lock` and before any inner lock, and holds it only to scan, never through TeX: a command in a shell waits at most `WAIT` for it.
+- The rebuild is to take `writes.lock` after `publication_lock` and before any inner lock, and hold it only to scan, never through TeX, so that a command in a shell waits at most `WAIT` for it (not built yet: within the server `publication_lock` keeps a build and the viewer's acts apart, and an act from another process may land while a build scans, which the watcher then builds again).
 
 ## Refusals
 
