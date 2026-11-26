@@ -45,7 +45,9 @@ Several triggers below are numbers loom already prints. That is the property to 
 | [WQ-67](WQ-67-corrections-to-a-digest.md) | corrections to a digest's results: annotations while a digest stays read-only, or edits the author keeps | loom, arras | the author asks for an ingest correction to be made in a digest, or edits a digest's file by hand to make one |
 | [WQ-68](WQ-68-toolbar-changes.md) | UI changes to the toolbar, workshopped through a demo the author revises | arras | the author starts the toolbar workshop, or a control that must be visible at rest has no room on a pane's toolbar at the width two panes leave it |
 | [WQ-69](WQ-69-every-note.md) | a view of every note in the quilt, likely opened from the left column | arras | the author asks to see the notes of more than one document, work or PDF at once |
+| [WQ-70](WQ-70-note-renderer-hook.md) | a hook that renders notes in other formats, org among them | loom, arras | a person asks to read a non-Markdown note rendered rather than as text |
+| [WQ-71](WQ-71-wikilinks.md) | `[[wikilinks]]` between Markdown notes | loom, arras | a quilt holds Markdown notes that link each other with `[[Note name]]` |
 
-Twenty-four active, twenty-one slots of headroom.
+Twenty-seven active, eighteen slots of headroom.
 
 Every item above has an observable trigger, which is the rule. The rule does not catch a second failure: **a trigger that is observable and will never be observed is a polite way of saying no.** Such an item looks like a plan and is actually a decline, which is worse than an empty queue because it suggests work is coming. So each review asks two questions, not one — is the trigger checkable, and will it ever fire? Five items failed the second on 2026-09-16 and were closed for it; their reasons are in [closed.md](closed.md), and their ids are retired rather than reused.
