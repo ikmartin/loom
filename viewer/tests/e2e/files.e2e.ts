@@ -22,6 +22,36 @@ test('Docs is the tree of the project: a directory folds, and stays as it was le
 	await expect(page).toHaveURL(/\/page\/state$/);
 });
 
+test('a folder holding the open file folds at a click, its name bold with the file under the pointer, and opening another file elsewhere, or into it by a link, leaves it folded', async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	const tree = page.getByTestId('docs-tree');
+	const drafting = tree.locator('[data-path="drafting"] > .fold');
+	const notes = tree.locator('[data-path="notes"] > .fold');
+	await expect(drafting).toHaveAttribute('aria-expanded', 'true');
+	await expect(drafting).not.toHaveAttribute('title');
+	await drafting.click();
+	await expect(drafting).toHaveAttribute('aria-expanded', 'false');
+	await expect(tree.getByRole('link', { name: 'main.tex', exact: true })).toHaveCount(0);
+	await expect(drafting).toHaveCSS('font-weight', '600');
+	await expect(drafting).toHaveAttribute('title', 'Holds main.tex, which is open');
+	// another file opened elsewhere leaves it folded, and no longer bold
+	await tree.getByRole('link', { name: 'README.md', exact: true }).click();
+	await expect(page).toHaveURL(/\/file\/README\.md$/);
+	await expect(drafting).toHaveAttribute('aria-expanded', 'false');
+	await expect(drafting).toHaveCSS('font-weight', '400');
+	await expect(drafting).not.toHaveAttribute('title');
+	// a file reached from elsewhere into a folded folder leaves it folded too, the bold saying what is open in it
+	await page.goto('/file/notes/intro.md');
+	await expect(pane(page, 0).getByTestId('file-item').locator('h1')).toBeVisible();
+	await expect(notes).toHaveAttribute('aria-expanded', 'false');
+	await expect(notes).toHaveAttribute('title', 'Holds intro.md, which is open');
+	// and a link in it to the paper opens the paper beside, its folder still as it was left
+	await pane(page, 0).getByTestId('file-item').getByRole('link', { name: 'the paper' }).click();
+	await expect(page.getByTestId('pane-1').getByTestId('item-tab').first()).toContainText('main.tex');
+	await expect(drafting).toHaveAttribute('aria-expanded', 'false');
+	await expect(tree.getByRole('link', { name: 'main.tex', exact: true })).toHaveCount(0);
+});
+
 test('a Markdown file is drawn, opened at the heading a link names, and its links are followed in the viewer', async ({ page }) => {
 	await page.goto('/file/notes/intro.md#next');
 	const file = pane(page, 0).getByTestId('file-item');

@@ -36,8 +36,10 @@ export const docs = {
 		head: 'Files',
 		/** Hover text on that head: the directory it shows. */
 		title: (dir: string) => `View of files in ${dir}/`,
-		/** The row for the quilt's research state, where the publisher lists no files. */
-		researchState: 'Research state'
+		/** The row for the quilt's research state, in the tree or, where the publisher lists no files, alone. */
+		researchState: 'Research state',
+		/** Hover text on a folded folder in the tree holding the file being read: that file, as a path from the folder. */
+		holds: (file: string) => `Holds ${file}, which is open`
 	},
 	picker: {
 		/** The button in Docs' column that opens the library over Docs. */
