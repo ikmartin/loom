@@ -439,17 +439,18 @@ async function arrived(page: Page, n: number, pane = 0): Promise<void> {
 	await expect.poll(off).toBeLessThanOrEqual(1);
 }
 
-/** Wait until this browser has kept `want` as where the reader is in a file, which it does once the column has been still a moment: a window opened or a reload before that finds the place before it. */
-async function kept(page: Page, want: At): Promise<void> {
-	await expect
-		.poll(async () => {
-			const places = await page.evaluate(() => Object.values<At>(JSON.parse(localStorage.getItem('viewer.places') ?? '{}')));
-			return places.some((at) => at.page === want.page && Math.abs(at.share - want.share) <= 0.01) ? said(want) : places.map(said).join(', ') || 'nothing kept';
-		})
-		.toBe(said(want));
+/** Whether this browser keeps `want` as where the reader is in a file, said as `kept` waits for it, else what it keeps. */
+async function keeps(page: Page, want: At): Promise<string> {
+	const places = await page.evaluate(() => Object.values<At>(JSON.parse(localStorage.getItem('viewer.places') ?? '{}')));
+	return places.some((at) => at.page === want.page && Math.abs(at.share - want.share) <= 0.01) ? said(want) : places.map(said).join(', ') || 'nothing kept';
 }
 
-/** Scroll a pane's paper to `want` as a reader does, with the wheel: only a hand on the paper moves it off a link's place. */
+/** Wait until this browser has kept `want` as where the reader is in a file, which it does once the column has been still a moment: a window opened or a reload before that finds the place before it. */
+async function kept(page: Page, want: At): Promise<void> {
+	await expect.poll(() => keeps(page, want)).toBe(said(want));
+}
+
+/** Scroll a pane's paper to `want` as a reader does, with the wheel: only a hand on the paper moves it off a link's place. Done once the paper has come to rest there and kept it, so a scroll still carrying it on, or one the paper has not yet taken in as the reader's, is wheeled again or waited for. */
 async function readTo(page: Page, want: At, pane = 0): Promise<void> {
 	const paper = paperIn(page, pane);
 	await paper.locator(`[data-holder="${want.page}"]`).waitFor({ state: 'attached' });
@@ -463,9 +464,12 @@ async function readTo(page: Page, want: At, pane = 0): Promise<void> {
 					const next = holder.nextElementSibling as HTMLElement | null;
 					return Math.round(holder.offsetTop + to.share * ((next?.offsetTop ?? c.scrollHeight) - holder.offsetTop) - c.scrollTop);
 				}, want);
-				if (Math.abs(away) <= 4) return 'there';
-				await page.mouse.wheel(0, away);
-				return `${away}px away`;
+				if (Math.abs(away) > 4) {
+					await page.mouse.wheel(0, away);
+					return `${away}px away`;
+				}
+				const place = await keeps(page, want);
+				return place === said(want) ? 'there' : `there, keeping ${place}`;
 			},
 			{ intervals: [300] }
 		)
