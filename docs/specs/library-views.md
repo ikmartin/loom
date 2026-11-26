@@ -411,7 +411,7 @@ What Docs draws of the library is the picker, a work beside a draft with a citat
 
 ### 6.1 The picker (8a)
 
-**Drawn.** Over Docs: a search, "300 works", `list` (Title, Authors, Year, and the label the draft cites it by, "[1]", with "main.tex cites it as [1]" on hover) or `thumbnails`, sorted by title, authors or year; a click opens the work beside the draft. It is a modal dialog: opened, it takes the keyboard (its search), what is behind it is inert, and Escape closes it, the keyboard going back to the control that opened it. **Read.** `library-works` with `{"doc"}`, whose `cited_as` is that label, read from the document's last compile as the build already reads it (`tex/aux.py`, `read_cite_labels`), null for a work the document does not cite or a document not compiled; and the thumbnails of §3.1. Open 28 asked for this label and is closed: the build has it.
+**Drawn.** Over Docs, opened by Library, the first of the two buttons at the head of Docs' column, above Files: a search, "300 works", `list` (Title, Authors, Year, and the label the draft cites it by, "[1]", with "main.tex cites it as [1]" on hover) or `thumbnails`, sorted by title, authors or year; a click opens the work beside the draft. It is a modal dialog: opened, it takes the keyboard (its search), what is behind it is inert, and Escape closes it, the keyboard going back to the control that opened it. **Read.** `library-works` with `{"doc"}`, whose `cited_as` is that label, read from the document's last compile as the build already reads it (`tex/aux.py`, `read_cite_labels`), null for a work the document does not cite or a document not compiled; and the thumbnails of §3.1. Open 28 asked for this label and is closed: the build has it.
 
 ### 6.2 A work beside a draft, and a citation's card (8, 8c)
 
@@ -425,7 +425,7 @@ What Docs draws of the library is the picker, a work beside a draft with a citat
 
 ### 6.3 The notes tab
 
-**Drawn.** A tab "All notes", 760 pixels wide, opened by Notes in Docs' column, which is offered once a file of the quilt links into it: every file whose `quilt:` links name a place the viewer shows (`docs/design/model.md`, "Notes"), by path, from the manifest's `backlinks` (`manifest.md`). A row names the file, its folder faint, and how many links it holds, and opens it at its first link, as the Notes list beside an item opens a note; under it each link names the place it points at, as the viewer names a link, with the words it quotes, and opens that place. A note is a file of the person's own: the tab writes nothing and nobody edits it.
+**Drawn.** A tab "All notes", 760 pixels wide, opened by Notes, beneath Library at the head of Docs' column, which is offered once a file of the quilt links into it: every file whose `quilt:` links name a place the viewer shows (`docs/design/model.md`, "Notes"), by path, from the manifest's `backlinks` (`manifest.md`). A row names the file, its folder faint, and how many links it holds, and opens it at its first link, as the Notes list beside an item opens a note; under it each link names the place it points at, as the viewer names a link, with the words it quotes, and opens that place. A note is a file of the person's own: the tab writes nothing and nobody edits it.
 
 **Reads and writes.** None: the tab is drawn from the manifest. An annotation is listed beside its place (Comments), never here.
 
