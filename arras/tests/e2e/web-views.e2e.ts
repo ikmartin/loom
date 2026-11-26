@@ -90,6 +90,7 @@ test("in graph form the column lists the scope's results to choose from, the gra
 	await open(page);
 	// the list's own controls are not in the column in list form
 	await expect(page.getByTestId('web-picks')).toHaveCount(0);
+	await expect(page.getByTestId('web-column')).toContainText('Show as');
 	await page.getByTestId('web-form-graph').click();
 	await expect(page.getByTestId('web-none')).toHaveText('Choose a result in the column to see what it uses and what uses it.');
 	await expect(page.getByTestId('web-graph')).toHaveCount(0);

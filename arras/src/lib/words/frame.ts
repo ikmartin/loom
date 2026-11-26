@@ -66,8 +66,8 @@ export const frame = {
 	marks: {
 		/** A result's paper mark, filled green: the person found loom's copy matches its paper. Also the mark's accessible name. */
 		checked: 'matches the paper',
-		/** A result's paper mark, an amber ring: digested and not compared with its paper yet. */
-		unchecked: 'not compared yet',
+		/** A result's paper mark, an amber ring: digested, its copy not yet checked against its paper, as Review's Results to check list it. */
+		unchecked: 'not yet checked against its paper',
 		/** A result's paper mark, a dotted ring: a stub, known and not read. */
 		stub: 'not read',
 		/** The flag on a place of a page the person marked to digest. */

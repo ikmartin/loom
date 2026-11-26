@@ -18,7 +18,7 @@ export const web = {
 		/** That choice, where the quilt names no main draft and none is chosen yet. */
 		choose: 'choose a draft',
 		/** The column's line over the two forms. */
-		form: 'Form',
+		form: 'Show as',
 		/** The two forms. */
 		list: 'list',
 		graph: 'graph',

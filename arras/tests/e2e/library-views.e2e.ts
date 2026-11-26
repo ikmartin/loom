@@ -22,7 +22,11 @@ test("the list holds round six's 300 works, sorted by title, and sorts, filters 
 	await expect(page.getByTestId('work-row').first()).toContainText('A note on admissible weightings');
 	await page.getByTestId('sort-title').click();
 	await expect(page.getByTestId('work-row').first()).not.toContainText('A note on admissible weightings');
-	await expect(page.getByTestId('library-column').getByRole('button')).toHaveText(['All works', 'Used in your drafts', 'No document']);
+	await expect(page.getByTestId('library-column').getByRole('button')).toHaveText(['All works', 'Cited in your drafts', 'No PDF or source']);
+	// the amber ring's words are Review's: a copy not yet checked against its paper
+	await page.getByTestId('legend-open').click();
+	await expect(page.getByTestId('legend')).toContainText('not yet checked against its paper');
+	await page.keyboard.press('Escape');
 	await page.getByTestId('filter-nodoc').click();
 	const nodoc = await page.getByTestId('work-row').count();
 	expect(nodoc).toBeGreaterThan(3);

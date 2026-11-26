@@ -20,7 +20,7 @@ export const library = {
 	byline: (a: readonly string[]) => (!a.length ? '' : a.length === 1 ? a[0] : a.length === 2 ? `${a[0]} and ${a[1]}` : `${a[0]} et al.`),
 	column: {
 		/** The four filters in the Library's column while the list of works is shown. */
-		filters: { all: 'All works', used: 'Used in your drafts', nodoc: 'No document' },
+		filters: { all: 'All works', used: 'Cited in your drafts', nodoc: 'No PDF or source' },
 		/** Accessible name of the filters' list. */
 		filtersLabel: 'Filters',
 		/** A work's head in the column: what loom holds of it, after its authors and year. */
