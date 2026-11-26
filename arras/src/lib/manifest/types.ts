@@ -658,6 +658,32 @@ export interface QuiltSettings {
   warnings: string[];
 }
 
+/** An agent app the write API's `agents-setup` sets up, and whether the quilt is set up for it (specs/manifest.md, Agents). */
+export interface AgentApp {
+  key: string;
+  label: string;
+  set_up: boolean;
+}
+
+/** One of the quilt's modes, as its agents are shown them. */
+export interface AgentMode {
+  name: string;
+  /** Its "When it fits" line. */
+  fits: string;
+  /** The quilt's copy, which an agent reads in place of loom's. */
+  path: string;
+  /** Whether the quilt's copy is the author's own, differing from what loom wrote. */
+  edited: boolean;
+}
+
+/** How agents are set up in the quilt and what they are told first. */
+export interface Agents {
+  apps: AgentApp[];
+  /** The line loom puts in each app's root file, verbatim; '' with no agent layer. */
+  line: string;
+  modes: AgentMode[];
+}
+
 export interface Manifest {
   reviewer?: { name: string; source: string };
   publisher: Publisher;
@@ -707,6 +733,8 @@ export interface Manifest {
   changes_since?: { who: string; when: string; carried?: string; unwatched?: string[]; holds?: string };
   /** The quilt's configuration, for Settings; absent from an older publisher. */
   config?: QuiltSettings;
+  /** How agents are set up and what they are told; absent from an older publisher. */
+  agents?: Agents;
   macros: { default: Macro[]; sets: Record<string, Macro[]> };
   search: SearchEntry[];
   /** Reserved for work not built yet, which will give each its shape (docs/specs/reserved.md); loom writes none of them. */

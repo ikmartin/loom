@@ -24,6 +24,10 @@ export interface Capabilities {
 	stale?: boolean;
 	/** The origin an HTML file is framed from, never the viewer's own; absent where none runs, and a page is then drawn with no script. */
 	frames?: string;
+	/** The agent servers alive as the publisher last looked (`agents/connected.ts`); absent where no stream says when they change. */
+	connected?: unknown[];
+	/** The quilt's folder, as an absolute path; absent from an older publisher. */
+	root?: string;
 	/** The layout the publisher found the quilt in and the one this loom reads; `found` below `reads` while it waits on a quilt an earlier loom made (shell/upgrade.svelte.ts). */
 	format?: { found: number; reads: number };
 }
