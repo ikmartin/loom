@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 16
+VERSION = 17
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -961,7 +961,7 @@ class Pages:
 def place(s: Survey, pages: Pages) -> dict[str, tuple[str | None, int]]:
     """Each heading's and result's printed number and page, read in the work's stored PDF.
 
-    A result's line is identified by its kind and its own words: a line opening with its printed name and a number (`Lemma 2.2.`, `Lemma 2.2 (Title).`), the number then the name (`2.2 Lemma.`), or the name alone (`Claim.`), whose rest and the lines after it, never past the next line that heads a result or a section, hold the statement's opening words, or its first words outside its mathematics in order (`Item.words`). A result with too few words to go by is identified by its place between two results so identified, where the source and the PDF hold as many results' headings between them. A heading's line is identified by its title, on its line or, after its number alone on a line that opens a block, on the next; a number alone is kept only where it continues the sequence of the headings already found at its level. Never by a number: the number is read from the line once it is found, whatever loom's reading of it. Results and headings are looked for in the source's order, a result found by its words before the last mark where it is not after it; a contents page holds no place. A mark nothing identifies keeps nothing.
+    A result's line is identified by its kind and its own words: a line opening with its printed name and a number (`Lemma 2.2.`, `Lemma 2.2 (Title).`), the number then the name (`2.2 Lemma.`), or the name alone (`Claim.`), whose rest and the lines after it, never past the next line that heads a result or a section, hold the statement's opening words, or its first words outside its mathematics in order (`Item.words`). A result with too few words to go by is identified by its place between two results so identified, where the source and the PDF hold as many results' headings between them. A heading's line is identified by its title, on its line or, after its number alone on a line that opens a block or follows straight on the title of the heading above it, on the next; a number alone is kept only where it continues the sequence of the headings already found at its level. Never by a number: the number is read from the line once it is found, whatever loom's reading of it. Results and headings are looked for in the source's order, a result found by its words before the last mark where it is not after it; a contents page holds no place. A mark nothing identifies keeps nothing.
 
     Parameters
     ----------
@@ -1015,21 +1015,25 @@ def _route(s: Survey, pages: Pages) -> dict[str, tuple[str | None, int, int, str
     out: dict[str, tuple[str | None, int, int, str]] = {}
     taken: set[int] = set()
     found: dict[int, str] = {}  # each level's last heading number found, so a number alone continues it
+    parent: tuple[int, int] | None = None  # the level and title line of the heading just found, nothing found after it
     marks: list[Section | Item] = sorted([*s.sections, *s.items], key=lambda m: m.order)
     for mark in marks:
         if isinstance(mark, Section):
-            got = _heading(pages, heads, contents, at, mark, found) if mark.emulated is not None else None
+            titled = parent[1] if parent is not None and parent[0] < mark.level else None
+            got = _heading(pages, heads, contents, at, mark, found, titled) if mark.emulated is not None else None
             if got is not None:
-                number, page, k = got
+                number, page, k, title = got
                 out[mark.section] = (number, page, k, "words")
                 found = {lv: n for lv, n in found.items() if lv < mark.level} | {mark.level: number}
                 at = k + 1
+                parent = (mark.level, title)
         elif _worded(mark):
             line = _result(pages, heads, contents, at, mark, taken)
             if line is not None:
                 taken.add(line)
                 out[mark.item] = (heads.at[line][1], pages.lines[line][0], line, "words")
                 at = max(at, line + 1)
+                parent = None
     # a result with no words to go by: its place between two found by theirs, where the counts agree
     items = [i for i in marks if isinstance(i, Item)]
     for n, item in enumerate(items):
@@ -1097,9 +1101,12 @@ def _contents(pages: Pages, titles: list[str]) -> range:
 
 
 def _heading(
-    pages: Pages, heads: _Heads, contents: range, at: int, sec: Section, found: dict[int, str]
-) -> tuple[str, int, int] | None:
-    """The first line after `at` that is `sec`'s heading, identified by its title: its number, its page and its line."""
+    pages: Pages, heads: _Heads, contents: range, at: int, sec: Section, found: dict[int, str], titled: int | None
+) -> tuple[str, int, int, int] | None:
+    """The first line after `at` that is `sec`'s heading, identified by its title: its number, its page, its line and its title's line.
+
+    A number alone heads a block, or follows straight on `titled`, the title line of the heading above it just found, as `pdftotext` writes a book's first section under its chapter's title with no empty line between.
+    """
     import heapq
 
     from loom.refs.search import _loose
@@ -1117,13 +1124,15 @@ def _heading(
             continue
         if m["rest"]:
             if _loose(f"{m['rest']} {pages.following(k)}").lower().startswith(title):
-                return number, page, k
+                return number, page, k, k
             continue
         # a number alone on a line heads a block, its title next, and continues the headings found at its level
-        if line.endswith(".") or not pages.opens(k) or not _loose(pages.following(k)).lower().startswith(title):
+        if line.endswith(".") or not (pages.opens(k) or k - 1 == titled):
+            continue
+        if not _loose(pages.following(k)).lower().startswith(title):
             continue
         if _continues(number, sec, found):
-            return number, page, k
+            return number, page, k, next(j for j in range(k + 1, k + 4) if pages.lines[j][1])
     return None
 
 

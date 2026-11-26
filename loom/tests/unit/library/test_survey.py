@@ -1518,3 +1518,39 @@ def test_an_opening_ends_at_a_reference_a_citation_or_an_inclusion() -> None:
         "Every widget is compact and closed."
     )
     assert _opening("By \\eqref{eq:bound} the map is onto.") is None, "too few letters before the reference"
+
+
+#: A book whose chapters' first sections `pdftotext` writes straight after the chapter's title, the appendix's too, and its first section's subsection after an empty line.
+BOOK = r"""\documentclass{book}
+\begin{document}
+\chapter{One}
+\section{First things here}
+Some text about widgets.
+\subsection{Smaller things there}
+More text.
+\chapter{Two}
+\section{Second things here}
+Text.
+\appendix
+\chapter{Extra}
+\section{Appendix things}
+Text.
+\end{document}
+"""
+#: Its pages as `pdftotext` writes them.
+BOOK_PDF = [
+    "Chapter 1\n\nOne\n1.1\n\nFirst things here\n\nSome text about widgets.\n\n1.1.1\n\nSmaller things there\n\nMore text.\n\n1\n",
+    "Chapter 2\n\nTwo\n2.1\n\nSecond things here\n\nText.\n\n3\n",
+    "Appendix A\n\nExtra\nA.1\n\nAppendix things\n\nText.\n\n5\n",
+]
+
+
+def test_a_section_straight_after_its_chapter_s_title_is_read(tmp_path: Path) -> None:
+    """The review's D-21: a book's first section under each chapter, its number alone with no empty line between it and the chapter's title, and what is below it."""
+    s = survey.read(_one_file(tmp_path, BOOK), "main.tex", TEX)
+    got = survey.place(s, survey.Pages(BOOK_PDF))
+    assert sorted(got.values()) == [("1", 1), ("1.1", 1), ("1.1.1", 1), ("2", 2), ("2.1", 2), ("A", 3), ("A.1", 3)], got
+    after_prose = survey.place(s, survey.Pages([BOOK_PDF[0].replace("One\n1.1", "One\nA line of prose.\n1.1")]))
+    assert ("1.1", 1) not in after_prose.values(), (
+        "a number alone after a line that is no heading's title, opening no block, heads nothing"
+    )
