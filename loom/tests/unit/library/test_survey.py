@@ -1466,7 +1466,7 @@ def test_on_the_compile_path_a_display_the_compile_never_set_keeps_nothing(tmp_p
 
 
 def test_a_result_naming_a_display_outside_every_result_by_any_ref_command_is_marked(tmp_path: Path) -> None:
-    """The third review's B-5: `\\hyperref[…]`, `\\crefrange`, `\\cpageref` and `\\nameref` name a display as `\\eqref` does, and a pointer inside `\\verb` names none."""
+    """The third review's B-5: `\\hyperref[…]`, `\\crefrange`, `\\cpageref` and `\\nameref` name a display as `\\eqref` does, and a pointer inside `\\verb` or `comment`, which digest does not read, names none."""
     src = r"""\documentclass{article}
 \usepackage{amsmath}
 \newtheorem{lemma}{Lemma}
@@ -1476,7 +1476,14 @@ def test_a_result_naming_a_display_outside_every_result_by_any_ref_command_is_ma
 \begin{lemma}\label{l:b} By \crefrange{eq:out}{eq:out}. \end{lemma}
 \begin{lemma}\label{l:c} On \cpageref{eq:out}, see \nameref{eq:out}. \end{lemma}
 \begin{lemma}\label{l:d} Type \verb|\eqref{eq:out}| for it. \end{lemma}
+\begin{lemma}\label{l:e} Quiet. \begin{comment}\eqref{eq:out}\end{comment} \end{lemma}
 \end{document}
 """
     s = survey.read(_one_file(tmp_path, src), "main.tex", TEX)
-    assert {i.item: i.outside for i in s.items} == {"l:a": ["eq:out"], "l:b": ["eq:out"], "l:c": ["eq:out"], "l:d": []}
+    assert {i.item: i.outside for i in s.items} == {
+        "l:a": ["eq:out"],
+        "l:b": ["eq:out"],
+        "l:c": ["eq:out"],
+        "l:d": [],
+        "l:e": [],
+    }

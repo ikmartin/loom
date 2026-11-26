@@ -494,12 +494,12 @@ def _walk(
 
 #: A label, or any command naming one: every `…ref…` (`\\eqref`, `\\cpageref`, `\\nameref`, `\\crefrange`'s two), `\\hyperref[label]`.
 _NAMES = re.compile(r"\\(?:label|[A-Za-z]*ref[A-Za-z]*)\*?\s*(?:\[([^\]]*)\])?\s*(?:\{([^{}]*)\})?(?:\s*\{([^{}]*)\})?")
-#: Verbatim text, which names nothing.
-_VERB = re.compile(r"\\verb\*?(.).*?\1|\\begin\s*\{verbatim\*?\}.*?\\end\s*\{verbatim\*?\}", re.S)
 
 
 def _name_outside(out: Survey, files: dict[str, SourceFile]) -> None:
     """Each item's `outside`: the labels of displays outside every result its statement and proofs name, in the order first named."""
+    from loom.library.body import unread
+
     spans = {}
     for item in out.items:
         spans[item.item] = [(item.file, item.body_start, item.body_end)] + [
@@ -510,7 +510,8 @@ def _name_outside(out: Survey, files: dict[str, SourceFile]) -> None:
         for rel, a, b in spans[item.item]:
             if rel not in files:
                 continue
-            text = _VERB.sub(" ", files[rel].clean[a:b])
+            # what digest reads as pointing, and nothing else: verbatim text and `comment` pass for none
+            text = unread(files[rel].clean[a:b])
             for raw in (g for m in _NAMES.finditer(text) for g in m.groups() if g):
                 for name in raw.split(","):
                     name = " ".join(name.split())
