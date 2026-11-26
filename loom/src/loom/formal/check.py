@@ -30,6 +30,8 @@ CONFIG = ("lakefile.toml", "lean-toolchain", "lake-manifest.json")
 TIMEOUT = 3600
 #: The most of the replay's output a record keeps.
 OUTPUT = 20_000
+#: The longest declaration, as Lean prints it, a record keeps; a longer one is kept as null, unprinted.
+SHOWN = 20_000
 #: The replay a record names: the probe hands every declaration of the project's modules to Lean's kernel over the modules they import from outside it, as leanchecker does one module at a time.
 REPLAY = "Lean.Kernel.Environment.replay"
 _ERROR = re.compile(r"^error: (?:\./)?(?P<path>[^:\s]+\.lean):(?P<rest>.*)$")
@@ -286,6 +288,7 @@ class _Decl:
     uses: list[str]
     internal: bool
     means: list[str]
+    shown: str | None = None
 
 
 def _statement_hashes(decls: dict[str, _Decl]) -> dict[str, str]:
@@ -307,6 +310,22 @@ def _statement_hashes(decls: dict[str, _Decl]) -> dict[str, str]:
     for name in decls:
         of(name, frozenset())
     return out
+
+
+def _named(name: str, decls: dict[str, _Decl]) -> list[str]:
+    """The declarations of the project a declaration's statement names, by name: through one Lean made for another, to what that one names."""
+    out: set[str] = set()
+    todo, seen = list(decls[name].means), {name}
+    while todo:
+        n = todo.pop(0)
+        if n in seen or n not in decls:
+            continue
+        seen.add(n)
+        if decls[n].internal:
+            todo.extend(decls[n].means)
+        else:
+            out.add(n)
+    return sorted(out)
 
 
 def _resolver(root: Path) -> Callable[[str], list[Subject]]:
@@ -358,6 +377,7 @@ def _record(
             list(d["uses"]),
             bool(d["internal"]),
             list(d.get("means", [])),
+            d["shown"] if isinstance(d.get("shown"), str) and 0 < len(d["shown"]) <= SHOWN else None,
         )
     imports: dict[str, list[str]] = {m: list(v) for m, v in found.get("modules", {}).items()}
     statements = _statement_hashes(decls)
@@ -442,6 +462,8 @@ def _fields(
                 "role": "states" if states else "supports",
                 "names": names,
                 "statement": statements[name],
+                "means": _named(name, decls),
+                "shown": d.shown,
                 "axioms": d.axioms,
                 "sorry": "sorryAx" in d.axioms,
             }
