@@ -20,9 +20,21 @@ async function open(page: Page): Promise<void> {
 	await expect(page.getByTestId('docs-library')).toBeVisible();
 }
 
-test('the Open a work… button opens the picker over Docs, which finds, sorts and opens a work beside the draft', async ({ page }) => {
+test('Docs\' column opens on Library and Notes, in that order, above the Files shelf', async ({ page }) => {
 	await open(page);
-	await expect(page.getByTestId('docs-library')).toHaveText('Open a work…');
+	const part = page.getByTestId('docs-part');
+	await expect(part.getByTestId('docs-notes')).toBeVisible();
+	const order = await part.evaluate((el) => [...el.querySelectorAll('[data-testid="docs-library"], [data-testid="docs-notes"], [data-testid="files-shelf"]')].map((e) => (e as HTMLElement).dataset.testid));
+	expect(order).toEqual(['docs-library', 'docs-notes', 'files-shelf']);
+	const y = async (id: string) => (await part.getByTestId(id).boundingBox())!.y;
+	expect(await y('docs-library')).toBeLessThan(await y('docs-notes'));
+	expect(await y('docs-notes')).toBeLessThan(await y('files-shelf'));
+	await expect(part.getByTestId('docs-library')).toHaveText('Library');
+});
+
+test('the Library button opens the picker over Docs, which finds, sorts and opens a work beside the draft', async ({ page }) => {
+	await open(page);
+	await expect(page.getByTestId('docs-library')).toHaveText('Library');
 	await page.getByTestId('docs-library').click();
 	const picker = page.getByTestId('docs-picker');
 	// a modal dialog: it takes the keyboard, the draft behind it is inert, and Escape gives the keyboard back to the Library button
