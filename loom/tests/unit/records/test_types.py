@@ -23,15 +23,16 @@ instructions = "A question that leads the learner toward the fault without givin
 """
 
 
-def test_the_defaults_are_four_types_with_their_looks() -> None:
+def test_the_defaults_are_three_types_with_their_looks() -> None:
     types, problems = parse_types(default_text())
     assert problems == []
-    assert [(t.id, t.name, t.look.color, t.look.style, t.look.opacity, t.open, t.notes) for t in types] == [
-        ("revision", "Revision", "red", "highlight", 60, True, False),
-        ("suggestion", "Suggestion", "orange", "highlight", 60, True, False),
-        ("question", "Question", "blue", "highlight", 60, True, False),
-        ("note", "Note", "grey", "highlight", 60, False, True),
+    assert [(t.id, t.name, t.look.color, t.look.style, t.look.opacity, t.open) for t in types] == [
+        ("revision", "Revision", "red", "highlight", 60, True),
+        ("suggestion", "Suggestion", "orange", "highlight", 60, True),
+        ("question", "Question", "blue", "highlight", 60, True),
     ]
+    # a remark that only informs is an untyped annotation; a type is never "listed in Notes", since a note is a file
+    assert "notes" not in types[0].to_dict()
     assert all(t.instructions and t.look.color in COLORS for t in types)
 
 
@@ -62,7 +63,7 @@ def test_an_untyped_annotation_is_drawn_in_the_files_plain_look(tmp_path: Path) 
 def test_a_quilt_without_the_file_has_the_defaults_and_is_told_the_command_that_writes_it(tmp_path: Path) -> None:
     """The plan's fallback: the defaults, with a diagnostic, which the publisher makes an info since nothing is lost (T3)."""
     got = load_types(tmp_path)
-    assert [t.id for t in got.types] == ["revision", "suggestion", "question", "note"]
+    assert [t.id for t in got.types] == ["revision", "suggestion", "question"]
     assert got.source is None and len(got.problems) == 1 and "`loom upgrade`" in got.problems[0]
 
 
@@ -70,7 +71,7 @@ def test_a_file_that_is_not_toml_loads_the_defaults_and_says_so(tmp_path: Path) 
     (tmp_path / ANNOTATION_TYPES).parent.mkdir(parents=True)
     (tmp_path / ANNOTATION_TYPES).write_text("[[type]\nid = ", encoding="utf-8")
     got = load_types(tmp_path)
-    assert [t.id for t in got.types] == ["revision", "suggestion", "question", "note"]
+    assert [t.id for t in got.types] == ["revision", "suggestion", "question"]
     assert len(got.problems) == 1 and "the default types are used" in got.problems[0]
 
 
@@ -80,7 +81,7 @@ def test_a_type_that_cannot_be_read_costs_only_itself(tmp_path: Path) -> None:
     (tmp_path / ANNOTATION_TYPES).write_text(FOUR + bad, encoding="utf-8")
     got = load_types(tmp_path)
     assert [t.id for t in got.types] == ["hint"]
-    assert got.types[0].look.style == "underline" and got.types[0].notes is False
+    assert got.types[0].look.style == "underline" and got.types[0].open is True
     assert got.problems == [f"{ANNOTATION_TYPES}: type 'loud': color must be one of {', '.join(COLORS)}"]
 
 

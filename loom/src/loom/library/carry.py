@@ -692,9 +692,9 @@ def _overviews(root: Path, works: list[_Work], names: _Names, out: Carried, *, w
             "event": "created",
             "target": w.ref,
             "anchor": None,
-            "type": "note",
+            "type": None,
             "look": {},
-            "drawn": drawn_look(types.find("note"), {}, types.plain),
+            "drawn": drawn_look(None, {}, types.plain),
             "body": text,
         }
         append_new(root, event, clock.today())

@@ -64,8 +64,8 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     ),
     (
         "Publish",
-        "Build the site and the PDFs, and serve them and the home page.",
-        ("build", "serve", "app", "compile", "check"),
+        "Build the site and the PDFs, serve them and the home page, and open the viewer at a link.",
+        ("build", "serve", "app", "open", "compile", "check"),
     ),
     ("Upkeep", "Keep loom's own files current, and documents live.", ("upgrade", "live")),
 ]

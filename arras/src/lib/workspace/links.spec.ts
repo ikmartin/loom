@@ -21,13 +21,17 @@ const m = {
 	regions: { 'sy-0003#eq:fix': { container: 'sy-0003', label: 'eq:fix', numbers: { 'drafting/main.tex': { number: '4' } } } },
 	annotations: {
 		'a-2026-09-16-ecnav2': { id: 'a-2026-09-16-ecnav2', type: 'revision', target: { key: 'sy-0003' } },
-		'a-2026-09-16-tc3rcf': { id: 'a-2026-09-16-tc3rcf', type: 'note', target: { key: 'drafting/main.tex' } },
+		'a-2026-09-16-tc3rcf': { id: 'a-2026-09-16-tc3rcf', type: 'gone', target: { key: 'drafting/main.tex' } },
 		'a-2026-09-17-qe0ph7': { id: 'a-2026-09-17-qe0ph7', type: 'question', target: { key: 'sy-0099-ref', work: 'sy-0099-ref', page: 2 } },
 		'a-2026-09-23-srw667': { id: 'a-2026-09-23-srw667', type: 'revision', target: { key: 'sy-0003#eq:fix' } },
 		'a-2026-09-23-qq96rn': { id: 'a-2026-09-23-qq96rn', type: 'question', target: { key: 'sy-0003#eq:fix' }, in_reply_to: 'a-2026-09-23-srw667' }
 	},
 	annotation_types: [{ id: 'revision', name: 'Revision' }, { id: 'question', name: 'Question' }],
 	sessions: [{ id: 's-2026-09-16-p9z37z', title: 'referee' }],
+	files: [
+		{ path: 'papers/median.pdf', kind: 'pdf', bytes: 1 },
+		{ path: 'notes/a.md', kind: 'markdown', bytes: 1 }
+	],
 	threads: {},
 	research_state: { path: 'research-state.md', hash: 'sha256:0', body_html: '<p>Goals.</p>', edited_since: false, links: { broken: [], moved: [] } }
 } as unknown as Manifest;
@@ -50,6 +54,16 @@ describe('a quilt: link', () => {
 		expect(itemForQuilt(m, 'a-2026-09-23-srw667')).toMatchObject({ kind: 'node', id: 'sy-0003', note: 'a-2026-09-23-srw667' });
 		// a reply opens the box of the thread it is in, which is where it is read
 		expect(itemForQuilt(m, 'a-2026-09-23-qq96rn')).toMatchObject({ kind: 'node', id: 'sy-0003', note: 'a-2026-09-23-srw667' });
+	});
+	it('carries the words it quotes to where it opens: a document at a place or whole, a project PDF at a page, a work by its reference', () => {
+		expect(itemForQuilt(m, 'drafting/main.tex#sy-0003&quote=every%20vertex')).toEqual({ kind: 'document', id: 'drafting/main.tex', anchor: 'sy-0003', quote: 'every vertex' });
+		expect(itemForQuilt(m, 'drafting/main.tex#quote=a%20%26%20b')).toEqual({ kind: 'document', id: 'drafting/main.tex', quote: 'a & b' });
+		expect(itemForQuilt(m, 'papers/median.pdf#page=2&quote=incidence+matrix')).toEqual({ kind: 'file', id: 'papers/median.pdf', anchor: 'page=2', quote: 'incidence matrix' });
+		expect(itemForQuilt(m, 'sy-0099-ref#page=3&quote=the%20words')).toEqual({ kind: 'work', id: 'sy-0099-ref', place: { page: 3, quote: 'the words' } });
+		expect(itemForQuilt(m, 'sy-0099-ref')).toEqual({ kind: 'work', id: 'sy-0099-ref' });
+		expect(itemForQuilt(m, 'sy-0003#quote=fixed')).toMatchObject({ kind: 'node', id: 'sy-0003', quote: 'fixed' });
+		// a Markdown file's words wait on annotations on Markdown: the file opens, at its place
+		expect(itemForQuilt(m, 'notes/a.md#quote=x')).toEqual({ kind: 'file', id: 'notes/a.md' });
 	});
 	it('goes to a place in a node: an equation of it, or its proof', () => {
 		expect(itemForQuilt(m, 'sy-0003#eq:fix')?.anchor).toBe('sy-0003-eq-fix');

@@ -217,7 +217,7 @@ class LibraryState {
 	/** A work's reader's view and annotating, kept while the person moves between tabs; its paper's zoom is its own, kept for the visit. */
 	reader(ref: string): { view: PdfView; notes: Annotating } {
 		let r = this.#readers.get(ref);
-		if (!r) this.#readers.set(ref, (r = { view: new PdfView(zooms()[ref], (z) => keepZoom(ref, z)), notes: new Annotating() }));
+		if (!r) this.#readers.set(ref, (r = { view: new PdfView(zooms()[ref], (z) => keepZoom(ref, z)), notes: new Annotating(`work:${ref}`) }));
 		return r;
 	}
 

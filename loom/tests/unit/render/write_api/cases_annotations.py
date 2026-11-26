@@ -43,7 +43,7 @@ def _annotate(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     ann = noted(s, q, sid)
     assert "session" not in the(events(q, ann), lambda e: True, "event")  # a session sent with it is ignored
     # an annotation belongs to no session, so a write that names none is written
-    succeeds(s, "annotate", {"target": "dm-0003", "message": "Named no session.", "type": "note", "author": WHO})
+    succeeds(s, "annotate", {"target": "dm-0003", "message": "Named no session.", "author": WHO})
     refuses(
         s,
         "annotate",
@@ -160,8 +160,8 @@ def _types_save(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, _ = on_demo(serve, tmp_path)
     look = {"color": "green", "style": "underline", "weight": 2, "opacity": 60}
     given = [
-        {"name": "Citation \\cite", **look, "open": False, "notes": True, "instructions": 'Use \\cite{x} and """.'},
-        {"id": "revision", "name": "Must change", **look, "color": "red", "open": True, "notes": False},
+        {"name": "Citation \\cite", **look, "open": False, "instructions": 'Use \\cite{x} and """.'},
+        {"id": "revision", "name": "Must change", **look, "color": "red", "open": True},
     ]
     said = succeeds(s, "types-save", {"types": given})
     assert said["result"] == "saved 2 annotation types"

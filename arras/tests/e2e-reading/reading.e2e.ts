@@ -90,7 +90,7 @@ async function noteOnPageAs(served: Served, phrase: string, body: string, type: 
 
 /** A person's note on page 2 of Bellamy19 over `phrase`, written through the API into `session`; returns its id. */
 async function noteOnPage2(served: Served, session: string, phrase: string, body: string): Promise<string> {
-	const result = await served.api('annotate', { target: bellamy(served).ref, page: 2, quote: phrase, message: body, type: 'note', session });
+	const result = await served.api('annotate', { target: bellamy(served).ref, page: 2, quote: phrase, message: body, session });
 	return result.split(/\s+/)[0];
 }
 

@@ -48,30 +48,58 @@ export function itemForHref(m: Manifest, href: string): Item | null {
 /**
  * The item a `quilt:` link names, by the key after the scheme, or null when the manifest knows no such thing.
  *
- * An annotation opens what it is on, with its box open (`note`); a session its transcript; a document path its document, at the place after `#`; any other key its node, at the place in it.
+ * An annotation opens what it is on, with its box open (`note`); a session its transcript; a document path its document, at the place after `#`; a work by its reference its pages, at `page=N`; any other key its node, at the place in it. Words the link quotes (`&quote=`) go with the item, lit where it opens.
  */
 export function itemForQuilt(m: Manifest, body: string): Item | null {
-	const { key, place } = quiltParts(body);
+	const { key, place, quote } = quiltParts(body);
 	if (!key) return null;
+	const quoted = quote ? { quote } : {};
 	const note = m.annotations[key];
 	if (note) return noteItem(m, threadOf(m, note.id), note.target);
 	if ((m.sessions ?? []).some((s) => s.id === key) || m.threads[key]) return { kind: 'session', id: key };
 	if (key === 'state' && m.research_state) return { kind: 'page', id: 'state' };
-	if (isDocument(m, key)) return { kind: 'document', id: key, ...(place ? { anchor: anchorId(place) } : {}) };
+	if (isDocument(m, key)) return { kind: 'document', id: key, ...(place ? { anchor: anchorId(place) } : {}), ...quoted };
 	const file = m.files?.find((f) => f.path === key);
-	if (file && LINKED.has(file.kind)) return { kind: 'file', id: key, ...(place ? { anchor: place } : {}) };
+	if (file && LINKED.has(file.kind)) return { kind: 'file', id: key, ...(place ? { anchor: place } : {}), ...(file.kind === 'pdf' ? quoted : {}) };
+	if (REFERENCE.test(key)) {
+		const page = Number(/^page=([1-9]\d*)$/.exec(place)?.[1] ?? 0);
+		const at = { ...(page ? { page } : {}), ...quoted };
+		return { kind: 'work', id: key, ...(Object.keys(at).length ? { place: at } : {}) };
+	}
 	const at = itemFromPath(m, keyUrl(m, key));
 	if (!at) return null;
-	if (!place) return at;
+	if (!place) return { ...at, ...quoted };
 	// a place in a node is a region of it (`KEY#label`) or another key it holds, such as its proof
 	const region = m.regions?.[`${key}#${place}`];
-	return { ...at, anchor: anchorId(region ? `${key}#${place}` : place) };
+	return { ...at, anchor: anchorId(region ? `${key}#${place}` : place), ...quoted };
 }
 
-/** A `quilt:` link's body cut at its first `#` into the key and the place, each decoded; a region's key holds a `#` of its own, so a document's place may be one. */
-function quiltParts(body: string): { key: string; place: string } {
+/** A work's reference, the library node a `quilt:` link names a work by (`nodes.md` §3): a stem and `-ref`. */
+const REFERENCE = /^[A-Za-z0-9]+-[0-9A-Z]{4}-ref$/;
+
+/**
+ * A `quilt:` link's body cut at its first `#` into the key, the place and the quoted words, each decoded; a region's key holds a `#` of its own, so a document's place may be one.
+ *
+ * The words (`quote=`, joined to the place by `&`, or alone) are cut out before decoding, so an `&` in them, written `%26`, stays in them.
+ */
+export function quiltParts(body: string): { key: string; place: string; quote: string } {
 	const cut = body.indexOf('#');
-	return { key: decodeURIComponent(cut < 0 ? body : body.slice(0, cut)), place: cut < 0 ? '' : decodeURIComponent(body.slice(cut + 1)) };
+	const parts = cut < 0 ? [] : body.slice(cut + 1).split('&');
+	const said = parts.find((p) => p.startsWith('quote='));
+	return {
+		key: decode(cut < 0 ? body : body.slice(0, cut)),
+		place: decode(parts.filter((p) => !p.startsWith('quote=')).join('&')),
+		quote: said ? decode(said.slice('quote='.length).replace(/\+/g, ' ')).replace(/\s+/g, ' ').trim() : ''
+	};
+}
+
+/** Percent-decoded, or as written where it is not valid percent-encoding. */
+function decode(s: string): string {
+	try {
+		return decodeURIComponent(s);
+	} catch {
+		return s;
+	}
 }
 
 /**

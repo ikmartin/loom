@@ -76,6 +76,25 @@ export interface PendingChange {
   diff?: string | null;
 }
 
+/** A link a shown file makes (`manifest.md`, Backlinks): where it is written, as written, and what loom resolved it to name. */
+export interface Backlink {
+  /** The file it is written in. */
+  from: string;
+  /** Its 1-based line there. */
+  line: number;
+  /** In a Markdown file, the id of the heading above it, where the note opens; '' for none. Absent from an older publisher. */
+  at?: string;
+  href: string;
+  /** What it names: `document`, `node`, `work`, `file`, `annotation`, `session`, `page` or `library`. */
+  kind: string;
+  /** A document's or file's path, a node's key, a work's reference. */
+  key: string;
+  /** The place after `#`, without its quoted words. */
+  place: string;
+  /** The words it quotes; '' for none. */
+  quote: string;
+}
+
 /** A file of the project the viewer shows, by its quilt-relative path (plan 0.22.7). */
 export interface ProjectFile {
   path: string;
@@ -404,13 +423,12 @@ export interface Look {
   opacity: number;
 }
 
-/** A type an annotation may carry: a label with a look, whether its annotations stay open until resolved, whether they are listed in Notes, and instructions for agents. */
+/** A type an annotation may carry: a label with a look, whether its annotations stay open until resolved, and instructions for agents. */
 export interface AnnotationType {
   id: string;
   name: string;
   look: Look;
   open: boolean;
-  notes: boolean;
   instructions: string;
   /** The modes whose text names this type. */
   modes?: string[];
@@ -679,6 +697,8 @@ export interface Manifest {
   research_state?: Page;
   /** Every file of the project the viewer shows, hidden ones left out (plan 0.22.7); absent from an older publisher. */
   files?: ProjectFile[];
+  /** Every `quilt:` and `cited:` link the shown files make, raw or bracketed, resolved to what it names, in file and line order; absent from an older publisher. */
+  backlinks?: Backlink[];
   /** Every pending change, edits since the reviewer's look and open suggested edits, in each file's order; absent before a first look. */
   changes?: PendingChange[];
   /** The reviewer's look: when it was taken, whose it was carried over from when their name had none, and the places it leaves to the person (the config and each `[agents] deny` entry), where a change is never listed, and how far that holds for the apps set up here. */

@@ -9,8 +9,8 @@ vi.mock('$lib/write', () => ({
 	}
 }));
 const types = [
-	{ id: 'question', name: 'Question', look: { color: 'blue', style: 'highlight', weight: 2, opacity: 60 }, open: true, notes: false, instructions: '' },
-	{ id: 'note', name: 'Note', look: { color: 'grey', style: 'highlight', weight: 2, opacity: 60 }, open: false, notes: true, instructions: '' }
+	{ id: 'question', name: 'Question', look: { color: 'blue', style: 'highlight', weight: 2, opacity: 60 }, open: true, instructions: '' },
+	{ id: 'aside', name: 'Aside', look: { color: 'grey', style: 'highlight', weight: 2, opacity: 60 }, open: false, instructions: '' }
 ];
 vi.mock('$lib/manifest/client.svelte', () => ({ store: { manifest: { annotations: {}, annotation_types: types, reviewer: { name: 'me', source: '' } }, refresh: async () => {} } }));
 
@@ -26,17 +26,17 @@ beforeEach(() => {
 
 describe('what the desk writes', () => {
 	it('marks words with the type in hand, which draws them, and its style', async () => {
-		hand.set({ type: 'note', over: {}, plain: {} });
+		hand.set({ type: 'aside', over: {}, plain: {} });
 		desk().markWords({ page: 2, text: 'incidence matrix', rects: [[10, 20, 60, 30]] });
 		await settle();
-		expect(calls).toEqual([['annotate', { target: 'Bellamy19', page: 2, rects: [[10, 20, 60, 30]], quote: 'incidence matrix', type: 'note' }]]);
+		expect(calls).toEqual([['annotate', { target: 'Bellamy19', page: 2, rects: [[10, 20, 60, 30]], quote: 'incidence matrix', type: 'aside' }]]);
 	});
 
 	it('writes a drawing with the type in hand and the look set over it, its tool drawing it', async () => {
-		hand.set({ type: 'note', over: { color: 'green', style: 'underline', weight: 4 }, plain: {} });
+		hand.set({ type: 'aside', over: { color: 'green', style: 'underline', weight: 4 }, plain: {} });
 		desk().draw({ kind: 'box', page: 1, rects: [[1, 2, 30, 40]] });
 		await settle();
-		expect(calls[0][1]).toEqual({ target: 'Bellamy19', page: 1, mark: 'box', rects: [[1, 2, 30, 40]], type: 'note', look: { color: 'green', weight: 4 } });
+		expect(calls[0][1]).toEqual({ target: 'Bellamy19', page: 1, mark: 'box', rects: [[1, 2, 30, 40]], type: 'aside', look: { color: 'green', weight: 4 } });
 	});
 
 	it('with Plain in hand writes only what is set over the plain look, words in its style', async () => {
@@ -48,7 +48,7 @@ describe('what the desk writes', () => {
 });
 
 describe('the notes on words drawn on no page', () => {
-	const note = (id: string, extra: Record<string, unknown> = {}) => ({ id, target: { work: 'Bellamy19', page: 2, key: '' }, quote: 'incidence matrix', status: 'open', author: { id: 'me' }, created: '2026-11-24T10:00:00Z', type: 'note', body_html: '', ...extra });
+	const note = (id: string, extra: Record<string, unknown> = {}) => ({ id, target: { work: 'Bellamy19', page: 2, key: '' }, quote: 'incidence matrix', status: 'open', author: { id: 'me' }, created: '2026-11-24T10:00:00Z', type: 'aside', body_html: '', ...extra });
 	const on = (s: Record<string, unknown>) => new MarkDesk(() => ({ on: 'Bellamy19', owns: () => true, url: '', name: 'Bellamy19.pdf', ...s }));
 
 	it('are said unread while where they stand cannot be learned, and unfound where loom finds their words on no page; a detached one and one with its own place are neither', async () => {

@@ -93,12 +93,11 @@ def _key(result: ScanResult, key: str) -> dict[str, Any]:
 
 
 def _work(result: ScanResult, named: str, page: Any = None) -> dict[str, Any]:
-    """A work, and a page of its PDF, as `loom link` links it: by the identifier its entry states, else by its reference."""
-    from loom.cli.link_cmd import _identifiers
+    """A work, and a page of its PDF, as `loom link` links it: by its reference, at the page."""
     from loom.cli.review import _work_target
     from loom.library.entries import read_entry, title
     from loom.library.store import read
-    from loom.links import cited_link, quilt_link
+    from loom.links import quilt_link
 
     page = page if isinstance(page, int) and page > 0 else None
     ref = _work_target(result, named) or ""
@@ -106,12 +105,7 @@ def _work(result: ScanResult, named: str, page: Any = None) -> dict[str, Any]:
     entry = read_entry(node.body) if node is not None else None
     said = title(entry.fields) if entry is not None else ""
     out: dict[str, Any] = {"work": ref or named, "name": f"{named} · {said}" if said else named, "page": page}
-    stated = _identifiers(result.quilt.root, ref) if ref else []
-    if stated:
-        scheme, _, value = stated[0].partition(":")
-        out["link"] = _href(cited_link(scheme, value, page))
-    else:
-        out["link"] = _href(quilt_link(ref)) if ref else None
+    out["link"] = _href(quilt_link(ref, f"page={page}" if page else "")) if ref else None
     return out
 
 

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Annotating } from '$lib/review/annotating.svelte';
 	import { apartIn, passes } from '$lib/review/annotating.svelte';
-	import { typeOf } from '$lib/review/annotationTypes';
 	import { acted, prune } from '$lib/review/acted.svelte';
 	import { authorOf, changeById, changesIn, pending } from '$lib/review/changes';
 	import type { Macro } from '$lib/manifest/types';
@@ -23,6 +22,7 @@
 	import { hold, type Hold } from './hold';
 	import { keep, take } from './kept';
 	import { parse, patch } from './patch';
+	import { lightRange, quoteRange } from './quote';
 
 	let {
 		path,
@@ -38,6 +38,7 @@
 		anchor,
 		jump = 0,
 		note,
+		quote,
 		arrival,
 		onmounted
 	}: {
@@ -60,6 +61,8 @@
 		jump?: number;
 		/** An annotation to open at its mark on arrival: what a followed link to an annotation names. */
 		note?: string;
+		/** Words a followed link quotes, lit on arrival at the place `anchor` names, else wherever the fragment holds them, and kept lit until the request changes. */
+		quote?: string;
 		/** Where the request last answered is kept, when it must outlive this fragment: a pane's item keeps it, so coming back to the item does not go to its link's place again. */
 		arrival?: { at: string | null };
 		onmounted?: (root: HTMLElement) => void;
@@ -69,7 +72,7 @@
 	const target = (): string => (anchor !== undefined ? anchor : decodeURIComponent(location.hash.slice(1)));
 
 	/** One request to go somewhere: in a pane, its anchor, the annotation it names and each reopening (`jump`); elsewhere the URL's hash. */
-	const request = (): string => (anchor !== undefined ? `${anchor}\u0000${jump}\u0000${note ?? ''}` : page.url.hash);
+	const request = (): string => (anchor !== undefined ? `${anchor}\u0000${jump}\u0000${note ?? ''}\u0000${quote ?? ''}` : page.url.hash);
 	/**
 	 * The request last arrived at. **A request is answered once**: the fragment mounts again on every new manifest, which a serving publisher writes whenever anything in the quilt changes -- an agent's annotation, a compile -- and a mount that went where the link had pointed each time sent a reader who had closed the box and scrolled on back to it, box open, every few seconds.
 	 */
@@ -561,12 +564,31 @@
 		if (anchor) flash(at);
 	}
 
-	/** Go where the item names: its place, and the annotation it names, its popup open at its mark. */
+	/** Takes the quoted words' light away; nothing while none is lit. */
+	let unlight = () => {};
+	onDestroy(() => unlight());
+
+	/** Light the words the link quotes, at its place or else anywhere in the fragment, and bring them into view; where they are not found the place alone was gone to. */
+	function lightQuote(): void {
+		unlight();
+		unlight = () => {};
+		if (!quote || !el) return;
+		const id = target();
+		const at = id ? el.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`) : null;
+		const range = (at && quoteRange(at, quote)) || quoteRange(el, quote);
+		if (!range) return;
+		unlight = lightRange(range);
+		const start = range.startContainer;
+		(start.nodeType === Node.ELEMENT_NODE ? (start as Element) : start.parentElement)?.scrollIntoView({ block: 'center' });
+	}
+
+	/** Go where the item names: its place, the words it quotes lit, and the annotation it names, its popup open at its mark. */
 	async function arrive() {
 		arrived().at = request();
 		// the pane stops putting the reader back where the item was left: this request names where to go
 		el?.dispatchEvent(new CustomEvent('arrive', { bubbles: true }));
 		scrollToHash();
+		lightQuote();
 		const id = note;
 		if (!id || !el) return;
 		// a link that names a settled annotation is a request to see it: the settled control comes on for the sitting, as the view menu turns it, and the re-wire it causes is waited for, since a settled annotation with no mark of its own has no label mark until then
@@ -578,7 +600,7 @@
 		const at = el.querySelector<HTMLElement>(`:is(${MARKS})[data-annotation~="${CSS.escape(id)}"]`);
 		// a note on no block has no mark: the list beside the text shows it apart, and it opens beside its card there
 		if (!at && annotations?.apart.includes(id)) {
-			if (annotations.side !== 'notes' || !typeOf(store.manifest, store.manifest?.annotations[id] ?? {})?.notes) annotations.side = 'comments';
+			annotations.side = 'comments';
 			annotations.reveal = id;
 			return;
 		}

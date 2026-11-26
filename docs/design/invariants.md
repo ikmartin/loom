@@ -515,3 +515,5 @@ Two differences are known and allowed: the blank space two runs of TeX over one 
 
 **2026-11-11.** Retired with notes (plan 0.30, decision 1): a note is an annotation whose type is listed in Notes, and an annotation never fades. P3 still holds for what replaced it, since whether an annotation is open is computed from its type.
 
+**2026-11-25.** A note is now a file of the person's own (plan 0.32, T044), and the Notes list beside an item is computed from the links the quilt's files make, so P3 holds for it too.
+
