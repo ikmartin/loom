@@ -416,7 +416,7 @@ readOnly("a paper's page in view is what loom here reports, at the address loom 
 	const looking = () => JSON.parse(served.loom(['here', '--json'])).looking ?? {};
 	await expect.poll(() => looking().item?.work).toBe(refOf('Bellamy19'));
 	await expect.poll(() => looking().item?.page).toBe(2);
-	expect(looking().item.link).toMatch(/^cited:.+\?page=2$/);
+	expect(looking().item.link).toBe(`quilt:${refOf('Bellamy19')}#page=2`);
 });
 
 // Where a work opens: where the reader last was, unless a link names a place. These write nothing to the quilt, only to this browser, so each runs on its worker's copy in a browser of its own.

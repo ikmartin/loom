@@ -32,7 +32,8 @@ def quilt(tmp_path: Path) -> tuple[Path, str]:
 def test_a_library_node_is_linked_by_its_id(tmp_path: Path) -> None:
     root, ref = quilt(tmp_path)
     result = scan(load_quilt(root))
-    assert (resolve(result, root, f"quilt:{ref}").kind, resolve(result, root, f"quilt:{ref}").key) == ("library", ref)
+    # a reference names its work, as a `cited:` link to it does: the viewer opens its pages, and a note linking it is listed beside the work
+    assert (resolve(result, root, f"quilt:{ref}").kind, resolve(result, root, f"quilt:{ref}").key) == ("work", ref)
     placed = resolve(result, root, "quilt:tq-0009#tq-0009-eq00")
     assert (placed.kind, placed.place) == ("library", "tq-0009-eq00")
     with pytest.raises(LinkError, match="not a place in tq-0009"):

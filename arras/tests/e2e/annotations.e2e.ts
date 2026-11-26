@@ -695,7 +695,7 @@ test.describe('changed from a type', () => {
 		await expect(page.getByTestId('settings-title')).toHaveText('Annotations');
 		const name = page.getByTestId('type-name');
 		await expect(name).toBeFocused();
-		await expect(page.getByTestId('type-tab')).toHaveCount(5);
+		await expect(page.getByTestId('type-tab')).toHaveCount(4);
 		await name.fill('Hint');
 		await page.getByTestId('types-save').click();
 		await expect.poll(() => sent['types-save']).toBeTruthy();
@@ -1087,6 +1087,8 @@ test.describe('the Notes list', () => {
 	});
 
 	test('with no file linking here it says what a note is', async ({ page }) => {
+		// the fixture's own files link into main.tex, so the quilt here is one whose files link nowhere
+		await serveKept(page, (m) => (m.backlinks = []));
 		await page.goto('/master/drafting/main');
 		await page.getByTestId('open-notes').click();
 		await expect(page.getByTestId('side-list')).toContainText('No file links here yet');
@@ -1257,7 +1259,7 @@ test.describe('Settings › Annotations', () => {
 		await page.getByTestId('types-save').click();
 		await expect.poll(() => sent['types-save']).toBeTruthy();
 		expect(sent['types-save'].plain).toEqual({ color: 'green', style: 'highlight', weight: 2, opacity: 60 });
-		expect((sent['types-save'].types as unknown[]).length).toBe(4);
+		expect((sent['types-save'].types as unknown[]).length).toBe(3);
 	});
 
 	test('served by a loom that cannot save types, it says the server is older than the page and to restart it', async ({ page }) => {
