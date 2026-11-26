@@ -216,9 +216,12 @@ def _formal_enable(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     s, root = synthetic(serve, tmp_path, watch=False)
     installed: list[Path] = []
-    monkeypatch.setattr(
-        install, "install", lambda r, say: installed.append(r) or install.Installed([("toolchain", 1.0)])
-    )
+    def fake(r: Path, say: Any) -> Any:
+        say("toolchain")
+        installed.append(r)
+        return install.Installed([("toolchain", 1.0)])
+
+    monkeypatch.setattr(install, "install", fake)
     refuses(s, "formal-enable", {"on": True, "author": "Referee (Agent)"}, 403, "author-only", "this is the person's")
     assert not switch.is_on(root) and installed == []
     refuses(s, "formal-enable", {"on": "yes"}, 400, "bad-field", "true or false")
@@ -227,7 +230,9 @@ def _formal_enable(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert switch.is_on(root) and installed == [root] and (job.kind, job.state) == ("install", "done")
     assert not (root / ".loom" / "formal").exists() and not any("formal" in p.name for p in root.iterdir())
     state = succeeds(s, "formal-state", {})
-    assert state["on"] is True and state["job"]["state"] == "done"
+    # the step by its code, which the viewer words, and what the install found
+    assert state["on"] is True and state["job"]["state"] == "done" and state["job"]["step"] == "toolchain"
+    assert state["job"]["found"] == {"steps": [{"step": "toolchain", "seconds": 1.0}]}
     succeeds(s, "formal-enable", {"on": False})
     assert not switch.is_on(root)
 

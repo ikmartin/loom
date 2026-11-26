@@ -65,7 +65,7 @@ def on_command(as_json: bool, quilt_path: str | None) -> None:
     switch.turn_on(root)
     with Progress("installing Lean") as progress:
         try:
-            done = install.install(root, say=progress.item)
+            done = install.install(root, say=lambda step: progress.item(install.STEPS[step]))
         except install.Refused as e:
             raise EnvError(
                 f"formalization is on, and installing failed: {e}\nRun `loom formal on` again once that is fixed."
@@ -107,7 +107,7 @@ def check_command(as_json: bool, quilt_path: str | None) -> None:
     root = open_quilt(quilt_path).root
     with Progress("checking the Lean") as progress:
         try:
-            done = check.check(root, say=progress.item)
+            done = check.check(root, say=lambda step: progress.item(check.STEPS[step]))
         except check.Refused as e:
             raise EnvError(str(e)) from None
     groups = [

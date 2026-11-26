@@ -32,6 +32,12 @@ TIMEOUT = 3600
 OUTPUT = 20_000
 #: The replay a record names: the probe hands every declaration of the project's modules to Lean's kernel over the modules they import from outside it, as leanchecker does one module at a time.
 REPLAY = "Lean.Kernel.Environment.replay"
+#: Each fenced step of the check by the code `check` tells, with the words a terminal and each step's seconds say it in; the viewer has its own words for each code.
+STEPS = {
+    "mathlib": "checking that Mathlib's build is whole",
+    "build": "building the Lean project from clean",
+    "probe": "replaying the build in Lean's kernel and reading what it states",
+}
 _ERROR = re.compile(r"^error: (?:\./)?(?P<path>[^:\s]+\.lean):(?P<rest>.*)$")
 
 
@@ -78,7 +84,7 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
     root : Path
         The quilt's root.
     say : callable, optional
-        Told each step as it starts, in words.
+        Told each fenced step as it starts, by its code in `STEPS`.
 
     Returns
     -------
@@ -186,16 +192,16 @@ def _check(
         try:
             got = _fenced(argv, places, proj, env)
         finally:
-            done.steps.append((step, time.monotonic() - t))
+            done.steps.append((STEPS[step], time.monotonic() - t))
         return got
 
     if "mathlib" in _packages(proj):
-        whole = run("checking that Mathlib's build is whole", [lake, "build", "--no-build", "Mathlib"])
+        whole = run("mathlib", [lake, "build", "--no-build", "Mathlib"])
         if whole.returncode != 0:
             raise Refused(
                 "Mathlib's build in the project is not whole, and loom will not compile Mathlib; turning formalization on again fetches it"
             )
-    built = run("building the Lean project from clean", [lake, "build", *(f"+{m}" for m in mods)])
+    built = run("build", [lake, "build", *(f"+{m}" for m in mods)])
     errors = _errors(built.stdout + built.stderr)
     done.errors = [e for es in errors.values() for e in es]
     ready = [m for m, p in mods.items() if (build / "lib" / "lean" / Path(p).with_suffix(".olean")).is_file()]
@@ -204,7 +210,7 @@ def _check(
     lib = Path("lib") / "lean"
     deps = [f"path={(proj / paths.LAKE_PACKAGES / p / paths.LAKE_BUILD / lib).resolve()}" for p in _packages(proj)]
     probed = run(
-        "replaying the build in Lean's kernel and reading what it states",
+        "probe",
         [str(toolchain / "bin" / "lean"), "--run", str(probe), f"own={(build / lib).resolve()}", *deps, *ready],
     )
     if probed.returncode != 0:

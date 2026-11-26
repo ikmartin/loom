@@ -12,16 +12,17 @@ from typing import Any
 
 @dataclass
 class Job:
-    """What the server is doing for formalization in one quilt, or did last: `install` or `check`, `running`, `done` or `failed`, the step it is on or what it found."""
+    """What the server is doing for formalization in one quilt, or did last: `install` or `check`, `running`, `done` or `failed`, the step it is on or was on when it failed (a code of `install.STEPS` or `check.STEPS`, '' before the first), what it found, and, failed, why in loom's words."""
 
     kind: str
     state: str = "running"
+    step: str = ""
     said: str = ""
     started: float = field(default_factory=time.time)
     found: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"kind": self.kind, "state": self.state, "said": self.said, "found": self.found}
+        return {"kind": self.kind, "state": self.state, "step": self.step, "said": self.said, "found": self.found}
 
 
 _JOBS: dict[Path, Job] = {}
@@ -37,7 +38,7 @@ def current(root: Path) -> Job | None:
 def start(root: Path, kind: str, work: Callable[[Callable[[str], None]], dict[str, Any]]) -> Job | None:
     """Run `work` in a thread for the quilt at `root`, which it tells each step through the callable it is given; None, starting nothing, while another runs there.
 
-    `work` answers what it found, kept on the job when it is done; an exception it raises is kept as what the job said, and the job failed. Review's and the Web's reads see the records it writes by the log itself (`evidence.memo`), so nothing is rebuilt after it.
+    `work` answers what it found, kept on the job when it is done; each step it tells is the job's `step`; an exception it raises is kept as what the job said, and the job failed. Review's and the Web's reads see the records it writes by the log itself (`evidence.memo`), so nothing is rebuilt after it.
     """
     key = root.resolve()
     with _LOCK:
@@ -47,7 +48,7 @@ def start(root: Path, kind: str, work: Callable[[Callable[[str], None]], dict[st
         job = _JOBS[key] = Job(kind)
 
     def tell(step: str) -> None:
-        job.said = step
+        job.step = step
 
     def run() -> None:
         try:
