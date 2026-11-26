@@ -1,11 +1,10 @@
 // The client of the library's reads and writes (`docs/specs/library-views.md`): one function a read and a write, each answered as `{ok, value}` or `{ok: false, error}`. Where they go is the source's: the publisher, or round six's fixture until a read exists (`source.ts`). Every read carries the generation it last saw for the same question, so a publisher whose library has not changed answers `unchanged` and does no other work.
 
-import { can, capabilities, forgetCapabilities, write } from '$lib/write';
+import { can, capabilities, forgetCapabilities } from '$lib/write';
 import { base } from '$app/paths';
 import { libraryPdfUrl } from '$lib/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
-import { discardChanges, keepChanges, type ChangeAnswer } from '$lib/review/history.svelte';
 import { library as libraryWords } from '$lib/words/library';
 import { library as generation } from './gen.svelte';
 import type { FormalMarks, FormalPlan, NotesAnswer, DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
@@ -194,23 +193,6 @@ export const mention = (citation: string) => call<WriteDone>('library-mention', 
 export const withdraw = (task: string, undo = false) => call<WriteDone>('review-task-delete', { task, ...(undo ? { undo: true } : {}) });
 /** Asks an agent (`review-task`, `evidence.md` §7): `kind` what is asked, `on` the place and what the kind needs, `text` the person's words, `docs` the person's drafts it is for (by default those that read the place). */
 export const ask = (kind: string, on: Record<string, unknown>, text = '', docs?: string[]) => call<WriteDone & { task: string }>('review-task', { kind, on, ...(text ? { text } : {}), ...(docs?.length ? { docs } : {}) });
-
-/** A write that is built today: to the publisher through `write()`, which names the reviewer and the session, or, for keep and discard, through the history that offers their undo; to the fixture as any other. */
-async function built(name: string, body: Record<string, unknown>, send: () => Promise<{ ok: boolean; error?: ApiError }>): Promise<Answer<WriteDone>> {
-	await chosen;
-	if (source !== server) return source.call<WriteDone>(name, body);
-	const done = await send();
-	return done.ok ? { ok: true, value: { gen: 0 } } : { ok: false, error: done.error ?? { code: 'failed', message: '' } };
-}
-/** Keep and discard answer `ok` with each change refused listed apart; one change refused is this act refused. */
-const one = async (sent: Promise<ChangeAnswer>) => {
-	const res = await sent;
-	const no = res.refused?.[0];
-	return no ? { ok: false, error: { code: no.code ?? 'refused', message: no.why } } : res;
-};
-export const keep = (change: string) => built('change-keep', { changes: [change] }, () => one(keepChanges({ changes: [change] })));
-export const discard = (change: string) => built('change-discard', { changes: [change] }, () => one(discardChanges({ changes: [change] })));
-export const accept = (key: string) => built('review-accept', { keys: [key] }, () => write('review-accept', { keys: [key] }));
 
 /** A row the intake answers with (`write-api.md` §6), with what the message needs (§3.5 of the views' spec). */
 /** A row of the intake (`write-api.md` §6), in one of four states once taken: `added` (the work, how it was found, its `act` for an undo), `here` (the work held already, and why), `question` (the file's own words and the works it may be), `cannot` (a code and why); `received` for a drop that waits to be taken, as an unfiled document does. */

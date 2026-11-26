@@ -316,13 +316,70 @@ export const review = {
 		/** The column's message after keeping one. */
 		kept: 'Kept.',
 		/** The column's message after discarding or undoing one. */
-		discarded: 'Discarded.'
+		discarded: 'Discarded.',
+		/** An edit made in the person's file's quiet line: when it was made. */
+		sinceLook: 'edited since your look',
+		/** Over Proposed edits: keeps every change listed that can be kept. */
+		keepAll: (n: number) => `keep all ${n}`,
+		/** Over Proposed edits: discards every change listed that can be. */
+		discardAll: (n: number) => `discard all ${n}`,
+		/** The column's message after keep all or discard all, then what was refused, a line each. */
+		keptAll: (n: number) => (n === 1 ? 'Kept 1 change.' : `Kept ${n} changes.`),
+		discardedAll: (n: number) => (n === 1 ? 'Discarded 1 change.' : `Discarded ${n} changes.`),
+		/** Over Proposed edits: undoes the last keep or discard, named as the document's toolbar names it. */
+		undoLast: (what: string) => `undo ${what}`,
+		/** Over Proposed edits: shows the open annotations from others beneath the changes, with their count. */
+		todo: (n: number) => `to do ${n}`,
+		/** Hover text on it. */
+		todoHover: 'The open annotations from others, beneath the changes',
+		/** In place of those annotations, where there are none. */
+		todoNone: 'No open annotations from others.',
+		/** A copy's quiet line before what it holds. */
+		copy: "an agent's copy",
+		/** A copy's link at the right of its row: opens it on its own page in Review, where it is taken in and applied. */
+		openCopy: 'review the copy'
 	},
 	accepted: {
 		/** Accepts a changed result again. */
 		accept: 'accept',
-		/** The column's message after accepting. */
-		accepted: 'Accepted.'
+		/** On that button while it is answered. */
+		accepting: 'accepting…',
+		/** The column's message after accepting one, by its name. */
+		acceptedOne: (name: string) => `Accepted ${name}.`,
+		/** The column's message after accepting several. */
+		acceptedMany: (n: number) => `Accepted ${n} results.`,
+		/** A changed result's quiet line where its own text was edited. */
+		changed: 'changed since you accepted',
+		/** A changed result's quiet line: its first reason, and how many more it has. */
+		more: (why: string, n: number) => (n ? `${why}, and ${n} more` : why),
+		/** An accepted result's quiet line, in the folded list of those accepted. */
+		by: (who: string, day: string) => `accepted by ${who}, ${day}`,
+		/** The checkbox on a row, its accessible name. */
+		pick: (name: string) => `Choose ${name} to accept with others`,
+		/** Over Results to accept while some are chosen: how many. */
+		picked: (n: number) => `${n} chosen`,
+		/** Accepts the ones chosen. */
+		acceptPicked: (n: number) => `accept ${n}`,
+		/** Unchooses them. */
+		clear: 'clear',
+		/** The two folds beneath the results waiting, which count nothing. */
+		never: 'Never accepted',
+		done: 'Accepted',
+		/** Over Results to accept where no reviewer name is set. */
+		noReviewer: 'Choose your reviewer name in Settings to accept.',
+		/** Over Results to accept where the quilt is not served for writing. */
+		readOnly: 'This copy of the quilt only reads; accepting needs the quilt served for writing.'
+	},
+	/** What changed in a block since it was accepted (`SinceAccepted`), in an open row of Results to accept, over Review with its document, and in Docs beside it. */
+	since: {
+		/** Over the block as it was last accepted, its own text since edited. */
+		accepted: (name: string) => `Last accepted · ${name}`,
+		/** Over what it rests on as it is now. */
+		current: (name: string) => `Current · ${name}`,
+		/** The choice among a block's reasons, its accessible name. */
+		choose: 'Why it waits',
+		/** One reason in that choice. */
+		option: (why: string, i: number, n: number) => `${why} · ${i} of ${n}`
 	},
 	yours: {
 		/** Under a block waiting to be accepted that cannot be yet, why, by loom's code (`refusal_code`); an older publisher sends none. */
@@ -336,18 +393,8 @@ export const review = {
 			})[code ?? ''] ?? "Can't be accepted yet.",
 		/** The same for a block marked incomplete with notes, before the person's own notes on it. */
 		cannotNoted: "Can't be accepted yet: it is marked incomplete:",
-		/** Under Proposed edits, the tag on an agent's copy waiting to be taken in. */
-		copy: "an agent's copy",
-		/** Beside a copy's name: the draft it would change. */
-		into: (doc: string) => `into ${file(doc)}`,
-		/** A copy's button: opens it to be taken in and applied. */
-		openCopy: 'Review the copy',
 		/** Over a copy opened from Proposed edits: back to the list. */
 		back: '‹ Proposed edits',
-		/** Under Results to accept, narrowed to a draft with no blocks to accept. */
-		none: (doc: string) => `Nothing of ${file(doc)} waits to be accepted.`,
-		/** Under Results to accept, over every draft's folded blocks, when none waits. */
-		nothing: 'Nothing waits to be accepted.'
 	},
 	statement: {
 		/** In place of a statement whose rendering could not be read. */

@@ -1,9 +1,9 @@
-// What the two kinds today's Your Changes draws count: the blocks its accept section lists as waiting, each once, and the cards of its changes section, each narrowed to a draft as it is drawn.
+// The rows of the two kinds drawn from the manifest, and what they count: Results to accept's blocks waiting, each once, the never accepted and the accepted folded beneath and uncounted; Proposed edits' changes and copies; each narrowed to a draft as it is drawn.
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../../tests/fixture/manifest.json';
 import type { Manifest, PendingChange } from '$lib/manifest/types';
 import type { ReviewList } from '$lib/library/types';
-import { acceptSections, acceptWaiting, changeGroups, changesWaiting, theirs } from './yours';
+import { acceptList, acceptSections, acceptWaiting, changeGroups, changeList, changesWaiting, theirs } from './yours';
 
 const m = fixture as unknown as Manifest;
 const MAIN = 'drafting/main.tex';
@@ -28,6 +28,28 @@ describe('the accept section', () => {
 		expect(acceptSections(m, TALK).map((s) => s.path)).toEqual([TALK]);
 	});
 
+	it('lists a row for each block waiting, the changed before the taken in within a document, and counts exactly those rows', () => {
+		const list = acceptList(m);
+		expect(list.waiting).toHaveLength(acceptWaiting(m));
+		const keys = [...list.waiting, ...list.never, ...list.accepted].map((b) => b.key);
+		expect(new Set(keys).size).toBe(keys.length);
+		expect(list.waiting.every((b) => b.row.cause !== 'never-accepted')).toBe(true);
+		expect(list.never.every((b) => b.row.cause === 'never-accepted')).toBe(true);
+		expect(list.never.length).toBeGreaterThan(0);
+		// a block names the document it is listed under, whose file names its row
+		for (const b of list.waiting) expect(m.masters.some((d) => d.path === b.doc)).toBe(true);
+		expect(acceptList(m, TALK).waiting).toHaveLength(acceptWaiting(m, TALK));
+	});
+
+	it('names the source of a block taken in from a copy, and lists it after its document\'s changed blocks', () => {
+		const taken: Manifest = { ...m, unresolved: m.unresolved!.map((r) => (r.key === 'sy-0001' ? { ...r, cause: 'adopted' as const, contribution: '.loom/copies/main-agent.tex' } : r)) };
+		const rows = acceptList(taken).waiting;
+		const row = rows.find((b) => b.key === 'sy-0001');
+		expect(row?.taken).toBe('Taken in from the copy “main-agent”');
+		const own = rows.filter((b) => b.doc === row!.doc);
+		expect(own.at(-1)?.key).toBe('sy-0001');
+	});
+
 	it('counts in a draft only what that draft reads, and nothing in a draft the quilt does not hold', () => {
 		expect(acceptWaiting(m, TALK)).toBeLessThan(acceptWaiting(m));
 		expect(acceptWaiting(m, 'drafting/bounds.tex')).toBe(0);
@@ -41,6 +63,15 @@ describe('the changes section', () => {
 	it('counts each change and each agent copy, and leaves out one just kept or discarded', () => {
 		expect(changesWaiting(x, {})).toBe(3 + copies);
 		expect(changesWaiting(x, { 'c-1': 'keep' })).toBe(2 + copies);
+	});
+
+	it('lists a row for each change, naming the draft whose text holds it, or the file of one in no draft', () => {
+		const rows = changeList(x, {});
+		expect(rows.map((r) => r.c.id)).toEqual(['c-1', 'c-2', 'c-3']);
+		expect(rows.map((r) => r.doc)).toEqual([MAIN, MAIN, null]);
+		expect(rows[2].label).toBe('notes/intro.md');
+		expect(changeList(x, { 'c-2': 'discard' }).map((r) => r.c.id)).toEqual(['c-1', 'c-3']);
+		expect(changeList(x, {}, TALK).map((r) => [r.c.id, r.doc])).toEqual([['c-2', TALK]]);
 	});
 
 	it("narrows to the changes in a draft's text, in one group, and the copies into it", () => {

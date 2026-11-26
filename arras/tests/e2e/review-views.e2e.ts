@@ -11,14 +11,21 @@ async function open(page: Page): Promise<void> {
 }
 
 const count = (page: Page, testid: string) => page.getByTestId(testid).locator('.n');
-// round six's own rows and groups, apart from those of today's Your Changes, which Results to accept and Proposed edits draw
+// every row Review draws, loom's and the two kinds drawn from the manifest alike
 const rows = (page: Page) => page.locator('[data-testid="review-row"][data-kind]');
+/** The rows of a kind drawn from the manifest: Results to accept's blocks, Proposed edits' changes and copies. */
+const kindRows = (page: Page, kind: 'accepted-changed' | 'edits') => page.locator(`[data-testid="review-row"][data-kind="${kind}"]`);
+/** Opens a row that is closed, by the button that opens it. */
+async function openRow(row: ReturnType<Page['locator']>): Promise<void> {
+	const h = row.locator('.rr-h[aria-expanded]');
+	if ((await h.getAttribute('aria-expanded')) !== 'true') await h.click();
+}
 
-test('Everything lists what waits by who is waiting, and the column counts each kind alphabetically, the agents below the drafts, two of them as Your Changes lists them', async ({ page }) => {
+test('Everything lists what waits by who is waiting, a row for each thing counted, and the column counts each kind alphabetically, the agents below the drafts', async ({ page }) => {
 	await open(page);
 	await expect(count(page, 'review-kind-all')).toHaveText('28');
 	const kinds = await page.getByTestId('review-column').locator('[data-testid^="review-kind-"]').evaluateAll((bs) => bs.map((b) => b.getAttribute('data-testid')!.slice(12) + ' ' + b.querySelector('.n')?.textContent));
-	// Results to accept and Proposed edits count what their sections of the manifest's Your Changes list as waiting, not the fixture's rows; Lean statements to attest counts the attested results that changed too
+	// Results to accept and Proposed edits count their rows drawn from the manifest, not the fixture's rows; Lean statements to attest counts the attested results that changed too
 	expect(kinds).toEqual(['all 28', 'questions 2', 'cited 4', 'attest 4', 'fetch 3', 'edits 5', 'accepted-changed 5', 'check 5', 'agents 6']);
 	await expect(page.getByTestId('review-column').locator('[data-testid^="review-kind-"] .t')).toHaveText(['Everything', 'Agent questions', "Cited results loom can't read", 'Lean statements to attest', 'Papers to add', 'Proposed edits', 'Results to accept', 'Results to check', 'Agents still working']);
 	// the tasks agents are still working on need nothing of the person, so they stand below the drafts, not under Waiting for you
@@ -26,12 +33,14 @@ test('Everything lists what waits by who is waiting, and the column counts each 
 	await expect(page.getByTestId('review-record')).toHaveText('History');
 	const groups = await page.locator('[data-testid="review-group"][data-kind]').evaluateAll((gs) => gs.map((g) => g.getAttribute('data-kind')));
 	expect(groups).toEqual(['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'edits', 'agents']);
-	await expect(rows(page)).toHaveCount(18);
+	// a row for each thing Everything counts, the never accepted and the accepted folded beneath Results to accept and counting nothing
+	await expect(rows(page)).toHaveCount(28);
+	await expect(kindRows(page, 'accepted-changed')).toHaveCount(5);
+	await expect(kindRows(page, 'edits')).toHaveCount(5);
 	// under Lean statements to attest, the attested results that changed first, then those never attested
 	const order = await page.locator('[data-testid="review-group"][data-kind="attest"] ~ [data-testid="review-row"]').evaluateAll((rs) => rs.map((r) => r.getAttribute('data-kind')));
 	expect(order.slice(0, 4)).toEqual(['attested-changed', 'attested-changed', 'attest', 'attest']);
-	await expect(page.locator('[data-testid="your-changes"][data-part="accept"]')).toHaveCount(1);
-	await expect(page.locator('[data-testid="your-changes"][data-part="changes"]')).toHaveCount(1);
+	await expect(page.getByTestId('your-changes')).toHaveCount(0);
 	// the agents' group starts folded
 	await expect(page.getByTestId('review-task')).toHaveCount(0);
 	await page.getByTestId('review-group').filter({ hasText: 'Agents still working' }).getByRole('button').click();
@@ -71,17 +80,24 @@ test("an agent's question is answered by a choice or in the person's words, and 
 	await expect(count(page, 'review-kind-questions')).toHaveText('0');
 });
 
-test('under Proposed edits each change is a card with its words out and in, an edit made in place said so, Keep and Discard on each', async ({ page }) => {
+test('under Proposed edits each change is a row that opens to its words out and in, an edit made in place said so, Keep and Discard on each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const changes = page.locator('[data-testid="your-changes"][data-part="changes"]');
-	const edit = changes.locator('[data-testid="change-card"][data-change="c-0f621ccf"]');
-	await expect(edit).toContainText('since your look');
-	await expect(edit.getByTestId('change-words').locator('.del, .ins').first()).toBeVisible();
-	for (const card of await changes.getByTestId('change-card').all()) {
-		await expect(card.getByTestId('card-keep')).toBeVisible();
-		await expect(card.getByTestId('card-discard')).toBeVisible();
+	const edit = page.locator('[data-testid="review-row"][data-change="c-0f621ccf"]');
+	await expect(edit.locator('.meta')).toHaveText('edited since your look');
+	await expect(page.locator('[data-testid="review-row"][data-change="e-2026-09-16-r2hw0m"] .meta')).toHaveText('proposed by agent');
+	await expect(page.getByTestId('change-card')).toHaveCount(0);
+	for (const row of await page.locator('[data-testid="review-row"][data-change]').all()) {
+		await openRow(row);
+		await expect(row.getByTestId('card-keep')).toBeVisible();
+		await expect(row.getByTestId('card-discard')).toBeVisible();
 	}
+	await expect(edit.getByTestId('change-words').locator('.del, .ins').first()).toBeVisible();
+	await expect(edit.getByTestId('change-card')).toContainText('since your look');
+	// an agent's copy is a row whose link opens it on its own page in Review
+	const copy = page.locator('[data-testid="review-row"][data-copy]');
+	await expect(copy).toHaveCount(1);
+	await expect(copy.getByTestId('proposed-open')).toHaveAttribute('href', /\/review\/proposed\?copy=/);
 });
 
 test("a work's results to check open the first a draft rests on beside its page, and the yes takes it away", async ({ page }) => {
@@ -274,15 +290,16 @@ test('see it lays the document over Review, read only, lands at the place, and c
 	await expect(cite.getByTestId('see-it')).toBeVisible();
 });
 
-test("a proposed edit's place lays its draft over Review and lands at the result, and a change in no draft's text names no place", async ({ page }) => {
+test("a proposed edit's see it lays its draft over Review and lands at the result, and a change in no draft's text offers none", async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const changes = page.locator('[data-testid="your-changes"][data-part="changes"]');
-	await expect(changes.locator('[data-testid="change-card"][data-change="c-5a59b9ba"]').getByTestId('change-see')).toHaveCount(0);
-	const suggested = changes.locator('[data-testid="change-card"][data-change="e-2026-09-16-r2hw0m"]');
-	const place = suggested.getByTestId('change-where').getByTestId('change-see');
-	const name = (await place.innerText()).trim();
-	await place.click();
+	const nowhere = page.locator('[data-testid="review-row"][data-change="c-5a59b9ba"]');
+	await openRow(nowhere);
+	await expect(nowhere.getByTestId('see-it')).toHaveCount(0);
+	const suggested = page.locator('[data-testid="review-row"][data-change="e-2026-09-16-r2hw0m"]');
+	await openRow(suggested);
+	const name = (await suggested.locator('.tx').innerText()).split(' · ')[1].trim();
+	await suggested.getByTestId('see-it').click();
 	const over = page.getByTestId('review-over');
 	await expect(over).toContainText(`at ${name} · read only here; edit it in Docs`);
 	await expect(over.locator('#sy-0004')).toBeInViewport();
@@ -298,7 +315,7 @@ test("a collaborator's pull is chosen under the kinds and drawn as today's revie
 	await expect(page.getByText('New prose', { exact: true })).toBeVisible();
 	await expect(page.getByTestId('contribution-bar')).toContainText('A pull is taken whole.');
 	await page.getByTestId('review-kind-all').click();
-	await expect(rows(page)).toHaveCount(18);
+	await expect(rows(page)).toHaveCount(28);
 });
 
 test('the tasks waiting for an agent say what was asked, who works on one, and delete withdraws one', async ({ page }) => {
@@ -407,50 +424,73 @@ test("the review's round: a task deleted comes back on undo, results are named i
 	expect(await tasks.allInnerTexts()).toEqual(before);
 });
 
-test('a link to one block\'s row lands with the row in view below the held bar, at the top of the list as further down', async ({ page }) => {
+test('a link to one block\'s row opens it in view, at the top of the list as further down and in a fold', async ({ page }) => {
 	await open(page);
-	const ids = await page.locator('[data-testid="your-changes"] [data-testid="review-row"]').evaluateAll((rows) => rows.map((r) => r.id));
-	expect(ids.length).toBeGreaterThan(3);
-	for (const id of [ids[0], ids[1], ids[ids.length - 1]]) {
+	await page.getByTestId('review-kind-accepted-changed').click();
+	const waiting = await kindRows(page, 'accepted-changed').evaluateAll((rows) => rows.map((r) => r.id));
+	expect(waiting.length).toBeGreaterThan(3);
+	await page.getByTestId('review-fold').filter({ hasText: 'Never accepted' }).getByRole('button').click();
+	const never = await page.locator('[data-testid="review-fold"][data-fold="accept:never"] ~ [data-kind="accepted-changed"]').evaluateAll((rows) => rows.map((r) => r.id));
+	for (const id of [waiting[0], waiting[waiting.length - 1], never[never.length - 1]]) {
 		await page.goto(`/review?fixture=round6#${id}`);
 		const row = page.locator(`#${id}`);
 		await expect(row).toBeInViewport();
-		const bar = page.getByTestId('review-bar').first();
-		await expect.poll(async () => (await row.boundingBox())!.y - ((await bar.boundingBox())!.y + (await bar.boundingBox())!.height)).toBeGreaterThanOrEqual(0);
+		await expect(row.locator('.rr-h')).toHaveAttribute('aria-expanded', 'true');
 	}
 });
 
-test('in Review a block, its note, Read, a change card\'s place and a To do item lay their draft over Review; only See change opens Docs', async ({ page }) => {
+test('nothing in Results to accept or Proposed edits leaves Review, and see it on a block changed since accepted draws that change over its draft', async ({ page }) => {
 	await open(page);
-	const leaving = async (part: string) => {
-		const section = page.locator(`[data-testid="your-changes"][data-part="${part}"]`);
-		await section.locator('details').evaluateAll((ds) => ds.forEach((d) => ((d as HTMLDetailsElement).open = true)));
-		return section.locator('a[href]').evaluateAll((as) => as.filter((a) => !a.getAttribute('href')!.startsWith('/review') && a.textContent!.trim() !== 'See change').map((a) => `${a.textContent!.trim()} ${a.getAttribute('href')}`));
-	};
+	// a link leaves Review unless it is one of Review's pages or an anchor in the page
+	const leaving = () => page.getByTestId('review-view').locator('a[href]').evaluateAll((as) => as.filter((a) => !/^(\/review|#)/.test(a.getAttribute('href')!)).map((a) => `${a.textContent!.trim()} ${a.getAttribute('href')}`));
 	await page.getByTestId('review-kind-accepted-changed').click();
-	expect(await leaving('accept')).toEqual([]);
-	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
-	const first = accept.locator('[data-group="never"] [data-testid="review-row"]').first();
-	const name = (await first.locator('.name').innerText()).trim();
-	await first.locator('.name').click();
-	const over = page.getByTestId('review-over');
-	await expect(over).toContainText(`at ${name}`);
-	await expect(page).toHaveURL(/\/review(\?|$)/);
-	await over.getByRole('button', { name: 'close' }).click();
-	await expect(over).toHaveCount(0);
+	for (const f of await page.getByTestId('review-fold').getByRole('button').all()) await f.click();
+	for (const row of await kindRows(page, 'accepted-changed').all()) await openRow(row);
+	expect(await leaving()).toEqual([]);
 	await page.getByTestId('review-kind-edits').click();
 	await page.getByTestId('your-todo').click();
-	expect(await leaving('changes')).toEqual([]);
-	const place = page.locator('[data-testid="your-changes"][data-part="changes"]').getByTestId('change-see').first();
-	await place.click();
+	for (const row of await page.locator('[data-testid="review-row"][data-change]').all()) await openRow(row);
+	await expect(page.getByTestId('todo-row').first()).toBeVisible();
+	expect(await leaving()).toEqual([]);
+	// a To do item lays its draft over Review
+	await page.getByTestId('todo-row').first().getByTestId('see-it').click();
+	const over = page.getByTestId('review-over');
 	await expect(over).toBeVisible();
+	await over.getByRole('button', { name: 'Close the document' }).click();
+	// the block's own text edited: what was accepted is drawn over the draft, at the block
+	await page.getByTestId('review-kind-accepted-changed').click();
+	const widget = page.locator('[data-testid="review-row"][data-key="sy-0001"]');
+	await expect(widget.getByTestId('review-row-why')).toHaveText('changed since you accepted');
+	await openRow(widget);
+	await expect(widget.getByTestId('review-comparison')).toContainText('Last accepted · Widget');
+	await widget.getByTestId('see-it').click();
+	await expect(over.getByTestId('review-over-since').getByTestId('review-comparison')).toContainText('Last accepted · Widget');
+	await expect(over.locator('#sy-0001')).toBeInViewport();
 	await expect(page).toHaveURL(/\/review(\?|$)/);
+	// the document's references, and the strip's, stay in-page anchors
+	expect(await leaving()).toEqual([]);
+	await over.getByRole('button', { name: 'Close the document' }).click();
+	// a block changed by what it rests on: that result as it is now, or the change's diff
+	const proof = page.locator('[data-testid="review-row"][data-key="sy-0002/proof"]');
+	await expect(proof.getByTestId('review-row-why')).toHaveText('This block uses Orbits, which uses the changed Widget.');
+	await openRow(proof);
+	await proof.getByTestId('see-it').click();
+	await expect(over.getByTestId('review-over-since')).toContainText('This block uses Orbits, which uses the changed Widget.');
+	// see it from a row that did not change since it was accepted draws no strip
+	await over.getByRole('button', { name: 'Close the document' }).click();
+	const never = page.locator('[data-testid="review-fold"][data-fold="accept:never"] ~ [data-kind="accepted-changed"]').first();
+	await openRow(never);
+	await never.getByTestId('see-it').click();
+	await expect(over).toBeVisible();
+	await expect(over.getByTestId('review-over-since')).toHaveCount(0);
 });
 
 test('see it keeps the block in view while the document above it settles, as a draft drawn as its source does, until the reader scrolls', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	await page.locator('[data-testid="change-card"][data-change="e-2026-09-16-r2hw0m"]').getByTestId('change-where').getByTestId('change-see').click();
+	const suggested = page.locator('[data-testid="review-row"][data-change="e-2026-09-16-r2hw0m"]');
+	await openRow(suggested);
+	await suggested.getByTestId('see-it').click();
 	const doc = page.getByTestId('review-over-doc');
 	const at = doc.locator('#sy-0004');
 	const offset = () => at.evaluate((e) => Math.round(e.getBoundingClientRect().top - e.closest('[data-testid="review-over-doc"]')!.getBoundingClientRect().top) + 0); // + 0: a top a hair above the pane rounds to -0, which toBe(0) tells from 0
@@ -484,7 +524,7 @@ test("Proposed edits says once what it watches and what it leaves to the person,
 	await expect(name).toHaveCount(0);
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	await expect(page.getByTestId('your-changes').first()).toBeVisible();
+	await expect(page.getByTestId('review-edit-list')).toBeVisible();
 	await expect(watched).toHaveCount(0);
 	await page.getByTestId('review-kind-accepted-changed').click();
 	await expect(name).toHaveCount(0);
@@ -503,45 +543,39 @@ test('before any draft has compiled, no block in Review is named by its id: an u
 	await open(page);
 	await expect(page.getByTestId('review-kind-accepted-changed')).toHaveText(/^Results to accept/);
 	await page.getByTestId('review-kind-accepted-changed').click();
-	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
-	await accept.locator('details').evaluateAll((ds) => ds.forEach((d) => ((d as HTMLDetailsElement).open = true)));
-	const names = await accept.locator('[data-testid="review-row"] .name').allInnerTexts();
+	for (const f of await page.getByTestId('review-fold').getByRole('button').all()) await f.click();
+	const names = (await kindRows(page, 'accepted-changed').locator('.tx').allInnerTexts()).map((t) => t.split(' · ').slice(1).join(' · '));
 	expect(names.length).toBeGreaterThan(10);
 	for (const name of names) expect(name).not.toMatch(/\b[a-z]{1,4}-[0-9A-Z]{4}\b/);
 	expect(names).toContain('Main Theorem in Appendix: an incomplete argument');
 	await page.getByTestId('review-kind-edits').click();
-	for (const place of await page.getByTestId('change-where').allInnerTexts()) expect(place).not.toMatch(/\b[a-z]{1,4}-[0-9A-Z]{4}\b/);
+	for (const place of await kindRows(page, 'edits').locator('.tx').allInnerTexts()) expect(place).not.toMatch(/\b[a-z]{1,4}-[0-9A-Z]{4}\b/);
 });
 
-test('Results to accept and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
+test('Results to accept and Proposed edits draw a row for each thing they count, and a draft narrows each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-accepted-changed').click();
-	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
-	await expect(accept.locator('[data-testid="review-group"][data-group="changed"]').first()).toBeVisible();
-	// every document's blocks, by document, each once, and no choice of document: as many waiting as the column counts
-	await expect(accept.getByTestId('review-document')).toHaveCount(0);
-	await expect(accept.getByTestId('accept-document')).toHaveCount(2);
-	const waiting = accept.locator('[data-group="changed"] [data-testid="review-row"], [data-group="taken"] [data-testid="review-row"]');
-	await expect(waiting).toHaveCount(5);
+	// every draft's blocks waiting, each once, as many as the column counts
+	await expect(kindRows(page, 'accepted-changed')).toHaveCount(5);
 	await expect(count(page, 'review-kind-accepted-changed')).toHaveText('5');
-	const keys = await accept.getByTestId('review-row').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-key')));
+	await expect(kindRows(page, 'accepted-changed').first().locator('.tx')).toHaveText('main.tex · Widget');
+	// the blocks never accepted and those accepted are folded beneath, and count nothing
+	await expect(page.getByTestId('review-fold')).toHaveText(['Never accepted22', 'Accepted1']);
+	await page.getByTestId('review-fold').filter({ hasText: 'Never accepted' }).getByRole('button').click();
+	await expect(kindRows(page, 'accepted-changed')).toHaveCount(27);
+	const keys = await kindRows(page, 'accepted-changed').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-key')));
 	expect(new Set(keys).size).toBe(keys.length);
-	// the blocks never accepted are folded beneath, and count nothing
-	await expect(accept.locator('[data-testid="review-group"][data-group="never"]').first()).not.toHaveAttribute('open', '');
-	await expect(rows(page)).toHaveCount(0);
+	await expect(count(page, 'review-kind-accepted-changed')).toHaveText('5');
 	await page.getByTestId('review-draft').filter({ hasText: 'bounds.tex' }).click();
-	await expect(accept).toContainText('Nothing of bounds.tex waits to be accepted.');
+	await expect(page.getByTestId('review-empty')).toHaveText('Nothing waits here.');
 	await page.getByTestId('review-kind-edits').click();
-	const changes = page.locator('[data-testid="your-changes"][data-part="changes"]');
-	await expect(changes.getByTestId('change-card')).toHaveCount(0);
+	await expect(kindRows(page, 'edits')).toHaveCount(0);
 	await page.getByTestId('review-draft').filter({ hasText: 'main.tex' }).click();
-	// the changes in main.tex's text, and the agent's copy into it: four cards, as the column counts
-	await expect(changes.getByTestId('change-card')).toHaveCount(3);
-	await expect(changes.getByTestId('change-group')).toHaveCount(1);
-	await expect(changes.getByTestId('proposed-card')).toHaveCount(1);
-	await expect(changes.getByTestId('proposed-open')).toHaveAttribute('href', /\/review\/proposed\?copy=/);
+	// the changes in main.tex's text, and the agent's copy into it: four rows, as the column counts
+	await expect(page.locator('[data-testid="review-row"][data-change]')).toHaveCount(3);
+	await expect(page.locator('[data-testid="review-row"][data-copy]')).toHaveCount(1);
 	// widened again, the change in no document's text is listed too
 	await page.getByTestId('review-kind-all').click();
-	await expect(changes.getByTestId('change-card')).toHaveCount(4);
+	await expect(page.locator('[data-testid="review-row"][data-change]')).toHaveCount(4);
 	await expect(count(page, 'review-kind-edits')).toHaveText('5');
 });

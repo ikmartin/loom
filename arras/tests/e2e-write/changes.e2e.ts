@@ -1,9 +1,10 @@
-// Pending changes under a running `loom serve` (plan 0.30.3): an edit made in a file since the reviewer's look and a suggested edit, both drawn in the document in Markup and in Final and listed in Review › Your Changes; Keep and Discard doing the same from either place; an annotation on the words a kept edit replaces carried onto its new words; Keep resolving the annotation a suggestion answers; and Keep all and Discard all.
+// Pending changes under a running `loom serve` (plan 0.30.3): an edit made in a file since the reviewer's look and a suggested edit, both drawn in the document in Markup and in Final and listed in Review's Proposed edits; Keep and Discard doing the same from either place; an annotation on the words a kept edit replaces carried onto its new words; Keep resolving the annotation a suggestion answers; and Keep all and Discard all.
 import { expect, test, type Served } from '../served';
 import type { Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pane } from '../workspace';
+import { shown as drawn } from '../review-rows';
 
 const MAIN = 'drafting/main.tex';
 const NODE = 'drafting/nodes/sy-0002.tex';
@@ -44,6 +45,7 @@ async function act(page: Page, served: Served, where: 'document' | 'review', id:
 		await expect(words(page, id, how === 'keep' ? 'old' : 'new').first()).toBeHidden();
 	} else {
 		await page.goto('/review');
+		await drawn(page, card(page, id));
 		await card(page, id).getByTestId(how === 'keep' ? 'card-keep' : 'card-discard').click();
 		await expect(card(page, id)).toHaveCount(0);
 	}
@@ -80,6 +82,8 @@ test('an edit in the file and a suggested edit are drawn in Markup and in Final,
 	expect(shown.refs.filter((t) => t === 'sy-0001#eq:fix').length).toBeLessThanOrEqual(1);
 	expect(shown.refs.filter((t) => t === 'sy-0001').length).toBeLessThanOrEqual(1);
 	await page.goto('/review');
+	await drawn(page, card(page, edit));
+	await drawn(page, card(page, SUGGESTED));
 	await expect(card(page, edit)).toContainText('Edit in the file');
 	await expect(card(page, edit).getByTestId('change-words')).toContainText('at most');
 	await expect(card(page, SUGGESTED)).toContainText('Suggestion');
@@ -149,7 +153,7 @@ test('Keep resolves the annotation a suggestion answers', async ({ page, served 
 	expect(text(served)).toContain('Each orbit');
 });
 
-test("Keep all keeps every ready change of a document from its Changes menu, and Discard all a file's from Review", async ({ page, served }) => {
+test("Keep all keeps every ready change of a document from its Changes menu, and Discard all every one Review lists", async ({ page, served }) => {
 	await editInPlace(served);
 	await page.goto('/master/drafting/main');
 	await pane(page, 0).getByTestId('changes-toggle').click();
@@ -158,12 +162,13 @@ test("Keep all keeps every ready change of a document from its Changes menu, and
 	const now = text(served);
 	expect(now).toContain('at most two points');
 	expect(now).toContain('the fixed points are those of');
-	// a file in no document: its changes discarded from Review, its words written back
+	// what is left, a file in no document's among it: discarded from Review, its words written back
 	const intro = 'notes/intro.md';
 	expect(pending(served).some((c) => c.path === intro)).toBe(true);
 	const before = text(served, intro);
 	await page.goto('/review');
-	await page.locator(`[data-testid="change-group"][data-path="${intro}"]`).getByTestId('group-discard-all').click();
+	await page.getByTestId('group-discard-all').click();
 	await expect.poll(() => pending(served).some((c) => c.path === intro), { timeout: 60_000 }).toBe(false);
+	await expect(page.getByTestId('column-message')).toContainText(/^Discarded \d+ changes?\./);
 	expect(text(served, intro)).not.toBe(before);
 });
