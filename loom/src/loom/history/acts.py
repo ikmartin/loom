@@ -1,6 +1,6 @@
-"""A version of a document at each of the author's acts, and a version put back.
+"""A version of a document at each of the author's acts, a version of a file no document's version holds, and a version put back.
 
-A version is a landmark (`stamp_document`): Keep and Undo in Your Changes keep one, taking changes in and applying a suggested edit keep one first, the author records one by hand, and restoring keeps the text it replaces as one. `restore` writes a version back into its document file by file; `put_back` writes back the text an undo set aside.
+A version is a landmark (`stamp_document`): Keep and Undo in Your Changes keep one, taking changes in and applying a suggested edit keep one first, the author records one by hand, and restoring keeps the text it replaces as one. A file an update from Overleaf writes over that no such version holds (a bibliography, a figure, a file no document reads) is kept as a version of its own, a `file-version` line naming its bytes by hash. `restore` writes a version back into its document file by file; `restore_file` writes a file's version back; `put_back` writes back the text an undo set aside.
 """
 
 from __future__ import annotations
@@ -20,6 +20,10 @@ RESTORE = "restore"
 APPLY = "apply"
 #: The ledger's line for the Keep of a suggested edit undone (`pending.unkeep`).
 UNAPPLY = "unapply"
+#: The ledger's line for a version of one file no document's version holds: its bytes before an act wrote over them, by hash (`from`).
+FILE_VERSION = "file-version"
+#: The ledger's line for a file's version put back (`restore_file`).
+FILE_RESTORE = "file-restore"
 
 
 @dataclass
@@ -219,3 +223,98 @@ def put_back(root: Path, history_dir: Path, path: str, digest: str, actor: str |
     except writes.WriteRefused as exc:
         raise RestoreRefused(exc.code, exc.message) from exc
     return before or ""
+
+
+def file_versions(history: History) -> list[Entry]:
+    """Every version of a file of its own (`FILE_VERSION`), oldest first: its path and its bytes by hash (`from`)."""
+    return [
+        e
+        for e in history.entries
+        if e.action == FILE_VERSION and isinstance(e.get("path"), str) and isinstance(e.get("from"), str)
+    ]
+
+
+def file_version_line(
+    history_dir: Path, path: str, digest: str, kept_for: str, message: str, actor: str | None
+) -> tuple[Path, str]:
+    """The ledger and a `file-version` line for it: `path`'s bytes `digest`, kept at the act `kept_for` (`sync`, `restore`), which the act's text store holds as the bytes it replaced."""
+    return ledger_line(
+        history_dir, FILE_VERSION, {"path": path, "from": digest, "kept_for": kept_for, "message": message}, actor
+    )
+
+
+def cannot_restore_file(root: Path, entry: Entry) -> str:
+    """Why the file version `entry` cannot be put back, in the person's words; '' when it can.
+
+    A file in the folder that mirrors Overleaf is written by an update alone (the door's `mirrored`), as a document's version there is.
+    """
+    from loom.overleaf import mirrored
+
+    if mirrored(root, str(entry.get("path"))):
+        return "This file mirrors Overleaf, and only an update from Overleaf writes it; take what you need from this version into Overleaf."
+    return ""
+
+
+def restore_file(root: Path, history_dir: Path, path: str, version: str, actor: str | None) -> dict[str, Any]:
+    """Put the file `path` back as its version `version` (the hash a `file-version` line names for it) holds it, byte for byte, through the door (`loom.writes`).
+
+    Its bytes now are kept first as a version of their own (`kept_for: "restore"`), and a `file-restore` line records it, both landing with the file in one act; a suggested edit whose words it takes out or brings back is recorded so (`pending.follow_words`).
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    history_dir : Path
+        Its history.
+    path : str
+        The file, quilt-relative.
+    version : str
+        The version's hash, `sha256:<hex>`.
+    actor : str, optional
+        Who restores it.
+
+    Returns
+    -------
+    dict
+        `path`, the file; `written`, False when the file already held those bytes; `label`, the version as an answer names it.
+
+    Raises
+    ------
+    RestoreRefused
+        `outside-quilt` for a path outside the quilt; `unknown-version` for a hash no version of `path` names; `no-text` when the history lacks its bytes; and the door's refusals (`mirrored`, `changed`, `not-writable`).
+
+    See Also
+    --------
+    restore : a document's version, every file it kept.
+    """
+    from loom import writes
+    from loom.pending import follow_words
+
+    try:
+        rel = writes.contained(root, path)
+    except writes.WriteRefused as exc:
+        raise RestoreRefused(exc.code, exc.message) from exc
+    history = load_history(history_dir)
+    entry = next(
+        (e for e in reversed(file_versions(history)) if e.get("path") == rel and e.get("from") == version), None
+    )
+    if entry is None:
+        raise RestoreRefused("unknown-version", f"{version} is not a version of {rel}")
+    data = writes.fetch(history_dir, version)
+    if data is None:
+        raise RestoreRefused("no-text", f"the bytes of {rel} in this version are missing from the history")
+    label = entry.message or Path(rel).name
+    try:
+        with writes.act(root, history_dir, "restore", actor) as w:
+            now = w.read(rel)
+            if now == data:
+                return {"path": rel, "written": False, "label": label}
+            before = writes.digest(now)
+            if before is not None:
+                w.log(*file_version_line(history_dir, rel, before, "restore", f"Before restoring “{label}”", actor))
+            follow_words(w, rel, now, data, ("human", actor or ""))
+            w.replace(rel, data)
+            w.log(*ledger_line(history_dir, FILE_RESTORE, {"path": rel, "from": before, "to": version}, actor))
+    except writes.WriteRefused as exc:
+        raise RestoreRefused(exc.code, exc.message) from exc
+    return {"path": rel, "written": True, "label": label}

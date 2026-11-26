@@ -549,6 +549,44 @@ export const review = {
 		whichResult: (short: string, where: string) => `Say which result of ${short} ${/^proof /.test(where) ? `the ${where}` : where} cites`,
 		formalize: (name: string, doc: string) => `Formalize ${name} of ${file(doc)}`
 	},
+	/** Review › History › Versions, under a document's versions: each version of a file no document's version holds. */
+	fileVersions: {
+		/** The section's heading. */
+		heading: 'Other files',
+		/** Under it. */
+		lead: 'Files an update from Overleaf wrote over while they held changes made here, and files a restore replaced, each kept as it was.',
+		/** A row's button that shows the version's bytes below it. */
+		open: 'Open',
+		/** A row's button that shows how the version differs from the file now. */
+		compare: 'Compare with now',
+		/** In place of Compare when the file holds these bytes now. */
+		same: 'Same as now',
+		/** A row's button that asks before restoring. */
+		restore: 'Restore…',
+		/** The question it asks. */
+		ask: (name: string, when: string) => `Put ${name} back as it was${when ? ` on ${when}` : ''}? Its bytes now are kept as a version.`,
+		/** The button that restores. */
+		go: 'Restore',
+		/** While it restores. */
+		going: 'Restoring…',
+		/** The button that cancels the question. */
+		cancel: 'Cancel',
+		/** A file that is neither text nor an image, opened: where its bytes are. */
+		download: (name: string) => `Download ${name} as kept`,
+		/** Compare on a file that is neither text nor an image. */
+		differs: 'The kept bytes differ from the file now; download them to compare.',
+		/** Over the version, beside the file now, when two images are compared. */
+		then: 'Kept',
+		now: 'Now',
+		/** When the file is gone now. */
+		gone: 'The file is not there now.',
+		/** When the version's bytes could not be read. */
+		unread: 'Its bytes could not be read.',
+		/** Everything recorded's words for a file's version, by why it was kept. */
+		kept: (name: string, message: string) => `Kept a version of ${name}${message ? `: ${message}` : ''}`,
+		/** Everything recorded's words for a file's version put back. */
+		restored: (name: string) => `Put ${name} back as a version`
+	},
 	/** Names joined as a sentence lists them. */
 	listed
 } as const;

@@ -601,6 +601,116 @@ def test_a_change_made_here_is_written_over_said_and_kept_in_the_version_before(
     assert kept == [stray]
 
 
+BIB = "@book{a, title={A}}\n"
+#: A PNG's signature and a few bytes that are no text.
+PNG = b"\x89PNG\r\n\x1a\n" + bytes(range(256))
+
+
+def kept_files(root: Path) -> list[tuple[str, bytes | None, str]]:
+    """Each version of a file of its own the history holds, oldest first: its path, the bytes it names, and the act it was kept at."""
+    from loom import writes
+    from loom.history.acts import file_versions
+
+    hist = load_quilt(root).history_dir
+    return [
+        (e.get("path"), writes.fetch(hist, e.get("from")), e.get("kept_for")) for e in file_versions(load_history(hist))
+    ]
+
+
+def call(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """`endpoint` asked as the viewer asks it; a refusal as `{"error": code}`."""
+    from loom.render.api import ApiError, handle
+
+    try:
+        return handle(root, endpoint, dict(body))
+    except ApiError as exc:
+        return {"error": exc.code}
+
+
+@pytest.mark.parametrize("name", ["refs.bib", "unused.tex"])
+def test_a_file_no_document_s_version_holds_written_over_is_kept_as_a_version_of_its_own(
+    tmp_path: Path, name: str
+) -> None:
+    """O-8: a bibliography, or a `.tex` file no document reads, changed here and written over keeps its bytes as a version of the file; the document's own file stays in the document's version alone."""
+    root, bare = mirror.paired(tmp_path, {"main.tex": mirror.SOURCE, "loom.sty": "% s\n", name: BIB})
+    mine = BIB + "@book{mine, title={Typed here}}\n"
+    (root / f"drafting/{name}").write_text(mine)
+    (root / "drafting/main.tex").write_text(mirror.SOURCE.replace("}A\\end", "}A, typed here\\end"))
+    theirs = BIB + "@book{b, title={B}}\n"
+    mirror.edit(mirror.colleague(tmp_path, bare), "theirs", {name: theirs})
+    said = overleaf.update(load_quilt(root))
+    assert said["overwritten"] == sorted(["drafting/main.tex", f"drafting/{name}"])
+    assert (root / f"drafting/{name}").read_text() == theirs
+    assert kept_files(root) == [(f"drafting/{name}", mine.encode(), "sync")]
+
+
+def bib_written_over(tmp_path: Path) -> tuple[Path, bytes, str]:
+    """A mirroring quilt whose `refs.bib`, changed here with Windows line endings, an update wrote over with a colleague's; with the bytes written over and the colleague's text."""
+    root, bare = mirror.paired(tmp_path, {"main.tex": mirror.SOURCE, "loom.sty": "% s\n", "refs.bib": BIB})
+    mine = (BIB + "@book{mine, title={Typed here}}\n").replace("\n", "\r\n").encode()
+    (root / "drafting/refs.bib").write_bytes(mine)
+    theirs = BIB + "@book{b, title={B}}\n"
+    mirror.edit(mirror.colleague(tmp_path, bare), "theirs", {"refs.bib": theirs})
+    overleaf.update(load_quilt(root))
+    return root, mine, theirs
+
+
+def test_history_lists_a_file_s_version_with_its_bytes_and_how_it_differs_from_now(tmp_path: Path) -> None:
+    """O-8: `history.files` names the version, publishes its bytes and its line diff against now, and says why it cannot go back while the folder mirrors Overleaf."""
+    from loom.render.parts.history import file_rows
+
+    root, mine, _ = bib_written_over(tmp_path)
+    files: dict[str, str | bytes] = {}
+    (row,) = file_rows(root, load_quilt(root).history_dir, files)
+    assert (row["path"], row["kind"], row["kept_for"], row["same"]) == ("drafting/refs.bib", "text", "sync", False)
+    assert files[row["kept"]] == mine and "+@book{b, title={B}}" in str(files[row["diff"]])
+    assert row["message"] == "Before an update from Overleaf" and "Overleaf" in row["cannot_restore"]
+    overleaf.unpair(load_quilt(root))
+    assert file_rows(root, load_quilt(root).history_dir, {})[0]["cannot_restore"] == ""
+
+
+def test_a_file_s_version_goes_back_byte_for_byte_once_its_folder_mirrors_nothing(tmp_path: Path) -> None:
+    """O-8: while the folder mirrors Overleaf only an update writes it, so restoring is refused and writes nothing; once the pairing ends, restoring gives back exactly the bytes written over, the bytes it replaces kept first."""
+    root, mine, theirs = bib_written_over(tmp_path)
+    from loom.history.acts import file_versions
+
+    (version,) = file_versions(load_history(load_quilt(root).history_dir))
+    asked = {"file": "drafting/refs.bib", "version": version.get("from")}
+    assert call(root, "history-restore", asked) == {"error": "mirrored"}
+    assert (root / "drafting/refs.bib").read_text() == theirs
+    overleaf.unpair(load_quilt(root))
+    assert "error" not in call(root, "history-restore", asked)
+    assert (root / "drafting/refs.bib").read_bytes() == mine
+    assert kept_files(root)[-1] == ("drafting/refs.bib", theirs.encode(), "restore")
+    assert call(root, "history-restore", {**asked, "version": "sha256:" + "0" * 64}) == {"error": "unknown-version"}
+
+
+def test_a_figure_changed_here_and_written_over_is_kept_and_goes_back_byte_for_byte(tmp_path: Path) -> None:
+    """O-8: a file that is no text, a PNG, is kept by its bytes as any file is, and restored exactly."""
+    root, bare = mirror.paired(tmp_path)
+    mine = PNG + b"drawn here"
+    (root / "drafting/plot.png").write_bytes(mine)
+    cleo = mirror.colleague(tmp_path, bare)
+    (cleo / "plot.png").write_bytes(PNG)
+    mirror.run(cleo, "add", "plot.png", who=mirror.COLLEAGUE)
+    mirror.run(cleo, "commit", "-q", "-m", "a figure", who=mirror.COLLEAGUE)
+    mirror.run(cleo, "push", "-q", "origin", "HEAD:main", who=mirror.COLLEAGUE)
+    said = overleaf.update(load_quilt(root))
+    assert said["overwritten"] == ["drafting/plot.png"] and (root / "drafting/plot.png").read_bytes() == PNG
+    assert kept_files(root) == [("drafting/plot.png", mine, "sync")]
+    from loom.render.parts.history import file_rows
+
+    files: dict[str, str | bytes] = {}
+    (row,) = file_rows(root, load_quilt(root).history_dir, files)
+    assert row["kind"] == "image" and files[row["kept"]] == mine and "diff" not in row
+    overleaf.unpair(load_quilt(root))
+    from loom.history.acts import file_versions
+
+    (version,) = file_versions(load_history(load_quilt(root).history_dir))
+    assert "error" not in call(root, "history-restore", {"file": "drafting/plot.png", "version": version.get("from")})
+    assert (root / "drafting/plot.png").read_bytes() == mine
+
+
 def test_a_file_overleaf_removes_is_removed_and_one_it_adds_arrives(tmp_path: Path) -> None:
     root, bare = mirror.paired(tmp_path, {"main.tex": mirror.SOURCE, "loom.sty": "% s\n", "old.tex": "old\n"})
     other = mirror.colleague(tmp_path, bare)

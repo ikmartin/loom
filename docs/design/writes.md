@@ -137,7 +137,7 @@ The door keeps every byte it is not asked to change. A splice maps the scan's of
 
 A file that is not UTF-8 is never spliced: the scan reads such a file as Mac Roman, which accepts any byte and is wrong for the Latin-1 files people have, so loom has no reading in which to place an edit or encode an agent's Unicode. Writing would guess; refusing damages nothing. The list says so on the edit before the person presses Keep, and the door refuses at the write (`not-utf8`). Restore and put-back write stored bytes back whole, so a version of a Latin-1 file comes back exactly.
 
-A version keeps each file's bytes as they were (`history.steps.stamp_document`), so restoring it gives the bytes back, not the scan's reading of them. The text store under versions, looks and the journal reads and writes bytes: a text stored with CRLF comes back with CRLF.
+A version keeps each file's bytes as they were (`history.steps.stamp_document`), so restoring it gives the bytes back, not the scan's reading of them. So does a version of a file (`model.md`, "History"): a pull names, in a `file-version` line staged with it, the bytes of each file it writes over that held a change made here and that no version it stamped holds as it is, bytes the act's before keeps in the store, and `history.acts.restore_file` writes them back whole, text or not, in an act of kind `restore` that keeps the bytes it replaces as a version of the file first. The text store under versions, looks and the journal reads and writes bytes: a text stored with CRLF comes back with CRLF.
 
 ## Where an act may write
 
@@ -254,7 +254,7 @@ The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.
 | writer | step | through the door |
 |---|---|---|
 | ticking a box (`tasks.tick`), saving Settings (`config_edit.set_values`) | 1 | yes |
-| Discard of an in-place change, put-back, restore | 2 | yes |
+| Discard of an in-place change, put-back, restore, and a version of a file restored (`history.acts.restore_file`) | 2 | yes |
 | Keep of a suggested edit | 3 | yes |
 | undo of a Keep in one step (`pending.unkeep`), and a restore or put-back that reopens what it takes out and records what it brings back (`pending.follow_words`) | 5 | yes |
 | taking in an agent's copy (`adopt.incorporate`) and a pull (`sync.incorporate`), each one act with the records it writes ("Records an act writes") | 6 | yes |
