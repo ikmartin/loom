@@ -1,5 +1,5 @@
 <script lang="ts">
-	// What stands at the end of a selection: Quote on a bare selection, Add comment after Annotate marked one. After the end of the selection's last line, level with it, below it near the window's right edge; it follows that end as the page scrolls and hides while it is scrolled out of view. Pressing it must not end the selection, which is why the mousedown is swallowed.
+	// What stands at the end of a selection: its actions (`SelectionMenu`), with Add comment before them after Annotate marked the words. After the end of the selection's last line, level with it, below it near the window's right edge; it follows that end as the page scrolls and hides while it is scrolled out of view. Pressing it must not end the selection, which is why the mousedown is swallowed.
 	import type { Snippet } from 'svelte';
 
 	type Box = { left: number; top: number; width: number; height: number };

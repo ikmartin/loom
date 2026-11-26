@@ -29,6 +29,7 @@ from loom.cli.link_cmd import link_command
 from loom.cli.lint_cmd import lint_command
 from loom.cli.mcp_cmd import mcp_command
 from loom.cli.nodes import new, search
+from loom.cli.open_cmd import open_command
 from loom.cli.page import write
 from loom.cli.paper import atomize, deloom_command, id_command, import_command
 from loom.cli.quilt import init
@@ -77,6 +78,7 @@ main.add_command(check)
 main.add_command(source)
 main.add_command(serve)
 main.add_command(app_command)
+main.add_command(open_command)
 main.add_command(accept)
 main.add_command(annotate)
 main.add_command(suggest_command)

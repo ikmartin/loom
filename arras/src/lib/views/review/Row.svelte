@@ -1,5 +1,5 @@
 <script lang="ts">
-	// One row waiting for the person: its two marks, its words, a quiet line at the right and a chevron; it opens in place to its body. A paper to fetch does not open: it offers the work's page, and a file dropped anywhere in loom (or on this row) is taken for it.
+	// One of loom's rows waiting for the person: its two marks, its words, a quiet line at the right and a chevron; it opens in place to its body. Results to accept and Proposed edits are drawn from the manifest instead (`AcceptRow`, `ChangeRow`). A paper to fetch does not open: it offers the work's page, and a file dropped anywhere in loom (or on this row) is taken for it.
 	import Icon from '$lib/components/Icon.svelte';
 	import Mark from '$lib/marks/Mark.svelte';
 	import type { ReviewRow } from '$lib/library/types';
@@ -8,7 +8,6 @@
 	import { rv } from './state.svelte';
 	import { reviewNames } from './names.svelte';
 	import Question from './rows/Question.svelte';
-	import Change from './rows/Change.svelte';
 	import Check from './rows/Check.svelte';
 	import Correction from './rows/Correction.svelte';
 	import Cited from './rows/Cited.svelte';
@@ -45,7 +44,7 @@
 	{/if}
 	{#if open}
 		<div class="rr-b">
-			{#if row.kind === 'questions'}<Question {row} />{:else if row.kind === 'edits' || row.kind === 'accepted-changed'}<Change {row} />{:else if row.kind === 'check' && row.correction !== undefined}<Correction {row} />{:else if row.kind === 'check'}<Check {row} />{:else if row.kind === 'cited' && row.citation !== undefined}<Citation {row} />{:else if row.kind === 'cited'}<Cited {row} />{:else if row.kind === 'attest'}<Attest {row} />{:else if row.kind === 'attested-changed'}<AttestedChanged {row} />{/if}
+			{#if row.kind === 'questions'}<Question {row} />{:else if row.kind === 'check' && row.correction !== undefined}<Correction {row} />{:else if row.kind === 'check'}<Check {row} />{:else if row.kind === 'cited' && row.citation !== undefined}<Citation {row} />{:else if row.kind === 'cited'}<Cited {row} />{:else if row.kind === 'attest'}<Attest {row} />{:else if row.kind === 'attested-changed'}<AttestedChanged {row} />{/if}
 		</div>
 	{/if}
 </div>

@@ -803,6 +803,28 @@ def check_config(quilt: Any) -> Item:
     return Item("config", WARN, QUILT, f"{w[0]}{more}", "loom lint")
 
 
+def check_writes(quilt: Any) -> Item:
+    """The writes loom could neither finish nor undo (`writes.left_acts`), each with the id `loom doctor --settle` takes: what the person settles as it stands, in the viewer or here (`settling`)."""
+    from loom.writes import left_acts
+
+    acts = left_acts(quilt.root, quilt.history_dir)
+    if not acts:
+        return Item("writes", OK, QUILT, "nothing loom wrote is left unsettled")
+    said = "; ".join(
+        f"{act_id}: {kind}{' on ' + ', '.join(files) if files else ''}" for act_id, kind, files, _, _ in acts
+    )
+    return Item(
+        "writes",
+        WARN,
+        QUILT,
+        f"loom could neither finish nor undo {len(acts)} write{'s' if len(acts) > 1 else ''}: {said}",
+        "settle each as it stands in the viewer's Problems, or with loom doctor --settle ID in a terminal of your own",
+        extra={
+            "left": [{"act": act_id, "kind": kind, "files": files, "why": why} for act_id, kind, files, why, _ in acts]
+        },
+    )
+
+
 def check_unpacked() -> Item:
     """What the machine's one folder for a tool TeX unpacks holds (`machine.unpacked`): its size and how many copies, one for each `biber` that ever ran here (a TeX Live year, loom's own TeX beside the person's). Nothing prunes it."""
     from loom.lifetimes import readable, size_of
@@ -955,6 +977,7 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
             check_gitignore(root),
             check_config(quilt),
             check_server(root),
+            check_writes(quilt),
             *check_sizes(root),
         ]
     return report

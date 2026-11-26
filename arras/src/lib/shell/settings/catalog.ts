@@ -1,7 +1,9 @@
+import { notes } from '$lib/words/notes';
+
 // What Settings holds: its sections, in two groups, and every setting's name and what it does, which the rows draw their words from. Each section says where its settings are kept. `[lint] disable` has no section: what it silences is lint's, which agents read, and it is set in config.toml.
 
 export type Group = 'loom' | 'quilt';
-export type SectionId = 'profile' | 'appearance' | 'files' | 'general' | 'documents' | 'annotations' | 'agents' | 'library' | 'overleaf';
+export type SectionId = 'profile' | 'appearance' | 'files' | 'general' | 'documents' | 'annotations' | 'notes' | 'agents' | 'library' | 'overleaf';
 
 export interface Section {
 	id: SectionId;
@@ -38,6 +40,7 @@ export const SECTIONS: Section[] = [
 	{ id: 'general', label: 'General', group: 'quilt', where: QUILT, icon: 'M4 6h16M4 12h16M4 18h10' },
 	{ id: 'documents', label: 'Documents', group: 'quilt', where: QUILT, icon: 'M7 3h7l5 5v13H7zM14 3v5h5' },
 	{ id: 'annotations', label: 'Annotations', group: 'quilt', where: "Saved in this quilt's .loom/records/annotation-types.toml, shared with everyone who has the quilt. You change it here; an agent may edit the file.", icon: 'm9 11-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4' },
+	{ id: 'notes', label: notes.settings.section, group: 'quilt', where: notes.settings.where, icon: 'M5 3h10l4 4v14H5zM15 3v4h4M9 12h6M9 16h4' },
 	{ id: 'agents', label: 'Agents', group: 'quilt', where: QUILT, icon: 'M7 7h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3M12 3v4M9 13h.01M15 13h.01' },
 	{ id: 'library', label: 'Library', group: 'quilt', where: QUILT, icon: 'M5 4v16M9 4v16M13 5l4 15M19 4l-2 16' },
 	{ id: 'overleaf', label: 'Overleaf', group: 'quilt', where: 'Recorded in .loom/records/source-sync.json, committed with the quilt; the folder it names is a clone on this computer.', icon: 'M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5M18 3v4h-4M6 21v-4h4' }
@@ -60,8 +63,10 @@ export const SETTINGS: Setting[] = [
 	{ id: 'quilt.home', section: 'documents', name: 'Front door', what: "What the viewer opens when you have nothing open. Unset, the quilt's README.", key: '[quilt] home' },
 	{ id: 'quilt.main', section: 'documents', name: 'Default document', what: 'The LaTeX document loom compiles and reads macros from when the quilt holds several.', key: '[quilt] main' },
 	{ id: 'quilt.research_state', section: 'documents', name: 'Research state', what: 'The page an agent keeps on where the work stands, and you edit.', key: '[quilt] research_state' },
-	{ id: 'annotation-types', section: 'annotations', name: 'Annotation types', what: 'The types an annotation may carry: each one’s name and look, whether it stays open until resolved, whether it is listed in Notes, and its instructions for agents.' },
+	{ id: 'annotation-types', section: 'annotations', name: 'Annotation types', what: 'The types an annotation may carry: each one’s name and look, whether it stays open until resolved, and its instructions for agents.' },
 	{ id: 'margin-marks', section: 'annotations', name: 'Show annotation marker in margin', what: 'An icon in the right margin beside each annotation and pending change, which opens it. Off, the marks in the text still open them. Kept in this browser, for every quilt.' },
+	{ id: 'notes.dir', section: 'notes', name: notes.settings.dir, what: notes.settings.dirWhat, key: '[notes] dir' },
+	{ id: 'notes.command', section: 'notes', name: notes.settings.command, what: notes.settings.commandWhat },
 	{ id: 'agents.deny', section: 'agents', name: 'Where agents may not write', what: "Patterns as in `.gitignore`, from the quilt's top. An agent may edit every other file in place; an edit to an accepted block shows it changed, and you keep or undo each edit in Review.", key: '[agents] deny' },
 	{ id: 'agents.protected', section: 'agents', name: 'Always protected', what: "Loom's records, this file and the research state, which an agent writes only through loom." },
 	{ id: 'agents.apps', section: 'agents', name: 'Apps', what: 'Which agent apps start loom here.' },

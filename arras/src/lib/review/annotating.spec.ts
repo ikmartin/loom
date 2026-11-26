@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { Annotation, Manifest } from '$lib/manifest/types';
-import { authors, changedFrom, commentSeed, earlier, handPayload, hintFor, keepLook, typesPayload, isTodo, lookOf, notesHere, notesOf, passes, plain, PLAIN, quoted, retype, sequence, takeSeed, withLook, withType } from './annotating.svelte';
+import { authors, changedFrom, commentSeed, earlier, handPayload, hintFor, keepLook, typesPayload, isTodo, lookOf, passes, plain, PLAIN, quoted, retype, sequence, takeSeed, withLook, withType } from './annotating.svelte';
 
 const fixture = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
 const RED = { color: 'red', style: 'highlight' as const, weight: 2, opacity: 60 };
@@ -78,8 +78,8 @@ describe('the look in hand', () => {
 
 	it('writes every type for types-save, one with a new look', () => {
 		const saved = typesPayload(fixture, 'question', { ...RED, color: 'green' });
-		expect(saved.map((t) => t.id)).toEqual(['revision', 'suggestion', 'question', 'note']);
-		expect(saved[2]).toMatchObject({ id: 'question', name: 'Question', color: 'green', style: 'highlight', weight: 2, opacity: 60, open: true, notes: false });
+		expect(saved.map((t) => t.id)).toEqual(['revision', 'suggestion', 'question']);
+		expect(saved[2]).toMatchObject({ id: 'question', name: 'Question', color: 'green', style: 'highlight', weight: 2, opacity: 60, open: true });
 		expect(saved[0]).toMatchObject({ color: 'red', opacity: 60 });
 	});
 
@@ -107,7 +107,8 @@ describe('the Comments list and To do', () => {
 	const m = { ...fixture, reviewer: { name: 'me', source: '' } } as Manifest;
 	const theirs = row({ id: 'a', type: 'question', author: { kind: 'agent', id: 'agent' } });
 	const mine = row({ id: 'b', type: 'question', author: { kind: 'person', id: 'me' } });
-	const informs = row({ id: 'c', type: 'note', author: { kind: 'agent', id: 'agent' } });
+	// a type the quilt no longer lists reads as untyped, and only informs
+	const informs = row({ id: 'c', type: 'gone', author: { kind: 'agent', id: 'agent' } });
 	const untyped = row({ id: 'd', author: { kind: 'agent', id: 'agent' } });
 	const done = row({ id: 'e', type: 'question', status: 'resolved', author: { kind: 'agent', id: 'agent' } });
 
@@ -132,23 +133,6 @@ describe('the Comments list and To do', () => {
 
 	it('names the reader first among the people', () => {
 		expect(authors(m, [theirs, mine]).map((p) => p.id)).toEqual(['me', 'agent']);
-	});
-});
-
-describe('the Notes list', () => {
-	it('holds the annotations read here whose type is listed in Notes, in reading order, and the badge counts them', () => {
-		const m = structuredClone(fixture) as Manifest;
-		m.annotations = {
-			n1: row({ id: 'n1', type: 'note', target: { key: 'sy-0003', hash: '' } }),
-			n2: row({ id: 'n2', type: 'note', target: { key: 'sy-0003', hash: '' } }),
-			elsewhere: row({ id: 'elsewhere', type: 'note', target: { key: 'sy-0002', hash: '' }, in: 'drafting/talk.tex' }),
-			q: row({ id: 'q', type: 'question', target: { key: 'sy-0003', hash: '' } }),
-			r: row({ id: 'r', type: 'note', in_reply_to: 'n1' })
-		};
-		// what is read here, in reading order: a note of another document never is
-		const here = { order: ['n2', 'q', 'n1', 'r'], apart: [] };
-		expect(notesOf(m, here).map((a) => a.id)).toEqual(['n2', 'n1']);
-		expect(notesHere(m, here)).toBe(2);
 	});
 });
 

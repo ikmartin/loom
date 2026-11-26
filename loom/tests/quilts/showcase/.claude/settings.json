@@ -96,6 +96,7 @@
       "Bash(loom linearize*)",
       "Bash(loom live*)",
       "Bash(loom mv*)",
+      "Bash(loom open*)",
       "Bash(loom revert*)",
       "Bash(loom session close*)",
       "Bash(loom session delete*)",

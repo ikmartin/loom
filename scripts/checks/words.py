@@ -83,7 +83,6 @@ LEGACY = (
     "arras/src/lib/review/DeletedBar.svelte",
     "arras/src/lib/review/IncomingPull.svelte",
     "arras/src/lib/review/LookControls.svelte",
-    "arras/src/lib/review/QuoteChip.svelte",
     "arras/src/lib/review/ReviewPanel.svelte",
     "arras/src/lib/review/SideList.svelte",
     "arras/src/lib/review/TypeList.svelte",

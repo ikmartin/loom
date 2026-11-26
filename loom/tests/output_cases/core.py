@@ -50,6 +50,8 @@ KIND: dict[str, str] = {
     "link": "raw",
     "lint": "report",
     "new": "report",
+    # the address it opened, a link; it opens a browser and may start a server, so only its refusals are run
+    "open": "raw",
     "search": "report",
     "serve": "running",
     "source": "raw",
@@ -182,6 +184,10 @@ CASES: dict[str, list[Case]] = {
         Case(("dm-0001",)),
         Case(("Calloway14", "--page", "1")),
         Case(("nope",), exit=2, unchanged=True, why="a key that names nothing (CLI study G1)"),
+    ],
+    "open": [
+        Case(("quilt:dm-9999",), exit=2, unchanged=True, why="a link that names nothing the viewer shows"),
+        Case(("just words",), exit=2, unchanged=True, why="text holding no link"),
     ],
     "lint": [
         Case(()),

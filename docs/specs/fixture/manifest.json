@@ -97,7 +97,6 @@
     "simplify"
    ],
    "name": "Revision",
-   "notes": false,
    "open": true
   },
   {
@@ -115,7 +114,6 @@
     "review"
    ],
    "name": "Suggestion",
-   "notes": false,
    "open": true
   },
   {
@@ -132,22 +130,7 @@
     "referee"
    ],
    "name": "Question",
-   "notes": false,
    "open": true
-  },
-  {
-   "id": "note",
-   "instructions": "An aside that asks nothing and is worth finding again: an explanation, a remark on why a step works, a sign that something checks out, or a dead end, counterexample or decision about this result, recorded when you find it.",
-   "look": {
-    "color": "grey",
-    "opacity": 60,
-    "style": "highlight",
-    "weight": 2
-   },
-   "modes": [],
-   "name": "Note",
-   "notes": true,
-   "open": false
   }
  ],
  "annotations": {
@@ -681,12 +664,44 @@
   }
  },
  "arriving": [],
+ "backlinks": [
+  {
+   "at": "notes-on-the-widgets",
+   "from": "notes/intro.md",
+   "href": "quilt:sy-0002",
+   "key": "sy-0002",
+   "kind": "node",
+   "line": 3,
+   "place": "",
+   "quote": ""
+  },
+  {
+   "at": "",
+   "from": "notes/page.html",
+   "href": "quilt:sy-0002",
+   "key": "sy-0002",
+   "kind": "node",
+   "line": 6,
+   "place": "",
+   "quote": ""
+  },
+  {
+   "at": "goals",
+   "from": "research-state.md",
+   "href": "quilt:sy-0003",
+   "key": "sy-0003",
+   "kind": "node",
+   "line": 2,
+   "place": "",
+   "quote": ""
+  }
+ ],
  "canon": [
   {
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "7e5b80e683bef81c5911ccb1a4ad4b1824ace93832fd017daba63ae1f648c2d2",
+   "hash": "fe069ee40053ddd59308920ff5ffbfb78e292d20b9b0ee17464f581c3842e404",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -701,7 +716,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "a40f3b53ddfe7261e404b8bcbf0bd7a019abd728b7a9c3dd34de4c344311324f",
+   "hash": "cc439806024563afe65862b85c063742b2c67ca687b293c7c46e41c37548bbd9",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -716,7 +731,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "0cffa462272f5b790bc94f6af96c5dcec48bbc118734ac9a5d0e38e1d5bf1530",
+   "hash": "e65c7e2d5956e5988a0ace45c6dbde181b610b2c5298a9f305e9d6c95caef409",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
@@ -910,7 +925,8 @@
    "quilt.home",
    "library.online",
    "lint.disable",
-   "agents.deny"
+   "agents.deny",
+   "notes.dir"
   ],
   "library": {
    "online": false
@@ -945,6 +961,7 @@
     "loom:invalid-name",
     "loom:link-place-missing",
     "loom:link-target-missing",
+    "loom:link-words-missing",
     "loom:link-work-unknown",
     "loom:macro-shadowed",
     "loom:macros-missing",
@@ -992,6 +1009,10 @@
     "loom:write-left"
    ],
    "disable": []
+  },
+  "notes": {
+   "default": "notes",
+   "dir": ""
   },
   "quilt": {
    "engine": "pdflatex",

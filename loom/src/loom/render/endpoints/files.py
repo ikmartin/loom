@@ -114,7 +114,13 @@ def _settings(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]
     shown = Shown.of(quilt)
     own = {m for m in result.masters if result.document_role(m) == "person"}
     try:
-        save(quilt, changes, masters=own, shown=lambda rel: (root / rel).is_file() and shown.is_shown(rel))
+        save(
+            quilt,
+            changes,
+            masters=own,
+            shown=lambda rel: (root / rel).is_file() and shown.is_shown(rel),
+            folders=lambda rel: (root / rel).is_dir() and shown.is_shown(rel),
+        )
     except ConfigRefused as exc:
         raise ApiError("bad-value", str(exc), status=409, fields=exc.refused) from exc
     except WriteRefused as exc:

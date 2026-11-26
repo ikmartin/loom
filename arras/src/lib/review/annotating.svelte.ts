@@ -175,7 +175,7 @@ export function changedFrom(m: Typed, a: Pick<Annotation, 'type' | 'look'>): Ann
 export function typesPayload(m: Typed, id?: string, look?: Look): Record<string, unknown>[] {
 	return (m?.annotation_types ?? []).map((t) => {
 		const l = id && look && t.id === id ? look : t.look;
-		return { id: t.id, name: t.name, color: l.color, style: l.style, weight: l.weight, opacity: l.opacity, open: t.open, notes: t.notes, instructions: t.instructions };
+		return { id: t.id, name: t.name, color: l.color, style: l.style, weight: l.weight, opacity: l.opacity, open: t.open, instructions: t.instructions };
 	});
 }
 
@@ -206,7 +206,13 @@ export interface Nowhere {
 }
 
 export class Annotating {
+	/** The item annotated here, by its key (`itemKey`): what its Notes list lists the files linking to; '' where it is no item. */
+	readonly on: string;
 	tool = $state<Tool>(null);
+
+	constructor(on = '') {
+		this.on = on;
+	}
 	/** The top-level annotations and the pending changes read here, by id, in reading order: those with a mark in the order their first marks stand, then those on the whole document and the changes drawn nowhere. The fragment sets it as it wires. */
 	order = $state<string[]>([]);
 	/** The top-level notes written in this document that are on no block now, by id: listed apart, after everything in `order`, and opened beside their card. The fragment sets it as it wires. */
@@ -374,29 +380,6 @@ function defaultDocument(m: Pick<Manifest, 'masters'>): string {
 	return m.masters.find((d) => d.default)?.path ?? m.masters[0]?.path ?? '';
 }
 
-/**
- * The Notes list beside an item: the top-level annotations read here whose type is listed in Notes, in reading order.
- *
- * Parameters
- * ----------
- * m : Manifest
- * s : Annotating
- *     The item's annotating, whose `order` is what is read here.
- *
- * Returns
- * -------
- * list of Annotation
- */
-export function notesOf(m: Manifest | null | undefined, s: Pick<Annotating, 'order'>): Annotation[] {
-	if (!m) return [];
-	return s.order.map((id) => m.annotations[id]).filter((a): a is Annotation => !!a && !a.in_reply_to && !!typeOf(m, a)?.notes);
-}
-
-/** How many notes are read here: what the Notes badge on this item's toolbar counts, and what its list holds, those on no block included. */
-export function notesHere(m: Manifest | null | undefined, s: Pick<Annotating, 'order' | 'apart'>): number {
-	return notesOf(m, s).length + notesApart(m, s).length;
-}
-
 /** What the group of notes on no block is called in a document's lists, and where such a note is said to stand. */
 export const APART = 'On no block now';
 
@@ -414,12 +397,6 @@ export function whyApart(m: Pick<Manifest, 'unplaced'>, a: Annotation): string {
 export function apartOf(m: Manifest | null | undefined, s: Pick<Annotating, 'apart' | 'hidden' | 'todo' | 'layer'>, showSettled = ui.showSettled): Annotation[] {
 	if (!m || s.layer === 'changes') return [];
 	return s.apart.map((id) => m.annotations[id]).filter((a): a is Annotation => !!a && passes(m, a, s, showSettled));
-}
-
-/** The notes on no block written in this document whose type is listed in Notes, which its Notes list shows apart at its end. */
-export function notesApart(m: Manifest | null | undefined, s: Pick<Annotating, 'apart'>): Annotation[] {
-	if (!m) return [];
-	return s.apart.map((id) => m.annotations[id]).filter((a): a is Annotation => !!a && !a.in_reply_to && !!typeOf(m, a)?.notes);
 }
 
 /** The top-level notes on no block that were written in the document at `path`, by id in the order they were written: what its fragment lists apart. */

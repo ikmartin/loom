@@ -96,7 +96,7 @@ def test_every_tool_is_written_and_stroked_ones_are_bounded(paper: Path) -> None
     assert ink["strokes"] == [[10, 10, 20, 30, 40, 5], [50, 50, 60, 60]] and ink["rects"] == [[10, 5, 60, 60]]
     assert annotated(paper, *ON, "--mark", "arrow", "--stroke", "1,2,30,40")["rects"] == [[1, 2, 30, 40]]
     # the look comes from the type and what is set on it, as any annotation's
-    green = annotated(paper, *ON, "--box", "1,1,9,9", "--mark", "box", "--color", "green", "--type", "note")
+    green = annotated(paper, *ON, "--box", "1,1,9,9", "--mark", "box", "--color", "green")
     assert (green["look"], green["drawn"]["color"]) == ({"color": "green"}, "green")
 
 

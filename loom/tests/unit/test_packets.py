@@ -34,9 +34,9 @@ def test_the_packet_is_what_the_person_marked_and_nothing_else(q: Path) -> None:
 
     sid, session = sitting(q)
     mine = comment(q, "dm-0003", "Which orbit?", "--quote", "finite set", "--type", "question")
-    theirs = comment(q, "dm-0002", "An agent's own note.", "--type", "note", who="Referee Agent", agent=True)
+    theirs = comment(q, "dm-0002", "An agent's own note.", who="Referee Agent", agent=True)
     ok("annotate", "--reply", theirs, "Not here.", "--as", "A. Author", cwd=q)
-    deleted = comment(q, "dm-0002", "Never mind.", "--type", "note")
+    deleted = comment(q, "dm-0002", "Never mind.")
     ok("annotate", "--delete", deleted, "--as", "A. Author", cwd=q)
     rows = pending(q, session(), "A. Author")
     assert [r["id"] for r in rows][0] == mine

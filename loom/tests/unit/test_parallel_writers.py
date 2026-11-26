@@ -149,7 +149,7 @@ def test_parallel_replies_and_new_annotations_draw_from_one_counter(tmp_path: Pa
     q = demo(tmp_path)
     new_session(q)
     parent = ok("annotate", "dm-0002", "the question", "--type", "question", "--as", AGENT, cwd=q).stdout.split()[0]
-    calls = [["annotate", "dm-0002", f"race {i}", "--type", "note", "--as", AGENT] for i in range(2)]
+    calls = [["annotate", "dm-0002", f"race {i}", "--as", AGENT] for i in range(2)]
     calls += [["annotate", "--reply", parent, f"race {i}", "--as", AGENT] for i in range(2, 4)]
     all_ok(racing(q, calls))
     ids = [str(e["id"]) for e in events(q / ANNOTATION_LOG) if "race " in str(e.get("body"))]
@@ -168,7 +168,7 @@ def test_annotating_with_nothing_active_opens_no_session(tmp_path: Path) -> None
     q = demo(tmp_path)
     set_active(q, None)
     before = events(q / INDEX)
-    all_ok(racing(q, (["annotate", "dm-0002", f"race {i}", "--type", "note", "--as", AGENT] for i in range(N))))
+    all_ok(racing(q, (["annotate", "dm-0002", f"race {i}", "--as", AGENT] for i in range(N))))
     wrote = [e for e in events(q / ANNOTATION_LOG) if "race " in str(e.get("body"))]
     assert len(wrote) == N and not [e for e in wrote if "session" in e]
     assert events(q / INDEX) == before

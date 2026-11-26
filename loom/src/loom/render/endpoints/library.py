@@ -366,7 +366,7 @@ def _carried(done: Carried | None) -> dict[str, Any]:
 def _locate(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """Turn a reader's selection on a page of a work's PDF into the anchor loom would record (plan 0.13 item 2).
 
-    Body: `ref`, the work's reference (its id, or the key its entry has), `page`, and either `text` -- what the reader selected -- or `rects`, the rectangles they drew when there was no text worth selecting. `page` may be left out with `text`, for a link that quotes without a page: the first page whose text holds the quote is used. The answer carries the anchor, the page, and beside them the line a person would read.
+    Body: `ref`, the work's reference (its id, or the key its entry has), or `file`, a project PDF the viewer shows by its path (`_locate_file`), `page`, and either `text` -- what the reader selected -- or `rects`, the rectangles they drew when there was no text worth selecting. `page` may be left out with `text`, for a link that quotes without a page: the first page whose text holds the quote is used. The answer carries the anchor, the page, and beside them the line a person would read.
 
     **Mapping happens here and not in the viewer.** The client's text layer is a third extraction of the page, after loom's page text and word boxes; only loom holds the other two, and only loom can say what its page text says, which is what an anchor is checked against. The client never decides what the anchor is.
 
@@ -379,6 +379,8 @@ def _locate(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     from loom.refs.pages import mapped, read_page
     from loom.refs.search import find_in_page
 
+    if "file" in body and "ref" not in body:
+        return _locate_file(root, body)
     asked = _str(body, "ref", required=True) or ""
     page = body.get("page")
     rects = [[float(v) for v in r] for r in body.get("rects") or []]
@@ -413,6 +415,42 @@ def _locate(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         "text": placed.selector.exact,
         "page_box": {"width": box[0], "height": box[1]} if box else None,
     }
+
+
+def _locate_file(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """Where quoted words stand on a project PDF the viewer shows, found as a mark's words are (`records.marks.lines_of`): `file`, `text`, and `page`, else the first page that holds them. Answers the page and the lines as `anchor.quads`; writes nothing."""
+    from loom.files import Shown
+    from loom.records.marks import lines_of
+    from loom.refs.pages import page_count
+    from loom.scan.quilt import load_quilt
+
+    rel = _str(body, "file", required=True) or ""
+    text = " ".join((_str(body, "text") or "").split())
+    page = body.get("page")
+    if not text:
+        raise ApiError("missing-field", "text is required on a file")
+    if page is not None and (not isinstance(page, int) or isinstance(page, bool) or page < 1):
+        raise ApiError("bad-field", "page must be a positive integer")
+    path = (root / rel).resolve()
+    if (
+        not rel.lower().endswith(".pdf")
+        or not Shown.of(load_quilt(root)).is_shown(rel)
+        or not path.is_relative_to(root.resolve())
+        or not path.is_file()
+    ):
+        raise ApiError("no-such-file", f"{rel} is not a PDF the viewer shows", status=404)
+    pages = [page] if page is not None else range(1, (page_count(path) or 0) + 1)
+    for n in pages:
+        lines = lines_of(path, n, text)
+        if lines:
+            return {
+                "ok": True,
+                "result": f"{rel} p.{n}, {len(lines)} line(s)",
+                "page": n,
+                "anchor": {"quads": lines},
+                "text": text,
+            }
+    raise ApiError("not-found", f"no page of {rel} holds that text", status=404)
 
 
 def _read_name(root: Path, node: str) -> str:

@@ -18,6 +18,7 @@ from tests.unit.render.write_api import (  # noqa: F401  (each fills CASES as it
     cases_formal,
     cases_library,
     cases_library_evidence,
+    cases_notes,
     cases_review,
     cases_sync,
     cases_web,
@@ -252,9 +253,7 @@ def test_a_browser_write_is_the_person_at_the_browser_not_the_servers_shell(
 
     save_author("Wren Halloway")
     monkeypatch.setenv("AI_AGENT", "1")
-    said = handle(
-        q, "annotate", {"session": open_session(q), "target": "dm-0003", "message": "from the browser", "type": "note"}
-    )
+    said = handle(q, "annotate", {"session": open_session(q), "target": "dm-0003", "message": "from the browser"})
     assert said["ok"], said
     written = log(q)[-1]
     assert written["author"] == "Wren Halloway" and written["kind"] == "human", written
@@ -265,7 +264,6 @@ def test_a_browser_write_is_the_person_at_the_browser_not_the_servers_shell(
             "session": open_session(q),
             "target": "dm-0003",
             "message": "from an agent",
-            "type": "note",
             "author": "Referee (Agent)",
         },
     )

@@ -465,11 +465,11 @@ def test_comment_quote_rules_and_records(tmp_path: Path) -> None:
     refused("annotate", "dm-0003/proof", "x", "--quote", "the", *AS, cwd=d, code=2, match="ambiguous")
     # the quote lies in the proof, outside the statement's own text
     refused("annotate", "dm-0003", "x", "--quote", "closedness", *AS, cwd=d, code=2, match="quote not found in dm-0003")
-    r5 = ok("annotate", "dm-0003", "Read; fine.", "--type", "note", *AS, cwd=d)
-    assert "  note  " in r5.output
+    r5 = ok("annotate", "dm-0003", "Read; fine.", *AS, cwd=d)
+    assert "  untyped  " in r5.output
     s = status_json(d)
     assert s["keys"]["dm-0003/proof"]["reviews"]["open"] == {"revision": 1}
-    assert s["keys"]["dm-0003"]["reviews"]["open"] == {}  # a note only informs, so it is never open
+    assert s["keys"]["dm-0003"]["reviews"]["open"] == {}  # an untyped annotation only informs, so it is never open
     refused(
         "annotate",
         "dm-0003",
@@ -661,7 +661,7 @@ def test_status_never_says_a_key_was_reviewed_clean(tmp_path: Path) -> None:
     """Plan 0.30, decision 6: a highlight with nothing said, a note, or a revision resolved says nothing about whether a key was reviewed, so status never claims it was (P15)."""
     d = demo(tmp_path)
     ok("annotate", "dm-0002", "--quote", "Every orbit", *AS, cwd=d)
-    ok("annotate", "dm-0003", "Read through.", "--type", "note", *AS, cwd=d)
+    ok("annotate", "dm-0003", "Read through.", *AS, cwd=d)
     gap = ok("annotate", "dm-0006", "A gap.", "--type", "revision", *AS, cwd=d).output.split()[0]
     ok("annotate", "--resolve", gap, "Closed.", *AS, cwd=d)
     for args in (("status",), ("status", "--json"), ("status", "--reading")):
@@ -858,16 +858,14 @@ def test_timeline_7_11(tmp_path: Path) -> None:
         "annotate",
         proof,
         "Read through; nothing to add.",
-        "--type",
-        "note",
         "--as",
         "agent",
         cwd=d,
         env=AGENT,
     )
     s = status_json(d)
-    # a note only informs: it is on the proof and opens nothing
-    assert [a["type"] for a in s["keys"][proof]["reviews"]["annotations"]].count("note") == 1
+    # an untyped annotation only informs: it is on the proof and opens nothing
+    assert [a["type"] for a in s["keys"][proof]["reviews"]["annotations"]].count(None) == 1
     assert s["keys"][proof]["reviews"]["open"] == {"revision": 2}
     # Day 3: the author resolves the statement's revision and accepts
     ann = next(e["id"] for e in events(d) if e["event"] == "created")
@@ -962,7 +960,7 @@ def test_ai_annotations_lists_every_annotation_and_each_filter_narrows_it(tmp_pa
     theirs = ok(
         "annotate", "dm-0002", "Wrong.", "--type", "revision", "--as", "agent", cwd=d, env=AGENT
     ).output.split()[0]
-    elsewhere = ok("annotate", "dm-0003", "Fine.", "--type", "note", *AS, cwd=d).output.split()[0]
+    elsewhere = ok("annotate", "dm-0003", "Shorter?", "--type", "suggestion", *AS, cwd=d).output.split()[0]
     ok("annotate", "--resolve", mine, "Answered.", *AS, cwd=d)
 
     def listed(*flags: str) -> list[str]:
@@ -972,7 +970,7 @@ def test_ai_annotations_lists_every_annotation_and_each_filter_narrows_it(tmp_pa
     assert listed("--by", "Markas Hecht") == [mine, elsewhere]
     assert sorted(listed("--target", "dm-0002")) == sorted([mine, theirs])
     assert listed("--target", "dm-0002", "--status", "open") == [theirs]
-    assert listed("--by", "Markas Hecht", "--type", "Note") == [elsewhere]
+    assert listed("--by", "Markas Hecht", "--type", "Suggestion") == [elsewhere]
     assert listed("--by", "Nobody") == []
     assert ok("ai", "annotations", "--by", "Nobody", cwd=d).stdout.startswith("no annotations match")
     # the key a work's entry has reaches the notes on its pages, which carry the work's reference as their target
@@ -1036,22 +1034,22 @@ def test_a_batch_carries_every_verb_and_refuses_line_by_line(
 
 
 def test_an_annotation_that_stays_open_needs_a_message_and_one_that_informs_does_not(tmp_path: Path) -> None:
-    """The re-grade: an annotation that asks something and says nothing was filed, exit 0; a note, or an untyped mark, with no words is the record that the target was read."""
+    """The re-grade: an annotation that asks something and says nothing was filed, exit 0; an untyped mark with no words is the record that the target was read."""
     d = demo(tmp_path)
     for type_given in ("revision", "Suggestion", "question"):
         refused("annotate", "dm-0002", "--type", type_given, *AS, cwd=d, code=2, match="needs words")
         refused("annotate", "dm-0002", "  ", "--type", type_given, *AS, cwd=d, code=2, match="needs words")
     assert events(d) == []
     ok("annotate", "dm-0002", *AS, cwd=d)
-    ok("annotate", "dm-0002", "--type", "note", *AS, cwd=d)
-    assert [e["type"] for e in events(d)] == [None, "note"]
+    ok("annotate", "dm-0002", *AS, cwd=d)
+    assert [e["type"] for e in events(d)] == [None, None]
 
 
 def test_a_type_is_named_by_its_id_or_its_name_and_one_the_quilt_lacks_is_refused(tmp_path: Path) -> None:
     d = demo(tmp_path)
-    ok("annotate", "dm-0002", "Fine.", "--type", "NOTE", *AS, cwd=d)
+    ok("annotate", "dm-0002", "Wrong.", "--type", "REVISION", *AS, cwd=d)
     ok("annotate", "dm-0002", "Why?", "--type", "Question", *AS, cwd=d)
-    assert [e["type"] for e in events(d)] == ["note", "question"]
+    assert [e["type"] for e in events(d)] == ["revision", "question"]
     r = refused("annotate", "dm-0002", "Why?", "--type", "objection", *AS, cwd=d, code=2, match="no type 'objection'")
     assert "revision (Revision)" in flat(r.output)  # the refusal names the quilt's types
     assert len(events(d)) == 2
@@ -1062,7 +1060,7 @@ def test_a_reply_refuses_what_it_cannot_carry(tmp_path: Path) -> None:
     d = demo(tmp_path)
     ann = ok("annotate", "dm-0002", "A finding", "--type", "revision", *AS, cwd=d).output.split()[0]
     before = len(events(d))
-    for extra in (("--type", "note"), ("--color", "red"), ("--quote", "finite set")):
+    for extra in (("--type", "question"), ("--color", "red"), ("--quote", "finite set")):
         for verb in ("--reply", "--resolve"):
             refused(
                 "annotate",
@@ -1086,7 +1084,7 @@ def test_an_edit_or_a_deletion_refuses_what_it_cannot_carry(tmp_path: Path) -> N
     for verb, extra in (
         ("--edit", ("--quote", "one or two")),
         ("--edit", ("--page", "3")),
-        ("--delete", ("--type", "note")),
+        ("--delete", ("--type", "question")),
         ("--delete", ("--quote", "one or two")),
         ("--delete", ("--color", "red")),
     ):
@@ -1575,7 +1573,7 @@ def test_accept_says_what_it_did_and_what_it_did_not(tmp_path: Path) -> None:
 def test_a_reply_and_an_edit_are_checked_as_a_new_annotation_is(tmp_path: Path) -> None:
     """K3 (DR-334): a reply carries its text only, an edit's type is checked against the quilt's as a new annotation's is, and only a type that stays open is resolved."""
     d = demo(tmp_path)
-    note = ok("annotate", "dm-0002", "Read; fine.", "--type", "note", *AS, cwd=d).output.split()[0]
+    note = ok("annotate", "dm-0002", "Read; fine.", *AS, cwd=d).output.split()[0]
     before = len(events(d))
     refused("annotate", "--reply", note, "Why?", "--type", "question", *AS, cwd=d, code=2, match="--type would be lost")
     refused("annotate", "--edit", note, "--type", "bogus", *AS, cwd=d, code=2, match="no type 'bogus' in this quilt")

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A text's annotating, in two halves (`part`). The half that writes stands on the annotation row: Annotate, Comment and the format menu beside them, and Undo and Redo, where the publisher takes writes. The half that reads stands on the toolbar's own row: a document's Changes menu where its text has pending changes (`changes`); the stepper over the annotations and changes in reading order (the arrows, J and K); Comments, counting the annotations here, and Notes, counting and listing those here of a type Notes lists, which open the list beside the text. The keys are the reading half's, since it is always drawn, and putting the annotation row away puts the tool in hand down.
+	// A text's annotating, in two halves (`part`). The half that writes stands on the annotation row: Annotate, Comment and the format menu beside them, and Undo and Redo, where the publisher takes writes. The half that reads stands on the toolbar's own row: a document's Changes menu where its text has pending changes (`changes`); the stepper over the annotations and changes in reading order (the arrows, J and K); Comments, counting the annotations here, and Notes, counting and listing the files of the quilt that link here (`backlinks.ts`), which open the list beside the text. The keys are the reading half's, since it is always drawn, and putting the annotation row away puts the tool in hand down.
 	//
 	// Annotate stays on until it is turned off, and selecting words while it is on marks them in the look in hand. Comment leaves a comment at the next place clicked. The format menu sets the look in hand: the Type list (Add new… starts a type the hand takes), the look controls, the line saying what the look was changed from, a type or Plain (Reset, Update it), Save as new type, and Customize, which opens Settings › Annotations. Number keys choose a type while Annotate is on, 0 for Plain. Undo and Redo, and ⌘Z and ⇧⌘Z, go back and forth over this page's annotation writes (`history.svelte.ts`); Delete or Backspace removes the annotation open, with the same undo.
 	import Icon from '$lib/components/Icon.svelte';
@@ -12,7 +12,9 @@
 	import { can, write } from '$lib/write';
 	import { linkName } from '$lib/workspace/names';
 	import type { Snippet } from 'svelte';
-	import { entries, hand, lookOf, notesHere, typeById, typesPayload, withLook, withType, type Annotating, type Side } from './annotating.svelte';
+	import { entries, hand, lookOf, typeById, typesPayload, withLook, withType, type Annotating, type Side } from './annotating.svelte';
+	import { noteFiles } from './backlinks';
+	import { docs as docsWords } from '$lib/words/docs';
 	import { history, nextRedo, nextUndo, redo, remove, undo } from './history.svelte';
 	import { say } from './toasts.svelte';
 	import Changed from './Changed.svelte';
@@ -51,7 +53,8 @@
 	const things = $derived((n: number) => (seq.some((e) => e.c) ? `${n} ${n === 1 ? 'item' : 'items'}` : `${n} ${n === 1 ? 'annotation' : 'annotations'}`));
 	/** What Comments counts: the annotations here; the changes among them in the list have their own count. */
 	const said = $derived(seq.filter((e) => e.a).length);
-	const notesN = $derived(notesHere(m, notes));
+	/** How many files link here: what the Notes list beside the item holds. */
+	const notesN = $derived(noteFiles(m, notes.on).length);
 	/** What the look in hand was changed from, while it differs from it: the type held, or Plain. */
 	const from = $derived(current ? (Object.keys(hand.over).length ? (typeById(m, current)?.name ?? null) : null) : Object.keys(hand.plain).length ? 'Plain' : null);
 
@@ -228,7 +231,7 @@
 	{/if}
 	{#if changes || seq.length}<span class="sep" aria-hidden="true"></span>{/if}
 	<button type="button" class="tool words" class:on={notes.side === 'comments'} aria-pressed={notes.side === 'comments'} title="The annotations here in reading order, with the changes among them" aria-label="Comments in {of}, {said}" data-testid="open-comments" onclick={() => side('comments')}><Icon name="panel" size={14} />Comments<span class="badge">{said}</span></button>
-	<button type="button" class="tool words" class:on={notes.side === 'notes'} aria-pressed={notes.side === 'notes'} title="Notes: the annotations here whose type is listed in Notes" aria-label="Notes in {of}, {notesN}" data-testid="open-notes" onclick={() => side('notes')}><Icon name="note" size={14} />Notes<span class="badge">{notesN}</span></button>
+	<button type="button" class="tool words" class:on={notes.side === 'notes'} aria-pressed={notes.side === 'notes'} title={docsWords.beside.hover} aria-label={docsWords.beside.named(of, notesN)} data-testid="open-notes" onclick={() => side('notes')}><Icon name="note" size={14} />{docsWords.beside.title}<span class="badge">{notesN}</span></button>
 </span>
 {/if}
 

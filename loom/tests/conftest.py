@@ -156,6 +156,8 @@ def isolated_env(request: pytest.FixtureRequest, tmp_path: Path, fake_bin: Path,
     # Overleaf's git stands in as a folder of bare repositories, one a project id, which a test's server may serve instead
     monkeypatch.setattr("loom.overleaf.BASE", str(tmp_path / "overleaf-projects"))
     monkeypatch.setattr("loom.overleaf.PROTOCOLS", ("https", "http", "file"))
+    # the dialog that confirms a new-note command is never raised on the machine running the suite: unanswered, it is Cancel, and a test that needs Set says so
+    monkeypatch.setattr("loom.notes.confirm", lambda command, quilt: False)
     if not request.node.get_closest_marker("network"):
         monkeypatch.setattr(socket.socket, "connect", _loopback_only(socket.socket.connect))
     # a fresh shim's first run waits on macOS for the system's check of a new executable, which a parallel suite can make longer than doctor's timeout; the hang test sets its own

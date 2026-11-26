@@ -195,3 +195,49 @@ def _history_restore(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     outside = {"path": "../outside.md", "text": undone.get("from")}
     refuses(s, "history-restore", outside, 409, "outside-quilt", "outside the quilt")
     assert not (q.parent / "outside.md").exists()
+
+
+def _left_restore(q: Path) -> str:
+    """A restore the journal holds begun on `notes.md`, which reads neither as before it nor as it left it: recovery leaves it. Its id."""
+    from loom import writes
+    from loom.paths import JOURNAL
+    from loom.scan.quilt import load_quilt
+
+    hist = load_quilt(q).history_dir
+    (q / "notes.md").write_text("the person's notes, as they stand\n", encoding="utf-8")
+    files = {"notes.md": [writes.store(hist, b"before\n"), writes.store(hist, b"after\n")]}
+    line = {"event": "begin", "act": "restore:c4c4c4c4c4c4c4c4", "kind": "restore", "actor": WHO, "by": "person", "when": "2026-11-24T00:00:00Z", "files": files, "edits": [], "records": []}  # fmt: skip
+    (q / JOURNAL).parent.mkdir(parents=True, exist_ok=True)
+    with (q / JOURNAL).open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+    ((act, *_),) = writes.left_acts(q, hist)
+    return str(act)
+
+
+@case("write-settle-preview")
+def _write_settle_preview(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    s, q, _ = on_demo(serve, tmp_path)
+    act = _left_restore(q)
+    said = succeeds(s, "write-settle-preview", {"act": act})
+    assert said["act"] == act and said["files"] == ["notes.md"] and said["history"] == ""
+    assert "notes.md stays as it is." in said["said"] and all(act not in line for line in said["said"])
+    assert [a for a, *_ in writes.left_acts(q, load_quilt(q).history_dir)] == [act]
+    refuses(s, "write-settle-preview", {"act": "keep:0000000000000000"}, 404, "no-such-act", "not waiting")
+
+
+@case("write-settle")
+def _write_settle(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    s, q, _ = on_demo(serve, tmp_path)
+    act = _left_restore(q)
+    refuses(s, "write-settle", {"act": act, "author": "Referee (Agent)"}, 403, "author-only", "author's")
+    said = succeeds(s, "write-settle", {"act": act})
+    assert said["result"] == "settled a restore as it stands" and said["files"] == ["notes.md"]
+    assert (q / "notes.md").read_text(encoding="utf-8") == "the person's notes, as they stand\n"
+    assert writes.left_acts(q, load_quilt(q).history_dir) == []
+    refuses(s, "write-settle", {"act": act}, 404, "no-such-act", "not waiting")

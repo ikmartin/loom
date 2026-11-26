@@ -1,6 +1,6 @@
 """The quilt's annotation types: `.loom/records/annotation-types.toml`, the presets a person picks from and an agent reads.
 
-A type is a label with a look, whether its annotations stay open until resolved, whether they are listed in Notes, and instructions for agents. The file's `[plain]` is the look of an annotation with no type. An annotation names its type by id and keeps its own look, so nothing here is needed to read one: a missing or malformed file loads the defaults with a diagnostic and never stops a quilt from loading.
+A type is a label with a look, whether its annotations stay open until resolved, and instructions for agents. The file's `[plain]` is the look of an annotation with no type. An annotation names its type by id and keeps its own look, so nothing here is needed to read one: a missing or malformed file loads the defaults with a diagnostic and never stops a quilt from loading.
 """
 
 from __future__ import annotations
@@ -45,7 +45,6 @@ class AnnotationType:
     name: str
     look: Look
     open: bool  # an annotation of this type stays open until someone resolves it; False: it only informs
-    notes: bool  # annotations of this type are also listed in Notes
     instructions: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -54,7 +53,6 @@ class AnnotationType:
             "name": self.name,
             "look": self.look.to_dict(),
             "open": self.open,
-            "notes": self.notes,
             "instructions": self.instructions,
         }
 
@@ -135,10 +133,9 @@ def _one(entry: Any, n: int, seen: set[str]) -> tuple[AnnotationType | None, str
     why = look_problem(look)
     if why:
         return None, f"type {tid!r}: {why}"
-    flags = {k: entry.get(k, False) for k in ("open", "notes")}
-    bad = [k for k, v in flags.items() if not isinstance(v, bool)]
-    if bad:
-        return None, f"type {tid!r}: {' and '.join(bad)} must be true or false"
+    is_open = entry.get("open", False)
+    if not isinstance(is_open, bool):
+        return None, f"type {tid!r}: open must be true or false"
     instructions = entry.get("instructions", "")
     if not isinstance(instructions, str):
         return None, f"type {tid!r}: instructions must be text"
@@ -146,8 +143,7 @@ def _one(entry: Any, n: int, seen: set[str]) -> tuple[AnnotationType | None, str
         id=tid,
         name=name.strip(),
         look=Look(**look),
-        open=flags["open"],
-        notes=flags["notes"],
+        open=is_open,
         instructions=instructions.strip(),
     ), None
 
@@ -256,7 +252,7 @@ def types_text(given: list[Any], plain: dict[str, Any] | None = None) -> str:
     Parameters
     ----------
     given : list of dict
-        The types as a write sends them, each `{id?, name, color, style, weight, opacity, open, notes, instructions}`.
+        The types as a write sends them, each `{id?, name, color, style, weight, opacity, open, instructions}`.
     plain : dict, optional
         The plain look, `{color, style, weight, opacity}`; default loom's.
 
@@ -304,9 +300,9 @@ def types_text(given: list[Any], plain: dict[str, Any] | None = None) -> str:
         why = look_problem(look)
         if why:
             raise TypesRefused(f"{said}: {why}")
-        flags = {k: entry.get(k, False) for k in ("open", "notes")}
-        if any(not isinstance(v, bool) for v in flags.values()):
-            raise TypesRefused(f"{said}: open and notes are true or false")
+        is_open = entry.get("open", False)
+        if not isinstance(is_open, bool):
+            raise TypesRefused(f"{said}: open is true or false")
         instructions = entry.get("instructions", "")
         if not isinstance(instructions, str):
             raise TypesRefused(f"{said}: its instructions are text")
@@ -317,8 +313,7 @@ def types_text(given: list[Any], plain: dict[str, Any] | None = None) -> str:
                     f"id = {_quoted(tid)}",
                     f"name = {_quoted(name)}",
                     *_look_lines(look),
-                    f"open = {'true' if flags['open'] else 'false'}",
-                    f"notes = {'true' if flags['notes'] else 'false'}",
+                    f"open = {'true' if is_open else 'false'}",
                     f"instructions = {_block(instructions)}",
                 ]
             )

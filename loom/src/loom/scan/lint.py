@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loom.paths import COPIES
 from loom.scan.diagnostics import LATEX, MODEL, can_disable
@@ -195,20 +195,24 @@ def _person_pages(result: ScanResult) -> bool:
 
 
 def _writes_left(result: ScanResult) -> list[Diagnostic]:
-    """`loom:write-left`: a write the journal records on the person's files that recovery could neither finish nor undo, one per act at its first file, saying only what was checked and what makes it go, in plain words; a record recovery cannot trust is said with no file."""
-    from loom.writes import left
+    """`loom:write-left`: a write the journal records on the person's files that recovery could neither finish nor undo, one per act at its first file, saying only what was checked and what makes it go, in plain words; a record recovery cannot trust is said with no file.
+
+    Each carries the fix that settles it as it stands (`settling`): `act` the endpoint a viewer offers as its control, after showing `write-settle-preview`'s words, and the command an agent or installer reads; the act's id is in those alone, never in the words.
+    """
+    from loom.writes import left_acts
 
     out = []
-    for kind, files, why, settles in left(result.quilt.root, result.quilt.history_dir):
+    for act_id, kind, files, why, settles in left_acts(result.quilt.root, result.quilt.history_dir):
+        fix = [
+            Fix(
+                "settle it as it stands",
+                f"loom doctor --settle {act_id}",
+                {"endpoint": "write-settle", "body": {"act": act_id}},
+            )
+        ]
         if not files:
             out.append(
-                Diagnostic(
-                    "warning",
-                    "loom:write-left",
-                    f"{why[0].upper()}{why[1:]}.",
-                    [],
-                    owner="person",
-                )
+                Diagnostic("warning", "loom:write-left", f"{why[0].upper()}{why[1:]}.", [], fixes=fix, owner="person")
             )
             continue
         # the wording is the author's to judge (handover): no command, no id; what settles it is the verdict's own (`writes._judge`)
@@ -221,6 +225,7 @@ def _writes_left(result: ScanResult) -> list[Diagnostic]:
                 "loom:write-left",
                 f"The journal records {kind} on {', '.join(files)} that loom could neither finish nor undo: {why}. {goes}",
                 [Location(files[0], 1)],
+                fixes=fix,
                 owner="person",
             )
         )
@@ -609,6 +614,25 @@ def markdown_links(result: ScanResult, drawn: Drawn | None = None) -> list[Diagn
                         fixes=[Fix("link the work as it is named now", "loom link WORK")] if exc.part == "work" else [],
                     )
                 )
+    disabled = set(result.quilt.config.lint_disable)
+    return [d for d in out if not (d.code in disabled and can_disable(d.code))]
+
+
+def link_words_missing(result: ScanResult, links: list[dict[str, Any]]) -> list[Diagnostic]:
+    """`loom:link-words-missing`: each indexed link (`backlinks.backlinks`) whose quoted words are gone from what it names, on the line that wrote it; `[lint] disable` applied."""
+    from loom.backlinks import words_found
+
+    root = result.quilt.root
+    out = [
+        Diagnostic(
+            "warning",
+            "loom:link-words-missing",
+            f"the words this link quotes are no longer in what it links to: “{' '.join(str(link['quote']).split())}”",
+            [Location(link["from"], link["line"])],
+        )
+        for link in links
+        if words_found(result, root, link) is False
+    ]
     disabled = set(result.quilt.config.lint_disable)
     return [d for d in out if not (d.code in disabled and can_disable(d.code))]
 

@@ -810,7 +810,7 @@ def test_an_act_left_for_a_history_recovery_does_not_write_is_one_whose_settling
         return
     assert len(said) == 1 and "settling it would write the history" in said[0], said
     ((_, _, _, settles),) = writes.left(root, hist)
-    assert settles.startswith("Recovery writes nothing in a history kept there") and "settled by hand" in settles
+    assert settles.startswith("Recovery writes nothing in a history kept there") and "settle it as it stands" in settles
     assert not (root / "notes/x.tex").exists()
 
 

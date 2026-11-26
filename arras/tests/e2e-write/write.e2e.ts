@@ -1,6 +1,7 @@
 // Writing from the viewer, against a publisher that is actually serving the write API.
 import { compileFolder, expect, readOnly, test, type Served } from '../served';
 import { openPicker, pickSession } from '../picker';
+import { acceptRow, openRow } from '../review-rows';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -137,13 +138,13 @@ test('a document is written on the same way, and what is written there is filed 
 	await expect(markOf()).toHaveCount(0);
 });
 
-readOnly('Quote stays at the end of the selection as its pane scrolls, and is hidden while those words are scrolled out of the pane', async ({ page }) => {
+readOnly('the actions stay at the end of the selection as its pane scrolls, and is hidden while those words are scrolled out of the pane', async ({ page }) => {
 	await page.goto('/master/drafting/main');
 	const body = page.locator('[data-pane="0"] > .body');
 	const words = page.locator('[data-pane="0"] .fragment .env[data-id="sy-0008"] > p[data-src]').first();
 	await words.scrollIntoViewIfNeeded();
 	await select(words);
-	const chip = page.getByTestId('quote-offer');
+	const chip = page.getByTestId('selection-actions');
 	await expect(chip).toBeVisible();
 	// how far the chip stands from the words' top, which a chip fixed to the window changes by the distance scrolled; the chip is placed to whole pixels, so within one
 	const at = (await chip.boundingBox())!.y - (await words.boundingBox())!.y;
@@ -443,13 +444,16 @@ function compiled(served: Served): void {
 	writeFileSync(join(compileFolder(served.root, 'drafting/main.tex'), 'main.pdf'), '%PDF-1.4\n');
 }
 
-test('a block resting on a stale one not accepted with it is refused, said in its row, and nothing is accepted', async ({ page, served }) => {
+test('a block resting on a stale one not accepted with it is refused, said in the viewer\'s words and never loom\'s, and nothing is accepted', async ({ page, served }) => {
 	// sy-0002 rests on sy-0001, whose acceptance is stale: accepting sy-0002 alone would record it against what was never re-read
 	const ledger = acceptedKeys(served);
 	await page.goto('/review');
-	const orbits = page.locator('[data-testid="review-row"][data-key="sy-0002"]');
+	const orbits = acceptRow(page, 'sy-0002');
+	await openRow(orbits);
 	await orbits.getByTestId('review-accept').click();
-	await expect(orbits.getByTestId('review-said')).toHaveText('Accept Widget first, or with it.');
+	await expect(page.getByTestId('column-message')).toHaveText('Orbits was not accepted.');
+	// loom's own sentence is written for the command line, and is never said
+	await expect(page.getByTestId('column-message')).not.toContainText('Accept Widget first');
 	expect(acceptedKeys(served)).toEqual(ledger);
 });
 
@@ -458,17 +462,19 @@ test('Accept records an acceptance at once, and the block leaves the queue', asy
 	const ledger = acceptedKeys(served);
 	await page.goto('/review');
 	const posted = page.waitForRequest('**/_api/review-accept');
-	await page.locator('[data-testid="review-row"][data-key="sy-0001"]').getByTestId('review-accept').click();
+	await openRow(acceptRow(page, 'sy-0001'));
+	await acceptRow(page, 'sy-0001').getByTestId('review-accept').click();
 	expect((await posted).postDataJSON()).toEqual({ reviewer: 'The synthetic quilt', keys: ['sy-0001'] });
 	await expect.poll(() => acceptedKeys(served)).toEqual([...ledger, 'sy-0001']);
 	const row = readFileSync(join(served.root, '.loom/records/state.toml'), 'utf8').split('[[accept]]').at(-1)!;
 	expect(row).toContain('key = "sy-0001"');
 	expect(row).toContain('master = "drafting/main.tex"');
 	expect(row).not.toContain('2026-09-14T09:00:00Z'); // a new row, dated now, not the fixture's
-	await expect(page.getByTestId('review-bar-said')).toHaveText('Accepted Widget.');
-	// and once the publisher has rebuilt, the key has left the queue for the accepted fold
-	await expect(page.locator('[data-testid="review-group"][data-group="changed"] [data-key="sy-0001"]')).toHaveCount(0);
-	await expect(page.locator('[data-testid="review-group"][data-group="accepted"] [data-key="sy-0001"]')).toHaveCount(1);
+	await expect(page.getByTestId('column-message')).toContainText('Accepted Widget.');
+	// and once the publisher has rebuilt, the key has left the rows waiting for the accepted fold
+	await expect(acceptRow(page, 'sy-0001')).toHaveCount(0);
+	await page.locator('[data-fold="accept:accepted"]').getByRole('button').click();
+	await expect(acceptRow(page, 'sy-0001').getByTestId('review-row-why')).toContainText('accepted by The synthetic quilt');
 });
 
 /** Press Take it until `taken` holds, each press given a few seconds and pressed again after them, which is harmless since the choice is the same one. The copy was just written, so the page may still show the publish before it: loom refuses a choice against a comparison that has moved on, and the page draws the new one, where the press is good. */
@@ -501,9 +507,8 @@ test('an agent copy is taken back in one pass: Take it, then one Apply writes it
 	await page.getByTestId('apply').click();
 	await expect.poll(() => readFileSync(join(served.root, document), 'utf8')).toContain('Proposed statement.');
 	await expect(page.locator('main')).toContainText('Took 1 change into adoption-test: 0 accepted, 1 wait to be accepted. adoption-test as it was is kept as a version.');
-	await page.goto('/review?document=drafting%2Fadoption-test.tex');
-	await expect(page.locator('[data-testid="review-group"][data-group="taken"] [data-key="sy-0900"]')).toHaveCount(1);
-	await expect(page.locator('[data-testid="review-group"][data-group="taken"] summary .title')).toHaveText('Taken in from the copy “adoption-proposal”');
+	await page.goto('/review');
+	await expect(acceptRow(page, 'sy-0900').getByTestId('review-row-why')).toHaveText('Taken in from the copy “adoption-proposal”');
 });
 
 test('a change marked as checked is accepted as it is taken in; one left stays out', async ({ page, served }) => {

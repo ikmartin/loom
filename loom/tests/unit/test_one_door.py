@@ -79,6 +79,7 @@ MODULES = {
 FUNCTIONS = {
     "adopt.py:_flat_shape_made": "a temporary tree",
     "cli/app_cmd.py:_open": "the home's own log, in the machine's place",
+    "cli/open_cmd.py:_start": "the log of the server it starts, `.loom/local/open-serve.log`, beside `serve.json`",
     "adopt.py:_merge": "a temporary tree",
     "adopt.py:prepare": "the saved preview, `.loom/local/`",
     "adopt.py:decide": "the saved choices, a record",
@@ -109,6 +110,7 @@ FUNCTIONS = {
     "reshape/canon.py:plan_draft": "a temporary stage",
     "reshape/importer.py:_mirror_quilt": "a temporary stage",
     "scan/quilt.py:save_author": "the machine's own config",
+    "notes.py:set_command": "the person's own new-note commands, `notes.toml` beside the machine's own config, written whole through a temporary file beside it",
     "upgrade.py:upgrade": "the annotation types, `.loom/records/annotation-types.toml`, written only where there are none",
 }
 

@@ -531,6 +531,10 @@
      "description": "Repair TeX first: install loom's own TeX, or put back what it lacks. Touches nothing outside loom's directory.",
      "type": "boolean"
     },
+    "settle": {
+     "description": "Settle a write loom could neither finish nor undo as it stands, by the id the writes item gives: your files stay as they are, each suggested edit it wrote is recorded as the files show, and it is no longer said. The author's; refused in an agent's shell.",
+     "type": "string"
+    },
     "strict": {
      "description": "Count a warning as a failure: exit 2 when any item warns.",
      "type": "boolean"
@@ -801,7 +805,7 @@
    "read_only_hint": true
   },
   "command": "loom link",
-  "description": "Print a markdown link to THING that the viewer can follow.\n\nTHING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.",
+  "description": "Print a markdown link to THING that the viewer can follow.\n\nTHING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). `--quote` carries words in a document, a project PDF or a work, which the viewer opens at and lights. The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
@@ -814,7 +818,7 @@
      "type": "integer"
     },
     "quote": {
-     "description": "Text on that page to find.",
+     "description": "Words to open at and light: on the work's page, on the PDF's page given by --at page=N, or at the place in a document; anywhere in it with no page or place.",
      "type": "string"
     },
     "thing": {

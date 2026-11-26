@@ -19,7 +19,7 @@ WHO = ("--as", "A. Author")
 
 
 def annotate(q: Path, quote: str, body: str = "Which points?") -> str:
-    return ok("annotate", "dm-0002", body, "--quote", quote, "--type", "note", *WHO, cwd=q).output.split()[0]
+    return ok("annotate", "dm-0002", body, "--quote", quote, *WHO, cwd=q).output.split()[0]
 
 
 def built(q: Path) -> dict[str, Any]:

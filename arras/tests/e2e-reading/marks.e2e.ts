@@ -209,6 +209,9 @@ test("one reader: a work's notes are drawn alike in the Library's tab and in its
 	await openPaper(page, `/library/${ref}?page=1`, 1);
 	await expect(page.locator(`[data-testid="page-mark-${box.id}"]`)).toHaveCount(1);
 	// a highlight made on words in the pane is recorded on the work by its words alone, and the tab counts it as the pane does and draws it where the publisher finds them
+	const count = page.getByTestId('step-count').first();
+	await expect(count).toHaveText(/^\d+ \w+$/);
+	const [was, things] = (await count.innerText()).split(' ');
 	const words = page.locator('[data-testid="pdf-page-1"] .text span').filter({ hasText: /^\w{5,}$/ });
 	const [first, second] = [await words.nth(0).innerText(), await words.nth(1).innerText()];
 	await annotate(page, 1, first);
@@ -216,9 +219,11 @@ test("one reader: a work's notes are drawn alike in the Library's tab and in its
 	const inPane = made().find((a) => a.id !== box.id)!;
 	expect(inPane.quote).toBe(first);
 	expect(inPane.rects).toBeNull();
-	const counted = await page.getByTestId('step-count').first().innerText();
+	// counted from the published annotations, so the pane counts it once the viewer has them, not when the file is written
+	const counted = `${Number(was) + 1} ${things}`;
+	await expect(count).toHaveText(counted);
 	await openPaper(page, `/library?work=${ref}`, 1);
-	await expect(page.getByTestId('step-count').first()).toHaveText(counted);
+	await expect(count).toHaveText(counted);
 	await expect(page.locator(`[data-testid="page-mark-${inPane.id}"][data-kind="highlight"]`)).toHaveCount(1);
 	// and one made on words in the tab is drawn in the pane, beside the first
 	await annotate(page, 1, second);
@@ -267,13 +272,28 @@ test.describe('on a project PDF', () => {
 		await page.keyboard.press('Escape');
 		await selectWords(page, 1, 'Abstract');
 		await expect(marks(page, 'underline')).toHaveCount(1);
-		await expect(page.getByTestId('quote-offer')).toHaveCount(0);
+		// words the tool marked keep Quote and New note beside them, and no Annotate
+		await page.getByTestId('selection-actions').click();
+		await expect(page.getByTestId('quote-offer')).toBeVisible();
+		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
+		// Escape closes the actions first, the tool staying in hand
+		await page.keyboard.press('Escape');
+		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
+		await expect(page.getByTestId('tool-annotate')).toHaveAttribute('aria-pressed', 'true');
 		await published(served, 2);
 		expect(marksOf(served).map((a) => a.style).sort()).toEqual(['highlight', 'underline']);
 		await page.keyboard.press('Escape');
 		await expect(page.getByTestId('tool-annotate')).toHaveAttribute('aria-pressed', 'false');
 		await selectWords(page, 1, 'Introduction');
+		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
+		await expect(page.getByTestId('selection-annotate')).toBeVisible();
+		// the menu's Annotate marks the words as the tool does, and they keep Quote and New note
+		await page.getByTestId('selection-annotate').click();
+		await published(served, 3);
+		await page.getByTestId('selection-actions').click();
+		await expect(page.getByTestId('quote-offer')).toBeVisible();
+		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
 	});
 
 	test('Comment writes a pin once it says something, the drawing tools each leave a mark in the look in hand, and a shape moves, resizes and comes back with Undo', async ({ page, served }) => {
@@ -514,6 +534,7 @@ test.describe('where no publisher takes writes', () => {
 		await expect(page.getByTestId('tool-rect')).toHaveCount(0);
 		// Quote writes nothing, so it is offered still
 		await selectWords(page, 2, 'order');
+		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
 		const [saved] = await Promise.all([page.waitForEvent('download'), pdfMenu(page, 'mark-save-copy')]);
 		expect(saved.suggestedFilename()).toBe(`${ref}-annotated.pdf`);

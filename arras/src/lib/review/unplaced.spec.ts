@@ -4,7 +4,7 @@ import type { Annotation, Manifest } from '$lib/manifest/types';
 import { masterUrl } from '$lib/nav';
 import { itemForQuilt } from '$lib/workspace/links';
 import { keyName, linkName } from '$lib/workspace/names';
-import { APART, apartIn, apartOf, documentOf, notesApart, notesHere, noteUrl, placeOf, PLAIN, whyApart } from './annotating.svelte';
+import { APART, apartIn, apartOf, documentOf, noteUrl, placeOf, PLAIN, whyApart } from './annotating.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => {}) }));
 
@@ -16,7 +16,7 @@ function note(id: string, over: Partial<Annotation> = {}): Annotation {
 		author: { kind: 'person', id: 'Tester' },
 		created: '2026-11-20',
 		target: { key: '', hash: 'sha256:x' },
-		type: 'note',
+		type: 'question',
 		look: { ...PLAIN },
 		body_html: '<p>cite the classification</p>',
 		status: 'open',
@@ -39,7 +39,7 @@ describe('a note on no block', () => {
 	it('is named by no key', () => {
 		const m = withUnplaced();
 		expect(keyName(m, '')).toBe('');
-		expect(linkName(m, 'quilt:u')).toBe('Note on no block');
+		expect(linkName(m, 'quilt:u')).toBe('Question on no block');
 	});
 
 	it('belongs to the document it was written in, and a link to it opens that document at the note', () => {
@@ -49,7 +49,7 @@ describe('a note on no block', () => {
 		expect(noteUrl(m, m.annotations.u)).toBe(masterUrl('drafting/main.tex') + '?note=u');
 	});
 
-	it('is listed apart in its own document’s Comments and Notes, and counted in its Notes badge', () => {
+	it('is listed apart in its own document’s Comments', () => {
 		const m = withUnplaced();
 		expect(apartIn(m, 'drafting/main.tex')).toEqual(['u']);
 		expect(apartIn(m, 'drafting/talk.tex')).toEqual([]);
@@ -57,8 +57,6 @@ describe('a note on no block', () => {
 		expect(apartOf(m, here, false).map((a) => a.id)).toEqual(['u']);
 		expect(apartOf(m, { ...here, layer: 'changes' }, false)).toEqual([]);
 		expect(apartOf(m, { ...here, hidden: ['Tester'] }, false)).toEqual([]);
-		expect(notesApart(m, here).map((a) => a.id)).toEqual(['u']);
-		expect(notesHere(m, here)).toBe(1);
 		expect(placeOf(m, m.annotations.u)).toBe(APART);
 	});
 });

@@ -233,10 +233,11 @@
 					<div class="part docs-part rail-scroll" data-testid="docs-part" style:flex={outline ? `0 0 ${share * 100}%` : '1 1 auto'}>
 						<FilesShelf {masters} {own} {copiesOf} {section} />
 						<DocumentList {own} {unplaced} {closed} {copiesOf} {section} {filename} {onDocument} {currentDoc} />
-						{#if docsState.served}
+						{#if docsState.served || store.manifest?.backlinks?.length}
 							<div class="colbtns">
-								<button type="button" class="colbtn" class:on={docsState.picker} aria-expanded={docsState.picker} data-testid="docs-library" onclick={() => (docsState.picker = !docsState.picker)}>{docs.picker.open}</button>
-								{#if served.has('notes')}<button type="button" class="colbtn" class:on={workspace.current?.kind === 'notes'} data-testid="docs-notes" onclick={() => ((docsState.picker = false), workspace.here({ kind: 'notes', id: 'all' }))}>{docs.notes.open}</button>{/if}
+								{#if docsState.served}<button type="button" class="colbtn" class:on={docsState.picker} aria-expanded={docsState.picker} data-testid="docs-library" onclick={() => (docsState.picker = !docsState.picker)}>{docs.picker.open}</button>{/if}
+								<!-- the notes tab lists the files that link into the quilt, so it is offered once one does -->
+								{#if store.manifest?.backlinks?.length}<button type="button" class="colbtn" class:on={workspace.current?.kind === 'notes'} data-testid="docs-notes" onclick={() => ((docsState.picker = false), workspace.here({ kind: 'notes', id: 'all' }))}>{docs.notes.open}</button>{/if}
 							</div>
 						{/if}
 					</div>

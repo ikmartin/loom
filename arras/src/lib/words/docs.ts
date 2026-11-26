@@ -74,35 +74,29 @@ export const docs = {
 		/** The column's message after asking. */
 		asked: 'Asked an agent to read it. It comes back in Review, under Results to check.'
 	},
+	beside: {
+		/** The Notes list beside a document, a work or a PDF, and the toolbar button that opens it: the files of the quilt that link here. */
+		title: 'Notes',
+		/** Hover text on the toolbar's Notes button. */
+		hover: 'Notes: the files in this quilt that link here',
+		/** Accessible name of the toolbar's Notes button, with how many files link here. */
+		named: (of: string, n: number) => `Notes in ${of}, ${n}`,
+		/** Under the list's title. */
+		sub: 'The files in this quilt that link here, each opening at its link.',
+		/** The list's close button. */
+		close: 'Close notes',
+		/** The list with no file linking here. */
+		none: 'No file links here yet. A note is a file of your own, in Markdown, org or plain text, anywhere in the quilt, holding a quilt: link to this place.',
+		/** On a link that quotes no words: where it points. */
+		at: (place: string) => (/^page=\d+$/.test(place) ? `page ${place.slice(5)}` : place ? `at ${place}` : 'links here'),
+		/** At the right of each link: the line of the note it is on. */
+		line: (n: number) => `line ${n}`
+	},
 	notes: {
 		/** The button in Docs' column that opens the notes tab. */
 		open: 'Notes',
 		/** The notes tab's name. */
-		tab: 'All notes',
-		/** Before the two orders. */
-		sortBy: 'sort by',
-		work: 'work',
-		date: 'date',
-		/** The box that shows or hides the notes that lost their place. */
-		showOrphaned: (n: number) => `show orphaned notes (${n})`,
-		/** The head over the notes that lost their place. */
-		orphaned: 'Orphaned · their document is gone, or their words are not found',
-		/** Under a group: the notes it holds beyond those shown, which a click shows. */
-		more: (n: number) => `${n} more`,
-		/** Under the notes by date. */
-		older: (n: number) => `${n} more, older`,
-		/** Who wrote a note and when. */
-		byAt: (by: string, at: string) => `${by} · ${at}`,
-		/** Where an orphaned note was. */
-		was: (where: string) => `was on ${where}`,
-		/** On an orphaned note: anchors it again. */
-		place: 'place it again',
-		/** The column's message after "place it again", until placing is built. */
-		placeHow: 'Click where the note belongs, or select its words.',
-		/** Deletes a note. */
-		delete: 'delete',
-		/** The column's message after deleting. */
-		deleted: 'Note deleted.'
+		tab: 'All notes'
 	},
 	formalize: {
 		/** The panel's head. */

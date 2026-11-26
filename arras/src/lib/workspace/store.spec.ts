@@ -21,6 +21,10 @@ describe('an item and its address', () => {
 			'/node/sy-0002/proof',
 			'/node/sy-0002?note=a-2026-09-16-ecnav2',
 			'/master/drafting/main?note=a-2026-09-16-tc3rcf',
+			// the words a link quotes, lit where it opens
+			'/master/drafting/main?quote=every+vertex#sy-0200',
+			'/node/sy-0002?quote=a+%26+b',
+			'/file/papers/median.pdf?quote=incidence+matrix#page=2',
 			'/context/sy-0002',
 			'/session/s-2026-09-16-p9z37z',
 			'/session/s-2026-09-16-p9z37z?view=did',

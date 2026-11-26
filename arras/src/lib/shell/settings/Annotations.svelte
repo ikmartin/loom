@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Settings › Annotations: Plain, the look of an annotation with no type, and then the quilt's annotation types, one at a time, the list at the left and the chosen one at the right: Plain has a look and nothing else; a type has its name, its look with a sample, whether it stays open until resolved or only informs, whether it is listed in Notes, its instructions for agents, and the modes that use it. A draft until Save, which writes the types file whole, Plain with it, through `types-save`; Restore defaults writes loom's defaults. Deleting a type a mode uses asks first. A type started from a format menu or a popup (Add new…, Save as new type) is taken by what started it once it is saved. What a type says is only its own name and instructions. Display, beneath, holds how annotations are shown in this browser, kept in its preferences rather than the quilt.
+	// Settings › Annotations: Plain, the look of an annotation with no type, and then the quilt's annotation types, one at a time, the list at the left and the chosen one at the right: Plain has a look and nothing else; a type has its name, its look with a sample, whether it stays open until resolved or only informs, its instructions for agents, and the modes that use it. A draft until Save, which writes the types file whole, Plain with it, through `types-save`; Restore defaults writes loom's defaults. Deleting a type a mode uses asks first. A type started from a format menu or a popup (Add new…, Save as new type) is taken by what started it once it is saved. What a type says is only its own name and instructions. Display, beneath, holds how annotations are shown in this browser, kept in its preferences rather than the quilt.
 	import { untrack } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import type { AnnotationType, Look } from '$lib/manifest/types';
@@ -21,7 +21,6 @@
 		name: string;
 		look: Look;
 		open: boolean;
-		notes: boolean;
 		instructions: string;
 		modes: string[];
 		/** Which draft row this is, kept across renames. */
@@ -29,9 +28,9 @@
 	}
 
 	let keys = 0;
-	const fromQuilt = (types: AnnotationType[]): Draft[] => types.map((t) => ({ id: t.id, name: t.name, look: { ...t.look }, open: t.open, notes: t.notes, instructions: t.instructions, modes: [...(t.modes ?? [])], key: ++keys }));
+	const fromQuilt = (types: AnnotationType[]): Draft[] => types.map((t) => ({ id: t.id, name: t.name, look: { ...t.look }, open: t.open, instructions: t.instructions, modes: [...(t.modes ?? [])], key: ++keys }));
 	/** What Save sends, and what tells a changed draft from the quilt's types. */
-	const payload = (list: Draft[]) => list.map((t) => ({ ...(t.id ? { id: t.id } : {}), name: t.name.trim(), color: t.look.color, style: t.look.style, weight: t.look.weight, opacity: t.look.opacity, open: t.open, notes: t.notes, instructions: t.instructions }));
+	const payload = (list: Draft[]) => list.map((t) => ({ ...(t.id ? { id: t.id } : {}), name: t.name.trim(), color: t.look.color, style: t.look.style, weight: t.look.weight, opacity: t.look.opacity, open: t.open, instructions: t.instructions }));
 
 	const quilt = $derived(store.manifest?.annotation_types ?? []);
 	const quiltPlain = $derived(store.manifest?.annotation_plain ?? PLAIN);
@@ -87,7 +86,7 @@
 	] as const;
 
 	function add(look: Look = { color: 'green', style: 'highlight', weight: 2, opacity: 50 }): void {
-		draft.push({ name: '', look: { ...look }, open: false, notes: false, instructions: '', modes: [], key: ++keys });
+		draft.push({ name: '', look: { ...look }, open: false, instructions: '', modes: [], key: ++keys });
 		chosen = draft.length - 1;
 		confirming = null;
 		queueMicrotask(() => nameField?.focus());
@@ -170,7 +169,7 @@
 			{#each draft as t, i (t.key)}
 				<button type="button" class="tp-row" class:on={i === chosen} role="tab" aria-selected={i === chosen} data-testid="type-tab" data-type={t.id ?? ''} onclick={() => ((chosen = i), (confirming = null))}>
 					<span class="tn">{#if t.name.trim()}<Sample look={t.look} text={t.name} />{:else}<span class="untitled">Untitled</span>{/if}</span>
-					<span class="tm">{t.open ? 'Open until resolved' : 'Static'}{t.notes ? ' · in Notes' : ''}</span>
+					<span class="tm">{t.open ? 'Open until resolved' : 'Static'}</span>
 				</button>
 			{/each}
 			{#if editable}<button type="button" class="tp-add lnk" data-testid="types-add" onclick={() => add()}>+ Add type</button>{/if}
@@ -207,11 +206,6 @@
 					</div>
 				</section>
 				<section class="tp-sec">
-					<h4>Notes</h4>
-					<label class="chk"><input type="checkbox" bind:checked={t.notes} disabled={!editable} data-testid="type-notes" />List in Notes</label>
-					<p class="tp-hint">Annotations of this type are also listed in Notes, beside the document they are on.</p>
-				</section>
-				<section class="tp-sec">
 					<h4>Instructions for agents</h4>
 					<p class="tp-hint">When to use this type. Agents read it with the instructions for every annotation.</p>
 					<textarea class="tp-ins" aria-label="Instructions for agents" placeholder="When should an agent use this type?" disabled={!editable} bind:value={t.instructions} data-testid="type-instructions"></textarea>
@@ -222,7 +216,7 @@
 			<div class="tp-detail" role="tabpanel" data-testid="plain-detail">
 				<section class="tp-sec">
 					<h4>Plain</h4>
-					<p class="tp-hint">An annotation with no type is drawn in this look, unless it sets a look of its own. A Plain annotation is static: it is never in To do or Notes.</p>
+					<p class="tp-hint">An annotation with no type is drawn in this look, unless it sets a look of its own. A Plain annotation is static: it is never in To do.</p>
 					<p class="tp-sample">Marked words <Sample look={plain} text="look like this" /> in the text.</p>
 					<LookControls look={plain} words disabled={!editable} onpick={(c) => (plain = { ...plain, ...c })} />
 				</section>
@@ -416,11 +410,6 @@
 		transition:
 			opacity 0.12s ease 0.2s,
 			visibility 0s linear 0.2s;
-	}
-	.chk {
-		display: flex;
-		align-items: center;
-		gap: 6px;
 	}
 	.tp-ins {
 		width: 100%;

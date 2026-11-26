@@ -128,6 +128,7 @@ export const frame = {
 		'no-such-proposal': 'That correction is no longer waiting for you.',
 		'no-such-question': 'That question has been answered already.',
 		'no-such-ref': 'That work is no longer in the library.',
+		'no-such-file': 'That PDF is not a file of this quilt the viewer shows.',
 		'no-such-result': 'That result is no longer in your drafts.',
 		'no-such-row': 'That no longer waits for you.',
 		'no-such-task': 'That task no longer waits for an agent.',
@@ -164,6 +165,10 @@ export const frame = {
 					: code === 'unreachable'
 						? 'Loom could not be reached, so the quilt was not upgraded.'
 						: 'The upgrade did not finish; try it again.'
+	},
+	open: {
+		/** The page `loom open` lands on, when the link it was given names nothing in this quilt. */
+		nothing: (link: string) => (link ? `${link} names nothing in this quilt.` : 'No link was given to open.')
 	},
 	page: {
 		/** The heading of the page shown when the manifest could not be read. */

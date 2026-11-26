@@ -86,6 +86,7 @@ Each item is ok, warn (works, but you will hit it) or fail (a command you need w
 | `--json` | Machine-readable report on stdout. |
 | `--strict` | Count a warning as a failure: exit 2 when any item warns. |
 | `--repair` | Repair TeX first: install loom's own TeX, or put back what it lacks. Touches nothing outside loom's directory. |
+| `--settle` `ID` | Settle a write loom could neither finish nor undo as it stands, by the id the writes item gives: your files stay as they are, each suggested edit it wrote is recorded as the files show, and it is no longer said. The author's; refused in an agent's shell. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ## Write
@@ -213,13 +214,13 @@ A number as a reader sees it -- `Theorem 3.4`, `3.4`, `(3)` -- finds what each d
 
 Print a markdown link to THING that the viewer can follow.
 
-THING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
+THING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). `--quote` carries words in a document, a project PDF or a work, which the viewer opens at and lights. The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
 
 | option | description |
 |---|---|
 | `--at` | A place in THING: a key inside the document or node, a heading's id in a Markdown file or notebook, page=N in a PDF, L and a line number in a text file. |
 | `--page` | A page of a work's PDF, from 1. |
-| `--quote` | Text on that page to find. |
+| `--quote` | Words to open at and light: on the work's page, on the PDF's page given by --at page=N, or at the place in a document; anywhere in it with no page or place. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ## Review
@@ -973,7 +974,7 @@ One tool per agent command, named for it (`loom status` is `loom_status`), its o
 
 ## Publish
 
-Build the site and the PDFs, and serve them and the home page.
+Build the site and the PDFs, serve them and the home page, and open the viewer at a link.
 
 ### `loom build`
 
@@ -1025,6 +1026,18 @@ One home runs on a machine: a home already running is left to run, and its addre
 | `--open` | Open the home page in the browser, starting the home first when it is not running, and return. |
 | `--install` | Write loom's app in ~/Applications, which opens the home page, say where, and return. |
 | `--no-compile` | Serve every quilt with no compiles, as loom serve --no-compile. |
+
+### `loom open`
+
+`loom open [OPTIONS] LINK`
+
+Open this quilt's viewer at LINK, a quilt: or cited: link, at the words it quotes.
+
+Run inside the quilt, as an editor runs it on the link under the cursor: `quilt:notes/day1.md#setup`, `quilt:REF#page=3&quote=…`, or the link inside a Markdown or org link around it. A `cited:` link opens the work that states its identifier, at its pages. The viewer running for the quilt opens it; with none running, loom serve is started for it first. A link that names nothing the viewer shows is refused, with why.
+
+| option | description |
+|---|---|
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ### `loom compile`
 

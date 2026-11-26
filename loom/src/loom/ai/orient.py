@@ -72,8 +72,7 @@ def types_text(types: Types) -> str:
     ]
     for t in types.types:
         stays = "stays open until resolved" if t.open else "only informs"
-        listed = ", listed in Notes" if t.notes else ""
-        lines += ["", f"## {t.name} (`--type {t.id}`): {stays}{listed}", ""]
+        lines += ["", f"## {t.name} (`--type {t.id}`): {stays}", ""]
         lines.append(t.instructions or "No instructions: use it when the person asks for it.")
     return "\n".join(lines) + "\n"
 
