@@ -1,6 +1,5 @@
 <script lang="ts">
-	// Proposed edits' rows, every draft's or the one the column chooses, from the manifest (`changeList`, `copiesOf`): over them a line with `keep all N` and `discard all N` for every change listed that can be (keep all passing over a change to a document that mirrors Overleaf, made there), the undo of the last keep or discard, and `to do N`; a row for each change (`ChangeRow`), then one for each agent's copy, whose link opens it on its own page in Review, where it is taken in and applied; with to do, the open annotations from others, a row each. Says once what it watches and what it leaves to the person.
-	import { said } from '$lib/library/said';
+	// Proposed edits' rows, every draft's or the one the column chooses, from the manifest (`editRows`, `copiesOf`): over them a line with `keep all N` and `discard all N` for every change listed that can be (keep all passing over a change to a document that mirrors Overleaf, made there), the undo of the last keep or discard, and `to do N`; a row for each file with edits made in place (`FileRow`) and for each suggested edit (`ChangeRow`), then one for each agent's copy, whose link opens it on its own page in Review, where it is taken in and applied; with to do, the open annotations from others, a row each. Says once what it watches and what it leaves to the person.
 	import { shortDate } from '$lib/badges';
 	import { dotVars, itemLabel } from '$lib/fragments/gutter';
 	import { store } from '$lib/manifest/client.svelte';
@@ -8,7 +7,7 @@
 	import { acted } from '$lib/review/acted.svelte';
 	import { ready } from '$lib/review/changes';
 	import { itemsOf, tally } from '$lib/review/contribution';
-	import { discardChanges, history, keepChanges, nextUndo, undo } from '$lib/review/history.svelte';
+	import { history, nextUndo, undo } from '$lib/review/history.svelte';
 	import { copySays } from '$lib/review/proposed';
 	import SaidOnce from '$lib/review/SaidOnce.svelte';
 	import { todoOf } from '$lib/review/yourChanges';
@@ -16,14 +15,16 @@
 	import { review as words } from '$lib/words/review';
 	import { can } from '$lib/write';
 	import { mirrors } from '$lib/overleaf/said';
-	import { changeSaid } from './answers';
+	import { every as act } from './every';
 	import ChangeRow from './rows/ChangeRow.svelte';
+	import FileRow from './rows/FileRow.svelte';
 	import SeeItLink from './SeeItLink.svelte';
 	import { rv } from './state.svelte';
-	import { changeList, copiesOf } from './yours';
+	import { changeList, copiesOf, editRows } from './yours';
 
 	const m = $derived(store.manifest!);
 	const items = $derived(changeList(m, acted.map, rv.doc));
+	const rows = $derived(editRows(m, acted.map, rv.doc));
 	const copies = $derived(copiesOf(m, rv.doc));
 	const ids = $derived(items.filter((i) => ready(i.c)).map((i) => i.c.id));
 	// a change to a document that mirrors Overleaf is made there, and kept by its own Done in Overleaf
@@ -39,15 +40,11 @@
 		void can('change-discard').then((yes) => (writes.discard = yes));
 	});
 
-	/** Keep or discard every change listed that can be; the column's message says how many, and why any was not, in the viewer's words (`changeSaid`). */
+	/** Keep or discard every change listed that can be. */
 	async function every(how: 'keep' | 'discard'): Promise<void> {
 		busy = true;
-		const which = how === 'keep' ? keeps : ids;
-		const res = how === 'keep' ? await keepChanges({ changes: which }) : await discardChanges({ changes: which });
+		await act(how, how === 'keep' ? keeps : ids);
 		busy = false;
-		if (!res.ok) return message.post(said({ code: res.error?.code ?? 'failed', message: res.error?.message ?? '' }));
-		const refused = res.refused ?? [];
-		message.post(changeSaid(how, res.done?.length ?? which.length - refused.length, refused));
 	}
 
 	async function back(): Promise<void> {
@@ -69,7 +66,7 @@
 			<button type="button" class="btn" class:on={todoOn} aria-pressed={todoOn} title={words.edits.todoHover} data-testid="your-todo" onclick={() => (todoOn = !todoOn)}>{words.edits.todo(todoCount)}</button>
 		</div>
 	{/if}
-	{#each items as item (item.c.id)}<ChangeRow {item} />{/each}
+	{#each rows as row (row.type === 'file' ? `file:${row.doc}:${row.path}` : row.c.id)}{#if row.type === 'file'}<FileRow {row} />{:else}<ChangeRow item={row} />{/if}{/each}
 	{#each copies as c (c.copy)}
 		<div class="rr" data-testid="review-row" data-kind="edits" data-copy={c.copy}>
 			<div class="rr-h">

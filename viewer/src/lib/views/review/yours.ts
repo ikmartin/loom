@@ -1,4 +1,4 @@
-// Review's two kinds drawn from the manifest rather than from loom's `review-list`, since their acts are the manifest's: "Results to accept", a row for each block waiting (changed since accepted, or taken in from a copy or a pull), the never accepted and the accepted folded beneath; "Proposed edits", a row for each change waiting in the person's text and for each agent's copy. The column counts for them the rows drawn, and a draft narrows them as it narrows every kind.
+// Review's two kinds drawn from the manifest rather than from loom's `review-list`, since their acts are the manifest's: "Results to accept", a row for each block waiting (changed since accepted, or taken in from a copy or a pull), the never accepted and the accepted folded beneath; "Proposed edits", a row for each file with edits made in place since the look (holding that file's changes), for each suggested edit and for each agent's copy. The column counts for them the rows drawn, and a draft narrows them as it narrows every kind.
 
 import type { Key, Manifest, PendingChange, UnresolvedReview } from '$lib/manifest/types';
 import type { ReviewKind, ReviewList } from '$lib/library/types';
@@ -97,14 +97,42 @@ export function changeList(m: Manifest, gone: Record<string, unknown>, doc?: str
 	return changeGroups(m, gone, doc).flatMap((g) => g.changes.map((c) => ({ c, doc: g.document ? g.path : null, label: g.label })));
 }
 
+/** A row of Proposed edits: a suggested edit alone, or a file with edits made in place, which opens to each of them. */
+export type EditRow = ({ type: 'suggested' } & ChangeItem) | ({ type: 'file'; path: string; changes: PendingChange[] } & Omit<ChangeItem, 'c'>);
+
+/** Whether a change was made in the file rather than suggested. */
+export const inPlace = (c: Pick<PendingChange, 'kind'>): boolean => c.kind !== 'suggested';
+
+/** Proposed edits' rows of changes, by document as `changeList` orders them: each suggested edit, and one row a file for the edits made in place, standing where the file's first change stands. */
+export function editRows(m: Manifest, gone: Record<string, unknown>, doc?: string | null): EditRow[] {
+	const out: EditRow[] = [];
+	const files = new Map<string, Extract<EditRow, { type: 'file' }>>();
+	for (const i of changeList(m, gone, doc)) {
+		if (!inPlace(i.c)) {
+			out.push({ type: 'suggested', ...i });
+			continue;
+		}
+		// a file is one row within the document listing it
+		const at = `${i.doc ?? ''}\n${i.c.path}`;
+		const row = files.get(at);
+		if (row) row.changes.push(i.c);
+		else {
+			const r = { type: 'file' as const, path: i.c.path, changes: [i.c], doc: i.doc, label: i.label };
+			files.set(at, r);
+			out.push(r);
+		}
+	}
+	return out;
+}
+
 /** The agents' copies waiting to be taken in; those into one draft when given. */
 export function copiesOf(m: Manifest, doc?: string | null) {
 	return adoptionsOf(m).filter((c) => !doc || c.source === doc);
 }
 
-/** The rows Proposed edits draws: each change and each agent's copy. */
+/** The rows Proposed edits draws: each file with edits made in place, each suggested edit and each agent's copy. */
 export function changesWaiting(m: Manifest, gone: Record<string, unknown>, doc?: string | null): number {
-	return changeList(m, gone, doc).length + copiesOf(m, doc).length;
+	return editRows(m, gone, doc).length + copiesOf(m, doc).length;
 }
 
 /** What a kind drawn from the manifest counts, in one draft when given: its rows waiting. */

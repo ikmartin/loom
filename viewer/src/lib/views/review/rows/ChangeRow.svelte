@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A change waiting in the person's text, as round six draws a row of Proposed edits: "main.tex · proof of Theorem 3.1", who proposed it or that it was edited in place since the look, a chevron. Open: the change as a card drawn bare (`ChangeCard`), its words out and in, what it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard, the history offering their undo and the column's message saying what they did in the viewer's words (`changeSaid`); then `see it in main.tex`. A change in no draft's text names no draft and offers no see it.
+	// A suggested edit waiting in the person's text, as round six draws a row of Proposed edits: "main.tex · proof of Theorem 3.1", who proposed it, a chevron; edits made in place are a row a file (`FileRow`). Open: the change as a card drawn bare (`ChangeCard`), its words out and in, what it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard, the history offering their undo and the column's message saying what they did in the viewer's words (`changeSaid`); then `see it in main.tex`. A change in no draft's text names no draft and offers no see it.
 	import Icon from '$lib/components/Icon.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import ChangeCard from '$lib/review/ChangeCard.svelte';
@@ -24,7 +24,7 @@
 	const where = $derived(item.doc ? words.file(item.doc) : item.label);
 	const line = $derived(c.key || (where !== c.path && where !== what) ? words.at(where, what) : where);
 	const who = $derived(whoMade(m, c));
-	const meta = $derived(c.kind === 'suggested' ? (who ? words.edits.by(who) : '') : words.edits.sinceLook);
+	const meta = $derived(who ? words.edits.by(who) : '');
 	/** A block the card names (the note it answers) is laid over Review in the draft that holds the change, else named in words. */
 	const see = $derived(item.doc ? (key: string, named: string) => (rv.over = { doc: item.doc!, key, name: named }) : null);
 	/** What Keep or Discard did, said in the column's message in the viewer's words. */
