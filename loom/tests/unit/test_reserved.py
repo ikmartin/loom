@@ -84,3 +84,13 @@ def test_a_path_some_part_of_loom_uses_is_not_on_the_page() -> None:
     built = sorted(f"{k} = {v}" for k, v in named.items() if v in on_page and k in used)
     assert built == [], f"built, and still on the page of reserved names: {built}"
     assert paths.LIBRARY_NODES not in on_page
+
+
+def test_the_mirror_s_names_are_the_overleaf_ones_it_serves() -> None:
+    """The mirror serves `overleaf-*`, which took the place of the `sync-` names reserved for it, so the page reserves `overleaf-` to Overleaf and no `sync-` name."""
+    served = sorted(name for name in HANDLERS if name.startswith("overleaf-"))
+    assert served, "no overleaf-* endpoint is served"
+    assert not [name for name in first_cells(section("Write operations")) if name.startswith("sync-")]
+    prefixes = re.search(r"^Prefixes: (.*)$", section("Write operations"), re.M)
+    assert prefixes is not None and "`sync-`" not in prefixes.group(1)
+    assert "`overleaf-` to Overleaf" in prefixes.group(1)

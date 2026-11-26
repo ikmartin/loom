@@ -17,7 +17,7 @@ def _accept_keys(body: dict[str, Any]) -> list[str]:
 
 
 def _overleaf(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
-    """The `overleaf-*` endpoints: pair the quilt with a project from a pasted link, give the git token once, say again who the person is on Overleaf, update from Overleaf, and end the pairing; the person's acts, refused to a declared agent.
+    """The `overleaf-*` endpoints: pair the quilt with a project from a pasted link, give the git token once, say again who the person is on Overleaf, update from Overleaf, and end the pairing; the person's acts, refused to a declared agent, by the request's `author` or else the quilt's reviewer name.
 
     Every refusal loom knows answers with its code and its words (409, or 400 for a token that is not one): a failure to reach Overleaf (`MirrorError`), a link that names no project, and the door's own refusals inside an update. The token goes from the request to the credential helper and nowhere else.
     """
@@ -27,10 +27,11 @@ def _overleaf(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]
     from loom.sync import SyncError
     from loom.writes import WriteRefused
 
-    if is_agent(_str(body, "author") or ""):
+    reviewer = reviewer_identity(root)[0] or None
+    # a reviewer name an agent goes by never pairs or updates, as in the library
+    if is_agent(_str(body, "author") or reviewer or ""):
         raise ApiError("author-only", "Pairing with Overleaf and updating from it are the author's", status=403)
     quilt = load_quilt(root)
-    reviewer = reviewer_identity(root)[0] or None
     try:
         if endpoint == "overleaf-update":
             return {"ok": True, "result": overleaf.update(quilt, reviewer)}
