@@ -1,11 +1,12 @@
 import { notes } from '$lib/words/notes';
 import { overleaf } from '$lib/words/overleaf';
 import { lean } from '$lib/words/lean';
+import { modes } from '$lib/words/modes';
 
 // What Settings holds: its sections, in two groups, and every setting's name and what it does, which the rows draw their words from. Each section says where its settings are kept. `[lint] disable` has no section: what it silences is lint's, which agents read, and it is set in config.toml.
 
 export type Group = 'loom' | 'quilt';
-export type SectionId = 'profile' | 'appearance' | 'files' | 'general' | 'documents' | 'annotations' | 'notes' | 'agents' | 'library' | 'lean' | 'overleaf';
+export type SectionId = 'profile' | 'appearance' | 'files' | 'general' | 'documents' | 'annotations' | 'notes' | 'agents' | 'modes' | 'library' | 'lean' | 'overleaf';
 
 export interface Section {
 	id: SectionId;
@@ -44,6 +45,7 @@ export const SECTIONS: Section[] = [
 	{ id: 'annotations', label: 'Annotations', group: 'quilt', where: "Saved in this quilt's .loom/records/annotation-types.toml, shared with everyone who has the quilt. You change it here; an agent may edit the file.", icon: 'm9 11-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4' },
 	{ id: 'notes', label: notes.settings.section, group: 'quilt', where: notes.settings.where, icon: 'M5 3h10l4 4v14H5zM15 3v4h4M9 12h6M9 16h4' },
 	{ id: 'agents', label: 'Agents', group: 'quilt', where: QUILT, icon: 'M7 7h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3M12 3v4M9 13h.01M15 13h.01' },
+	{ id: 'modes', label: modes.settings.section, group: 'quilt', where: modes.settings.where, icon: 'M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z' },
 	{ id: 'library', label: 'Library', group: 'quilt', where: QUILT, icon: 'M5 4v16M9 4v16M13 5l4 15M19 4l-2 16' },
 	{ id: 'lean', label: lean.settings.section, group: 'quilt', where: lean.settings.where, icon: 'M12 3l8 9-8 9-8-9z' },
 	{ id: 'overleaf', label: overleaf.settings.section, group: 'quilt', where: overleaf.settings.where, icon: 'M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5M18 3v4h-4M6 21v-4h4' }
@@ -75,6 +77,7 @@ export const SETTINGS: Setting[] = [
 	{ id: 'agents.setup', section: 'agents', name: 'Use an agent here', what: 'An app set up here starts loom whenever a conversation in it opens this folder.' },
 	{ id: 'agents.told', section: 'agents', name: 'What an agent is told and sees', what: 'The same for every agent working here, in any app.' },
 	{ id: 'agents.apps', section: 'agents', name: 'Apps', what: 'Which agent apps start loom here.' },
+	{ id: 'modes.list', section: 'modes', name: modes.settings.name, what: modes.settings.what },
 	{ id: 'library.online', section: 'library', name: 'Use the network', what: 'Let the library look identifiers up (zbMATH Open, Crossref) and fetch papers from arXiv. Off, it uses only what is on this computer.', key: '[library] online' },
 	{ id: 'lean.on', section: 'lean', name: lean.settings.name, what: lean.settings.what },
 	{ id: 'lean.check', section: 'lean', name: lean.settings.check, what: lean.settings.checkWhat },

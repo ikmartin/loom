@@ -13,6 +13,7 @@
 	import General from './settings/General.svelte';
 	import Documents from './settings/Documents.svelte';
 	import Agents from './settings/Agents.svelte';
+	import Modes from './settings/Modes.svelte';
 	import Library from './settings/Library.svelte';
 	import Overleaf from './settings/Overleaf.svelte';
 	import Lean from './settings/Lean.svelte';
@@ -78,8 +79,8 @@
 		nav?.querySelector('button.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 	});
 	const attention = $derived<Partial<Record<SectionId, string>>>(config?.agents.stale ? { agents: 'Claude Code holds an older list' } : {});
-	// Overleaf shows the pairing and changes nothing, and Lean's switch is kept on this computer and not in config.toml, so neither is ever said to be read-only
-	const readOnly = $derived(SECTION[shown].group === 'quilt' && shown !== 'overleaf' && shown !== 'lean' && !(shown === 'annotations' ? canTypes : canSave));
+	// Overleaf shows the pairing and changes nothing, Lean's switch is kept on this computer and not in config.toml, and Modes says for itself what it cannot change, so none is ever said to be read-only here
+	const readOnly = $derived(SECTION[shown].group === 'quilt' && shown !== 'overleaf' && shown !== 'lean' && shown !== 'modes' && !(shown === 'annotations' ? canTypes : canSave));
 </script>
 
 <button class="toggle" aria-label="Settings" aria-haspopup="dialog" aria-expanded={open} title="Settings" onclick={() => (open = !open)} data-testid="settings-toggle"><Icon name="gear" size={18} /></button>
@@ -130,6 +131,7 @@
 				{:else if shown === 'annotations'}<Annotations editable={canTypes} />
 				{:else if shown === 'notes'}<Notes editable={canSave} />
 				{:else if config && shown === 'agents'}<Agents {config} editable={canSave} {canUpdate} />
+				{:else if shown === 'modes'}<Modes />
 				{:else if shown === 'library'}<Library editable={canSave} />
 				{:else if shown === 'lean'}<Lean />
 				{:else if config && shown === 'overleaf'}<Overleaf />

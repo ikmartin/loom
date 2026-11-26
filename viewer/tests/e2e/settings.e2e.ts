@@ -10,7 +10,7 @@ test('Settings opens as a window over the page, Loom first with Profile at its h
 	await expect(win).toHaveAttribute('role', 'dialog');
 	const nav = page.getByTestId('settings-nav');
 	await expect(nav.locator('.group')).toHaveText(['Loom', 'Quilt', 'Development']);
-	await expect(nav.locator('[data-testid^="settings-section-"]')).toHaveText(['Profile', 'Appearance', 'Files', 'General', 'Documents', 'Annotations', 'Notes', 'Agents', 'Library', 'Lean', 'Overleaf']);
+	await expect(nav.locator('[data-testid^="settings-section-"]')).toHaveText(['Profile', 'Appearance', 'Files', 'General', 'Documents', 'Annotations', 'Notes', 'Agents', 'Modes', 'Library', 'Lean', 'Overleaf']);
 	// larger than the box it replaced: a window, not a menu
 	const box = await win.boundingBox();
 	expect(box!.width).toBeGreaterThan(700);
@@ -56,6 +56,25 @@ test('each section opens its own page, saying where it is saved, and the window 
 	await page.reload();
 	await page.getByTestId('settings-toggle').click();
 	await expect(page.getByTestId('settings-title')).toHaveText('Overleaf');
+});
+
+test("Settings › Modes lists the quilt's modes in the order its agents are shown them, each loom's or edited, and shows the one chosen with when it fits", async ({ page }) => {
+	await page.goto('/');
+	await settings(page, 'modes');
+	await expect(page.getByTestId('settings-title')).toHaveText('Modes');
+	await expect(page.getByTestId('settings-window').locator('.where')).toContainText('.loom/agents/instructions/modes/');
+	const tabs = page.getByTestId('mode-tab');
+	await expect(tabs.locator('.name')).toHaveText(['quick', 'question', 'audit', 'referee', 'review', 'simplify', 'flow', 'draft', 'formalize']);
+	await expect(tabs.locator('.state')).toHaveText(Array(9).fill("loom's"));
+	// the fixture's quilt has no agent layer, so these are loom's own, said once at the head
+	await expect(page.getByTestId('modes-no-layer')).toBeVisible();
+	await expect(page.getByTestId('mode-detail')).toHaveAttribute('data-mode', 'quick');
+	await tabs.nth(3).click();
+	await expect(page.getByTestId('mode-detail')).toHaveAttribute('data-mode', 'referee');
+	await expect(page.getByTestId('mode-fits')).toContainText('whether the mathematics is right');
+	await expect(page.getByTestId('mode-state')).toHaveText("loom's");
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('mode-detail')).toHaveAttribute('data-mode', 'review');
 });
 
 test('the display preferences survive a reload and change the document', async ({ page }) => {
