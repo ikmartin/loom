@@ -513,6 +513,54 @@ def test_digested_results_to_check_are_a_row_a_work_and_a_correction_a_row_with_
     assert [r["kind"] for r in rows() if "correction" in r] == []
 
 
+def test_review_reads_the_library_once_whatever_the_number_of_corrections(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each correction row says why its take would be refused (`acts.take_refusal`), which reads the node and checks the file against the library; one read of Review reads the index and lists the nodes folder as often for two corrections as for one, since doing it per row grew with corrections times nodes (4.5 s at a thousand of each)."""
+    from loom.evidence import acts
+    from loom.evidence.web import LibraryWeb
+    from loom.library.index import NodeIndex
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    reads = 0
+    real = NodeIndex.open.__func__  # type: ignore[attr-defined]
+    made = LibraryWeb.__init__
+
+    def counted(cls: type[NodeIndex], /, *args: object, **kwargs: object) -> NodeIndex:
+        nonlocal reads
+        reads += 1
+        index: NodeIndex = real(cls, *args, **kwargs)
+        return index
+
+    def making(self: LibraryWeb, *args: object) -> None:
+        nonlocal reads
+        reads += 1
+        made(self, *args)  # type: ignore[arg-type]
+
+    def corrected(node: str, old: bytes, new: bytes) -> list[dict[str, object]]:
+        shown = LibraryWeb(root).subject(Here("node", node))
+        assert shown is not None
+        acts.check(root, node, shown.hash, PERSON)
+        data = (folder(root) / f"{node}.node").read_bytes()
+        acts.propose(root, node, data.replace(old, new, 1), AGENT, "page 4")
+        nonlocal reads
+        reads = 0
+        rows = [r.to_dict() for r in _gather(root).of("check") if r.to_dict().get("correction")]
+        return rows
+
+    monkeypatch.setattr(NodeIndex, "open", classmethod(counted))
+    monkeypatch.setattr(LibraryWeb, "__init__", making)
+    one = corrected("tq-00A4", b"compact set", b"closed set")
+    once = reads
+    two = corrected("tq-00K3", b"be a widget", b"be any widget")
+    assert len(one) == 1 and len(two) == 2 and all(r["refusal"] is None for r in two), "each take is still offered"
+    assert reads == once, "the index is opened, and the library listed, as often for two corrections as for one"
+
+
 def test_a_citation_of_a_library_work_naming_no_result_is_listed_until_the_person_calls_it_a_mention(
     root: Path,
 ) -> None:

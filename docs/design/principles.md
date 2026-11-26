@@ -1,6 +1,6 @@
 # Principles
 
-Every design principle of loom and arras is here and nowhere else: what loom is, how the viewer and its annotations behave, how a command's output reads, how the command line is shaped, and how the code is built. Elsewhere a principle is cited by its name (`P7`, `V3`) rather than restated.
+Every design principle of loom and its viewer is here and nowhere else: what loom is, how the viewer and its annotations behave, how a command's output reads, how the command line is shaped, and how the code is built. Elsewhere a principle is cited by its name (`P7`, `V3`) rather than restated.
 
 A principle's name is its set's letter and its number, and the name is permanent. Numbers run from 1 in the order principles were added and are never reused. A principle changes by editing it here, with the reason in the commit message; one that stops holding keeps its heading, marked *(retired)*, so its old citations still resolve. A new principle is a heading `### Xn. Title` at the end of its set, and a new set is a section `## X · What it governs` at the end of this file. `python3 scripts/checks/principles.py --write` regenerates the two tables below from the headings, and the check fails when a principle cited anywhere in the repository does not exist.
 
@@ -76,7 +76,7 @@ Loom does not require an AI. It is a complete tool for reading, exploring, draft
 
 ## P · What loom is
 
-The principles that decide what loom and arras are. Each is stated, followed by its reason and a concrete consequence.
+The principles that decide what loom and its viewer are. Each is stated, followed by its reason and a concrete consequence.
 
 ### P1. Mathematics is LaTeX, and nothing an author writes as mathematics lives elsewhere.
 
@@ -140,7 +140,7 @@ Mathematics is only as trustworthy as the checking behind it, and an assistant's
 
 ## V · The viewer
 
-How every surface of arras is judged: what it shows, where, and how much. Each has cost something to follow, and every surface is checked against them one element at a time.
+How every surface of the viewer is judged: what it shows, where, and how much. Each has cost something to follow, and every surface is checked against them one element at a time.
 
 ### V1. Open on the thing itself.
 
@@ -255,7 +255,7 @@ Nothing else can be tested without it, and the source contract is the part most 
 
 ### C2. Vertical slices.
 
-Each change runs end to end, source to arras page, for a growing part of the contract, rather than completing one layer at a time.
+Each change runs end to end, source to viewer page, for a growing part of the contract, rather than completing one layer at a time.
 
 ### C3. The fixture is the contract's executable form.
 
@@ -267,7 +267,7 @@ The tests that enforce P7 are written before any command that touches a file.
 
 ### C5. One tool in two languages, each with its own build and tests.
 
-Loom is Python and its viewer, arras, is Svelte; they live in one repository and the viewer ships inside loom. The specifications describe what crosses between them, and a change on either side changes them in the same commit (P11).
+Loom is Python and its viewer is Svelte; they live in one repository and the viewer ships inside loom. The specifications describe what crosses between them, and a change on either side changes them in the same commit (P11).
 
 ## K · The command line
 

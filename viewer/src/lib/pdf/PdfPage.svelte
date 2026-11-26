@@ -1,0 +1,562 @@
+<script lang="ts">
+	type Box = { left: number; top: number; width: number; height: number };
+	// One page of a PDF: the canvas, PDF.js's text layer over it, and loom's rectangles over that.
+	//
+	// **A dumb renderer** (plan 0.13 §6). It is given a document, a page and the rectangles to draw, and it reports what the reader did. It fetches no annotations, knows nothing of sessions, and decides nothing about what a highlight means — which is what lets the same component serve the pane and a preview.
+	//
+	// **`render` is the virtualisation seam.** A page outside the window keeps its size and loses its canvas, its text
+	// layer and its overlay; the parent decides which pages are in, and this decides nothing about scrolling.
+	//
+	// It is deliberately NOT keyed on the manifest store: the viewer polls every second and swaps the manifest whenever its
+	// hash changes, so a pane that re-derived from it would re-render a page a second — the failure `Fragment.svelte`
+	// has been patched for twice.
+	import { onDestroy, untrack, type Snippet } from 'svelte';
+	import { asPercent, document_, pdfjs } from './document';
+	import { markAt, type PageMark } from './marks';
+	import PageMarks, { type Drawn, type Moved } from './PageMarks.svelte';
+
+	type Rect = readonly number[];
+	/** An annotation the PDF itself holds, with words to read: another program's comment. */
+	type Embedded = { id: string; subtype: string; rects: number[][]; body: string; by: string };
+
+	let {
+		url,
+		page = 1,
+		quads = [],
+		scale = 1.4,
+		render = true,
+		tool = 'select',
+		regions = false,
+		focus = '',
+		onselect,
+		onbox,
+		onsized,
+		ondrawn,
+		onlink,
+		marks = [],
+		selected = '',
+		hide = [],
+		ondraw,
+		onpick,
+		onmove,
+		onembedded,
+		overlay
+	}: {
+		url: string;
+		page?: number;
+		/** Rectangles to draw, in loom's space: points, origin top left, one per line: a work's results, and the place a link points at (`transient`). Annotations are `marks`. */
+		quads?: { id: string; rects: Rect[]; transient?: boolean }[];
+		scale?: number;
+		/** Whether to draw at all. False keeps the page's size and releases everything that costs memory. */
+		render?: boolean;
+		/** `select` uses the text layer; a drawing tool takes the pointer. A page with no text layer drags a region for what uses the words. */
+		tool?: string;
+		/** A drag that starts on no words draws a region, as Annotate's does. */
+		regions?: boolean;
+		/** The id of the mark to show as the one being looked at. */
+		focus?: string;
+		/** The reader selected text: the page, what they selected, and the rectangles it covers. */
+		onselect?: (e: { page: number; text: string; rects: number[][]; client: Box }) => void;
+		/** The reader drew a region where selection was not worth trusting. */
+		onbox?: (e: { page: number; rects: number[][]; client: Box }) => void;
+		/** The page and its marks have finished rendering. */
+		ondrawn?: () => void;
+		/** This page's size in points, once known, so a parent can size what it has not drawn. */
+		onsized?: (e: { page: number; width: number; height: number }) => void;
+		/** The reader followed a link inside the paper to another of its pages; a link out of it opens in a new tab and is not reported. */
+		onlink?: (e: { page: number }) => void;
+		/** The marks drawn on this page: annotations that record their own place. */
+		marks?: PageMark[];
+		/** The mark being looked at, which can be moved. */
+		selected?: string;
+		/** Annotations in the PDF that one of loom's now stands for, by their reference: left off the canvas, so nothing is drawn twice. */
+		hide?: string[];
+		/** The reader drew a mark with a tool that takes the pointer. */
+		ondraw?: (e: Drawn & { page: number }) => void;
+		/** The reader clicked a mark, or nothing (`id` empty). */
+		onpick?: (e: { id: string }) => void;
+		/** The reader moved or resized the mark being looked at. */
+		onmove?: (e: Moved) => void;
+		/** The reader clicked an annotation the PDF holds. */
+		onembedded?: (e: Embedded & { client: Box }) => void;
+		/** What a caller draws over a drawn page, positioned by rectangles in loom's space through `at`: the Library's digest marks. */
+		overlay?: Snippet<[{ page: number; at: (r: Rect) => { left: string; top: string; width: string; height: string } }]>;
+	} = $props();
+
+	let host: HTMLDivElement;
+	let canvas = $state<HTMLCanvasElement | null>(null);
+	let textLayer = $state<HTMLDivElement | null>(null);
+	let box = $state({ width: 612, height: 792 });
+	let size = $state({ width: 612 * 1.4, height: 792 * 1.4 });
+	let problem = $state('');
+	let drawing = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+	let empty = $state(false);
+	let drawn = $state(false);
+	/** The paper's own links on this page (plan 0.13 item 5, "link followed"): where each is, and where it goes. */
+	let links = $state<{ left: string; top: string; width: string; height: string; url?: string; page?: number }[]>([]);
+	/** The comments the PDF itself holds on this page, in points from its top left. */
+	let embedded = $state<Embedded[]>([]);
+
+	/** What is left off the canvas, as a string, since the list is new at every manifest and the page is drawn again only when what it says changes. */
+	const hidden = $derived(hide.join());
+
+	/** Box mode: forced on a page whose text layer has nothing to select. */
+	const boxing = $derived(empty);
+
+	// Stage timings go to the performance timeline rather than to a prop: they are wanted by the profiler, by whoever is
+	// deciding whether a page is cheap enough to keep in a pane, and by nothing in the app. `measure` is free when
+	// nobody is recording.
+	function timed(name: string, from: number, to: number): void {
+		performance.measure(`pdf:${name}`, { start: from, end: to });
+	}
+
+	// **One draw at a time on a canvas.** A page drawn again — at a new zoom, say — cancels the render still running on its canvas and waits for it to let go before touching it; pdf.js refuses a second render on a busy canvas, and that refusal was shown at the top of the page. A draw that a later one superseded stops at its next step and shows nothing.
+	type Cancellable = { cancel(): void; promise: Promise<unknown> };
+	let running: Cancellable | null = null;
+	let layerRunning: { cancel(): void } | null = null;
+	let drawSeq = 0;
+
+	async function settle(): Promise<void> {
+		layerRunning?.cancel();
+		layerRunning = null;
+		const task = running;
+		running = null;
+		if (task) {
+			task.cancel();
+			await task.promise.catch(() => {});
+		}
+	}
+
+	onDestroy(() => {
+		drawSeq++;
+		void settle();
+	});
+
+	/** pdf.js's own word for a render that was called off: not a problem with the page. */
+	const cancelled = (exc: unknown) => exc instanceof Error && (exc.name === 'RenderingCancelledException' || /cancel/i.test(exc.message));
+
+	async function draw(): Promise<void> {
+		if (!canvas || !textLayer) return;
+		const seq = ++drawSeq;
+		const stale = () => seq !== drawSeq;
+		try {
+			await settle();
+			if (stale()) return;
+			problem = '';
+			const t0 = performance.now();
+			const lib = await pdfjs();
+			const doc = await document_(url);
+			const p = await doc.getPage(page);
+			if (stale()) return;
+			const viewport = p.getViewport({ scale });
+			box = { width: viewport.width / scale, height: viewport.height / scale };
+			size = { width: viewport.width, height: viewport.height };
+			onsized?.({ page, width: box.width, height: box.height });
+			if (!canvas || !textLayer) return;
+			const ratio = window.devicePixelRatio || 1;
+			canvas.width = Math.floor(viewport.width * ratio);
+			canvas.height = Math.floor(viewport.height * ratio);
+			const ctx = canvas.getContext('2d');
+			if (!ctx) return;
+			ctx.scale(ratio, ratio);
+			const t1 = performance.now();
+			// a PDF annotation one of loom's stands for stays out of the drawing, through the document's annotation storage, which no page saves
+			for (const id of hide) doc.annotationStorage.setValue(id, { noView: true });
+			const task = p.render({ canvasContext: ctx, viewport, canvas, ...(hide.length ? { annotationMode: lib.AnnotationMode.ENABLE_STORAGE } : {}) }) as unknown as Cancellable;
+			running = task;
+			await task.promise;
+			if (running === task) running = null;
+			if (stale()) return;
+			const t2 = performance.now();
+			const content = await p.getTextContent();
+			if (stale() || !textLayer) return;
+			textLayer.replaceChildren();
+			const layer = new lib.TextLayer({ textContentSource: content, container: textLayer, viewport });
+			layerRunning = layer;
+			await layer.render();
+			if (layerRunning === layer) layerRunning = null;
+			if (stale()) return;
+			const t3 = performance.now();
+			// The paper's links, drawn by us rather than by PDF.js's annotation layer, which wants a link service with a
+			// contract of its own; a `Link` annotation is a rectangle and a destination, and that is all a reader needs.
+			const found: typeof links = [];
+			const held: Embedded[] = [];
+			for (const a of await p.getAnnotations()) {
+				const said = (a.contentsObj?.str ?? '').trim();
+				if (a.subtype !== 'Link' && a.subtype !== 'Popup' && a.subtype !== 'Widget' && said && a.rect && !hide.includes(a.id)) {
+					const [ax, ay] = viewport.convertToViewportPoint(a.rect[0], a.rect[1]);
+					const [bx, by] = viewport.convertToViewportPoint(a.rect[2], a.rect[3]);
+					held.push({ id: a.id, subtype: a.subtype, body: said, by: a.titleObj?.str ?? '', rects: [[Math.min(ax, bx) / scale, Math.min(ay, by) / scale, Math.max(ax, bx) / scale, Math.max(ay, by) / scale]] });
+				}
+				if (a.subtype !== 'Link' || !Array.isArray(a.rect)) continue;
+				const r = a.rect as number[];
+				const [x0, y0] = viewport.convertToViewportPoint(r[0], r[1]);
+				const [x1, y1] = viewport.convertToViewportPoint(r[2], r[3]);
+				const at = {
+					left: `${(Math.min(x0, x1) / viewport.width) * 100}%`,
+					top: `${(Math.min(y0, y1) / viewport.height) * 100}%`,
+					width: `${(Math.abs(x1 - x0) / viewport.width) * 100}%`,
+					height: `${(Math.abs(y1 - y0) / viewport.height) * 100}%`
+				};
+				if (typeof a.url === 'string') found.push({ ...at, url: a.url });
+				else if (a.dest) {
+					try {
+						const dest = typeof a.dest === 'string' ? await doc.getDestination(a.dest) : a.dest;
+						const ref = Array.isArray(dest) ? dest[0] : null;
+						if (ref) found.push({ ...at, page: (await doc.getPageIndex(ref)) + 1 });
+					} catch {
+						// a destination the document cannot resolve is a dead link in every viewer
+					}
+				}
+			}
+			if (stale()) return;
+			links = found;
+			embedded = held;
+			timed('open', t0, t1);
+			timed('render', t1, t2);
+			timed('text', t2, t3);
+			// a page with no text layer cannot be selected on, so the reader is given the box tool whatever the toolbar says
+			empty = textLayer.textContent?.trim() === '';
+			drawn = true;
+			ondrawn?.();
+		} catch (exc) {
+			if (stale() || cancelled(exc)) return;
+			problem = exc instanceof Error ? exc.message : String(exc);
+		}
+	}
+
+	$effect(() => {
+		void url;
+		void page;
+		void scale;
+		void hidden;
+		const on = render && !!canvas && !!textLayer;
+		untrack(() => {
+			if (on) void draw();
+			else drawn = false;
+		});
+	});
+
+	/** Where a client rectangle sits in loom's space: points from the top left of the page. */
+	function toPoints(r: { left: number; top: number; width: number; height: number }): number[] {
+		const at = host.getBoundingClientRect();
+		const k = box.width / (size.width || 1);
+		return [(r.left - at.left) * k, (r.top - at.top) * k, (r.left - at.left + r.width) * k, (r.top - at.top + r.height) * k];
+	}
+
+	function readSelection(): void {
+		if (boxing) return;
+		const sel = window.getSelection();
+		const text = sel?.toString().trim() ?? '';
+		if (!sel || !text || sel.rangeCount === 0) return;
+		// **A range over a text layer yields more rectangles than it has lines.** Every element the range crosses contributes one, degenerate ones included, and those rectangles are not only drawn: they are mapped to points and recorded as the annotation's anchor, and their union is where the composer opens. One filter serves all three — a rectangle with no area, or one outside the page, is not part of what the reader selected.
+		const at = host.getBoundingClientRect();
+		const client = [...sel.getRangeAt(0).getClientRects()].filter(
+			(r) => r.width > 0.5 && r.height > 0.5 && r.bottom > at.top && r.top < at.bottom && r.right > at.left && r.left < at.right
+		);
+		if (!client.length) return;
+		const rects = client.map((r) => toPoints(r));
+		onselect?.({ page, text, rects, client: union(client) });
+	}
+
+	/** A click that selected nothing, asked what it landed on: a mark takes no pointer, so a press on a highlight can begin a selection like one on any other words. */
+	function clicked(e: MouseEvent): void {
+		if (tool !== 'select' || window.getSelection()?.toString().trim()) return;
+		const at = host.getBoundingClientRect();
+		const k = box.width / (size.width || 1);
+		landed((e.clientX - at.left) * k, (e.clientY - at.top) * k);
+	}
+
+	function landed(x: number, y: number): boolean {
+		const hit = markAt(marks, x, y);
+		if (hit) {
+			onpick?.({ id: hit.id });
+			return true;
+		}
+		const held = embedded.find((a) => a.rects.some((r) => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]));
+		if (held) {
+			const at = host.getBoundingClientRect();
+			const k = size.width / (box.width || 1);
+			const [x0, y0, x1, y1] = held.rects[0];
+			onembedded?.({ ...held, client: { left: at.left + x0 * k, top: at.top + y0 * k, width: (x1 - x0) * k, height: (y1 - y0) * k } });
+			return true;
+		}
+		onpick?.({ id: '' });
+		return false;
+	}
+
+	/** A region: on a page with no words, with the modifier that reaches it from anywhere, or, while Annotate is on, from a press on no words. */
+	function drags(e: PointerEvent): boolean {
+		return boxing || e.altKey || (regions && e.button === 0 && e.target === e.currentTarget);
+	}
+
+	function startBox(e: PointerEvent): void {
+		if (!drags(e)) return;
+		const at = host.getBoundingClientRect();
+		drawing = { x0: e.clientX - at.left, y0: e.clientY - at.top, x1: e.clientX - at.left, y1: e.clientY - at.top };
+		// captured on the layer whose handlers these are: capturing on the page redirected every later pointer event
+		// to the page, which listens for none of them, so a drag began and never ended
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+
+	function moveBox(e: PointerEvent): void {
+		if (!drawing) return;
+		const at = host.getBoundingClientRect();
+		drawing = { ...drawing, x1: e.clientX - at.left, y1: e.clientY - at.top };
+	}
+
+	function endBox(e: PointerEvent): void {
+		if (!drawing) return;
+		const at = host.getBoundingClientRect();
+		const d = drawing;
+		drawing = null;
+		(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+		const left = Math.min(d.x0, d.x1) + at.left;
+		const top = Math.min(d.y0, d.y1) + at.top;
+		// a click without a drag leaves a point, which is the degenerate span
+		const rect = { left, top, width: Math.abs(d.x1 - d.x0), height: Math.abs(d.y1 - d.y0) };
+		// on a page with no words every press comes here, so a click on a mark is still a click on it
+		if (rect.width < 3 && rect.height < 3 && tool === 'select') {
+			const [x, y] = toPoints(rect);
+			if (landed(x, y)) return;
+		}
+		onbox?.({ page, rects: [toPoints(rect)], client: rect });
+	}
+
+	/** One rectangle around several, in client space: where a form beside the selection stands. */
+	function union(rs: { left: number; top: number; width: number; height: number }[]): { left: number; top: number; width: number; height: number } {
+		if (!rs.length) return { left: 0, top: 0, width: 0, height: 0 };
+		const l = Math.min(...rs.map((r) => r.left));
+		const t = Math.min(...rs.map((r) => r.top));
+		const r = Math.max(...rs.map((x) => x.left + x.width));
+		const b = Math.max(...rs.map((x) => x.top + x.height));
+		return { left: l, top: t, width: r - l, height: b - t };
+	}
+</script>
+
+<div
+	class="page"
+	class:boxing
+	bind:this={host}
+	data-page={page}
+	data-testid="pdf-page-{page}"
+	style="width: {size.width}px; height: {size.height}px;"
+>
+	{#if render}
+		<canvas bind:this={canvas} style="width: {size.width}px; height: {size.height}px;"></canvas>
+		<div
+			class="text"
+			bind:this={textLayer}
+			style="--total-scale-factor: {scale};"
+			onmouseup={readSelection}
+			onclick={clicked}
+			onpointerdown={startBox}
+			onpointermove={moveBox}
+			onpointerup={endBox}
+			role="presentation"
+		></div>
+		{#if links.length}
+			<div class="links" aria-hidden="false">
+				{#each links as l, i (i)}
+					{#if l.url}
+						<a class="link" href={l.url} target="_blank" rel="noopener noreferrer" title={l.url} aria-label="link out of the paper" style="left: {l.left}; top: {l.top}; width: {l.width}; height: {l.height};"></a>
+					{:else if l.page}
+						<button type="button" class="link" title="page {l.page}" aria-label="to page {l.page}" data-testid="pdf-link-{l.page}" style="left: {l.left}; top: {l.top}; width: {l.width}; height: {l.height};" onclick={() => onlink?.({ page: l.page! })}></button>
+					{/if}
+				{/each}
+			</div>
+		{/if}
+		<PageMarks {marks} {box} {scale} {tool} {selected} {embedded} ondraw={(e) => ondraw?.({ ...e, page })} {onpick} {onmove} />
+		<!-- Marks belong to a drawn page and to nothing else (plan 0.13 item 2): a held page has no box of its own to position them against, and a book of hundreds of pages would otherwise carry every mark in the DOM at once. Annotations are drawn by `PageMarks`, above. -->
+		<div class="marks" aria-hidden={quads.length === 0}>
+			{#each quads as q (q.id)}
+				{#each q.rects as r, i (i)}
+					{@const at = asPercent(r, box)}
+					<!-- A result is drawn only where a link lands, and the place a link points at while the link is in force; neither takes the pointer, so the page's words under them select like any other. -->
+					<span class="mark {q.transient ? 'transient' : 'result'}" class:on={focus === q.id} class:lead={i === 0} data-mark={q.id} data-testid="mark-{q.id}" aria-hidden="true" style="left: {at.left}; top: {at.top}; width: {at.width}; height: {at.height};"></span>
+				{/each}
+			{/each}
+		</div>
+		{#if overlay}<div class="overlay">{@render overlay({ page, at: (r) => asPercent(r, box) })}</div>{/if}
+	{:else}
+		<div class="held" aria-hidden="true"></div>
+	{/if}
+	{#if drawing}
+		<div
+			class="drawn"
+			style="left: {Math.min(drawing.x0, drawing.x1)}px; top: {Math.min(drawing.y0, drawing.y1)}px; width: {Math.abs(
+				drawing.x1 - drawing.x0
+			)}px; height: {Math.abs(drawing.y1 - drawing.y0)}px;"
+		></div>
+	{/if}
+	{#if render && !drawn && !problem}<p class="waiting" aria-hidden="true">page {page}</p>{/if}
+	{#if problem}<p class="problem" data-testid="pdf-problem">{problem}</p>{/if}
+</div>
+
+<style>
+	/* a caller's layer over the page, which takes the pointer only where what it draws does */
+	.overlay {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+	.page {
+		position: relative;
+		background: var(--surface, #fff);
+		box-shadow: 0 1px 3px rgb(0 0 0 / 0.14);
+	}
+	.page.boxing {
+		cursor: crosshair;
+	}
+	canvas {
+		display: block;
+	}
+	.held {
+		position: absolute;
+		inset: 0;
+	}
+	/* **PDF.js's own text-layer geometry, and it has to be its own.** The layer was styled by hand: spans were made
+	   transparent and absolute and nothing else, so they took the browser's default 16px with no horizontal scale and
+	   their boxes sat above and beside the glyphs they stand for. A selection then highlighted the wrong rectangles,
+	   and `<br>`, left in normal flow, piled empty line boxes at the layer's top-left — the stray block. The variable
+	   was wrong too: this build reads `--total-scale-factor`, and `--scale-factor` is the older name it ignores.
+	   The declarations below are `pdfjs-dist/web/pdf_viewer.css` (`.textLayer`, lines 647-693) and should be re-read
+	   from it on an upgrade rather than adjusted here. */
+	.text {
+		position: absolute;
+		inset: 0;
+		overflow: clip;
+		line-height: 1;
+		text-align: initial;
+		letter-spacing: normal;
+		word-spacing: normal;
+		text-size-adjust: none;
+		forced-color-adjust: none;
+		transform-origin: 0 0;
+	}
+	.text :global(span),
+	.text :global(br) {
+		color: transparent;
+		position: absolute;
+		white-space: pre;
+		cursor: text;
+		transform-origin: 0 0;
+	}
+	.text :global(> :not(.markedContent)),
+	.text :global(.markedContent span:not(.markedContent)) {
+		z-index: 1;
+		font-size: calc(var(--total-scale-factor) * var(--font-height, 0));
+		transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1));
+	}
+	.text :global(.markedContent) {
+		display: contents;
+	}
+	/* Translucent, because the glyphs are on the canvas *under* this layer: a solid wash covers the very words the
+	   reader is selecting. A highlighter, not a block. */
+	.text :global(span::selection) {
+		background: rgb(24 95 165 / 0.25);
+	}
+	/* A line's `<br>` stands at the layer's left edge, so a selected one draws a short bar there, a column of them down the margin for a selection of many lines; pdf_viewer.css (lines 773-778) makes it transparent, and so must this. */
+	.text :global(br::selection) {
+		background: transparent;
+	}
+	/* While the box tool is up a drag draws a rectangle, so the text must not take the drag instead. */
+	.page.boxing .text {
+		user-select: none;
+	}
+	.text :global(.endOfContent) {
+		display: none;
+	}
+	.marks {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		z-index: 2;
+	}
+	.links {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		z-index: 2;
+	}
+	.link {
+		position: absolute;
+		display: block;
+		border: 0;
+		padding: 0;
+		background: transparent;
+		cursor: pointer;
+		pointer-events: auto;
+	}
+	.link:hover {
+		outline: 1px solid var(--link, #35618f);
+		outline-offset: 1px;
+	}
+	/* A result's mark is drawn only where a link lands (`on`): the paper's own typography already marks every result, so a tint on each would say nothing the page does not and make a read page busier than an unread one. It takes no pointer (`.result`), so selection runs through it. An annotation's mark is drawn by theme.css from its classes and takes nothing from here but its place. The glyphs are on the canvas under this layer, so any tint is translucent. */
+	.mark {
+		position: absolute;
+		border: 0;
+		padding: 0;
+		background: transparent;
+		cursor: pointer;
+		pointer-events: auto;
+		/* scrolled to, a mark stops short of the column's edge by the landing dot's room */
+		scroll-margin-left: 18px;
+	}
+	/* with the box tool, what is under the pointer is the page and nothing on it: a reader drawing over a mark or a
+	   link is drawing, not clicking, and a mark that took the press would end the box before it began */
+	.page.boxing .mark,
+	.page.boxing .link {
+		pointer-events: none;
+	}
+	.mark.result {
+		pointer-events: none;
+		cursor: auto;
+	}
+	.mark.on:not(.annotation) {
+		background: color-mix(in srgb, var(--link) 30%, transparent);
+	}
+	/* **Where a link landed, marked at its start rather than boxed.** Following a link, the one thing the reader does not
+	   know is where the thing begins; they can see its extent for themselves once they are looking at it. A dot beside
+	   the first line says that and leaves the words alone, and it is the same dot the hover preview draws, so the mark
+	   means the same thing before and after the click. Sized from the mark's own height, so it holds at every zoom. */
+	.mark.on.lead::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 50%;
+		height: 46%;
+		aspect-ratio: 1;
+		transform: translate(-160%, -50%);
+		border-radius: 50%;
+		background: rgb(224 168 32 / 0.55);
+		pointer-events: none;
+	}
+	/* the place a link points at: lit while the URL carries it, never a record, so it is drawn as an outline */
+	.mark.transient {
+		background: none;
+		outline: 2px solid var(--link, #35618f);
+		outline-offset: 1px;
+		pointer-events: none;
+	}
+	/* the box being drawn, as a fragment draws one (fragments/FragmentNotes.svelte) */
+	.drawn {
+		position: absolute;
+		border: 1.5px dashed var(--accent);
+		background: var(--accent-wash);
+		border-radius: 2px;
+		pointer-events: none;
+	}
+	.waiting,
+	.problem {
+		position: absolute;
+		top: 8px;
+		left: 12px;
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--muted, #6b6b6b);
+	}
+	.problem {
+		color: var(--problem, #a33);
+	}
+</style>

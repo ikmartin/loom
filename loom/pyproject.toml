@@ -49,6 +49,7 @@ tmp_path_retention_policy = "failed"
 tmp_path_retention_count = 1
 markers = [
   "tex: needs a real TeX distribution (TeX tier)",
+  "lean: needs the Lean toolchain loom pins, installed under elan's home, and the fence up (Lean tier)",
   "poppler: needs the real pdftotext for page text and word boxes; TeX stays the shim",
   "paper: needs LOOM_PAPER_FIXTURES pointing at the arXiv sources (paper tier)",
   "network: needs network access",

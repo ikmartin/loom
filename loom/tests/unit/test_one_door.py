@@ -56,7 +56,7 @@ MODULES = {
     "sessions.py": "loom's records of agents' sessions",
     "presence.py": "`.loom/local/`",
     "machine.py": "the machine's own place",
-    "app/": "the home's own places in the machine's (its list, its address and lock, the servers' logs, the drops waiting, the records of quilts being made) and loom's app; a new quilt is made in a hidden folder beside its place and renamed into it whole, its skeleton `cli/quilt.py`'s and its paper brought in through the import's act",
+    "app/": "the home's own places in the machine's (its list, its address and lock, the jobs it hands on over a restart, the servers' logs, the drops waiting, the records of quilts being made) and loom's app; a new quilt is made in a hidden folder beside its place and renamed into it whole, its skeleton `cli/quilt.py`'s and its paper brought in through the import's act",
     "looks.py": "the person's look, a record",
     "review_queue.py": "loom's records",
     "mcp/server.py": "an agent's scratch and the server's log",
@@ -73,6 +73,7 @@ MODULES = {
     "library/survey.py": "the kept surveys, `.loom/cache/library/survey/`, and a compile's marked copy in its run folder there or a temporary one: loom's own place, as the index's and the thumbnails' (ruled 2026-11-25)",
     "evidence/log.py": "the evidence log, `.loom/records/evidence/`",
     "cli/library/add.py": "a folder's source, packed into a drop in `.loom/local/incoming/`",
+    "formal/switch.py": "the switch that turns formalization on, one file a quilt in the machine's own place",
 }
 
 #: Functions of mixed modules that write only loom's own places, by `module:qualname`, with why.
@@ -112,6 +113,9 @@ FUNCTIONS = {
     "scan/quilt.py:save_author": "the machine's own config",
     "notes.py:set_command": "the person's own new-note commands, `notes.toml` beside the machine's own config, written whole through a temporary file beside it",
     "upgrade.py:upgrade": "the annotation types, `.loom/records/annotation-types.toml`, written only where there are none",
+    "formal/check.py:check": "loom's probe, copied into a temporary folder of its own",
+    "formal/check.py:_check": "two folders in the Lake project's `.lake`, refused where it or they are a link: `.lake/loom`, loom's own folder for a check's home and temporary files, made anew each check; and `.lake/build`, Lake's build of the project's own modules, which the check builds again from clean; never a source, a package or anything outside the project",
+    "formal/install.py:_install_elan": "elan's installer, downloaded into a temporary folder of its own",
 }
 
 

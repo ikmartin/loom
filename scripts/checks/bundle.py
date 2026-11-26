@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The vendored arras bundle is complete, committable and current (plan 0.14.1 phase 4).
+"""The vendored viewer bundle is complete, committable and current (plan 0.14.1 phase 4).
 
 Usage:
     scripts/checks/bundle.py
 
-Fails when a file `index.html` needs is missing or git-ignored, or when `VERSION` is not a vendoring stamp. Needed means `index.html`'s own links and imports, then transitively every file a module loads (static and dynamic imports, Vite's preload lists, `new URL(..., import.meta.url)` assets) or a stylesheet's `url(...)` names, and the pdf.js data directories. Warns, without failing, when a needed file is untracked, when `VERSION` is stamped `-dirty`, or when arras's sources have commits the stamped one lacks: the author vendors before committing. Exit 0 or 1.
+Fails when a file `index.html` needs is missing or git-ignored, or when `VERSION` is not a vendoring stamp. Needed means `index.html`'s own links and imports, then transitively every file a module loads (static and dynamic imports, Vite's preload lists, `new URL(..., import.meta.url)` assets) or a stylesheet's `url(...)` names, and the pdf.js data directories. Warns, without failing, when a needed file is untracked, when `VERSION` is stamped `-dirty`, or when the viewer's sources have commits the stamped one lacks: the author vendors before committing. Exit 0 or 1.
 """
 
 from __future__ import annotations
@@ -15,12 +15,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BUNDLE = ROOT / "loom" / "src" / "loom" / "assets" / "arras"
-VENDOR = "cd arras && npm run build && cd ../loom && uv run python scripts/vendor_arras.py ../arras/build"
+BUNDLE = ROOT / "loom" / "src" / "loom" / "assets" / "viewer"
+VENDOR = "cd viewer && npm run build && cd ../loom && uv run python scripts/vendor_viewer.py ../viewer/build"
 
 # the stamp is judged by the function `loom doctor` uses, which is standard library only
 sys.path.insert(0, str(ROOT / "loom" / "src"))
-from loom.arras_bundle import parse_stamp, staleness  # noqa: E402
+from loom.viewer_bundle import parse_stamp, staleness  # noqa: E402
 
 Q = r"""["'`]"""
 PATH = r"""((?:\.{1,2}|/_app)/[^"'`\s]+)"""
@@ -71,9 +71,9 @@ def main() -> int:
     stamp = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
     stamped = parse_stamp(stamp)
     if stamped is None:
-        errors.append(f"VERSION is {stamp!r}, not `arras <commit> vendored <time>`")
+        errors.append(f"VERSION is {stamp!r}, not `viewer <commit> vendored <time>`")
     else:
-        warnings += [f"the bundle is {why}; vendor again once arras is committed" for why in staleness(ROOT, stamped)]
+        warnings += [f"the bundle is {why}; vendor again once the viewer is committed" for why in staleness(ROOT, stamped)]
 
     files, dirs = needed()
     rel = sorted(str(f.relative_to(ROOT)) for f in files if f.is_relative_to(ROOT))
@@ -94,7 +94,7 @@ def main() -> int:
         errors += [f"{p} is needed and git-ignored, so no commit can carry it" for p in sorted(ignored)]
         if untracked:
             warnings.append(
-                f"{len(untracked)} needed files are untracked, e.g. {sorted(untracked)[0]}; `git add loom/src/loom/assets/arras` before committing"
+                f"{len(untracked)} needed files are untracked, e.g. {sorted(untracked)[0]}; `git add loom/src/loom/assets/viewer` before committing"
             )
 
     for w in warnings:

@@ -519,7 +519,7 @@
    "read_only_hint": true
   },
   "command": "loom doctor",
-  "description": "Check the TeX toolchain and what loom needs of it, poppler, git, the author name and the arras bundle; inside a quilt, also its engine, its generated files, its .gitignore and its config.\n\nEach item is ok, warn (works, but you will hit it) or fail (a command you need will refuse), with the command that fixes it. Exits 0 when nothing fails and 2 when anything does; under --strict a warning counts as a failure. Without --repair it writes nothing; a tool is run only to ask its version or test what loom needs of it, and one that has not answered in 10 s is reported as hung.",
+  "description": "Check the TeX toolchain and what loom needs of it, poppler, git, the author name and the viewer bundle; inside a quilt, also its engine, its generated files, its .gitignore and its config.\n\nEach item is ok, warn (works, but you will hit it) or fail (a command you need will refuse), with the command that fixes it. Exits 0 when nothing fails and 2 when anything does; under --strict a warning counts as a failure. Without --repair it writes nothing; a tool is run only to ask its version or test what loom needs of it, and one that has not answered in 10 s is reported as hung.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
@@ -645,6 +645,48 @@
    "type": "object"
   },
   "name": "loom_evidence"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom formal",
+  "description": "Say whether formalization is on for this quilt on this machine, and whether loom can check its Lean here.\n\nThe person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom \"LABEL\"]`, and asks loom to check it (`loom formal check`). What Lean said is loom's own record, never an agent's.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    }
+   },
+   "type": "object"
+  },
+  "name": "loom_formal"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom formal check",
+  "description": "Have loom check the quilt's Lean itself: rebuild the project from clean, read which declaration states which result (`@[loom \"LABEL\"]`) and the axioms each rests on, and replay the build in Lean's kernel, every step fenced, with no network and writes only in the project. Each result a declaration states gets loom's own record of what Lean said, which stops standing once its Lean or its statement changes.\n\nRefused when formalization is off here, and from a shell that is itself fenced, such as an agent's sandbox, where the fence cannot be put up: ask through loom's tools instead.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    }
+   },
+   "type": "object"
+  },
+  "name": "loom_formal_check"
  },
  {
   "annotations": {
@@ -796,6 +838,387 @@
    "type": "object"
   },
   "name": "loom_id"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom library correct",
+  "description": "Propose a correction of a node's text: written at once where no person has compared it, else filed for the person to take or decline, the compared text standing meanwhile.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "body": {
+     "description": "The node's corrected text, as LaTeX; its header is kept.",
+     "type": "string"
+    },
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "mention": {
+     "description": "A node the text mentions without resting on it.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "node": {
+     "type": "string"
+    },
+    "why": {
+     "description": "What was wrong, for the person who compared it.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "node",
+    "body",
+    "why"
+   ],
+   "type": "object"
+  },
+  "name": "loom_library_correct"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom library digest",
+  "description": "Have loom write a work's results from its TeX source, numbered by its stored PDF: loom's own extraction, never a compile. A work whose numbers only a compile could confirm waits for the person's act in the viewer.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "item": {
+     "description": "A result of its source's survey, for --scope chosen.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "ref": {
+     "type": "string"
+    },
+    "scope": {
+     "default": "used",
+     "description": "What the drafts cite of it, every result, or the items --item names.",
+     "enum": [
+      "used",
+      "all",
+      "chosen"
+     ],
+     "type": "string"
+    }
+   },
+   "required": [
+    "ref"
+   ],
+   "type": "object"
+  },
+  "name": "loom_library_digest"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom library fill",
+  "description": "Give a stub its text, transcribed from its work's PDF or read from its TeX source: its words are checked to stand there, and how it was made is recorded as yours.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "body": {
+     "description": "The result's text, as LaTeX, pointing at other nodes by their ids.",
+     "type": "string"
+    },
+    "from": {
+     "default": "pdf",
+     "description": "Read from the work's PDF, or from its TeX source.",
+     "enum": [
+      "pdf",
+      "tex"
+     ],
+     "type": "string"
+    },
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "mention": {
+     "description": "A node the text mentions without resting on it; every other it names is a use.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "pages": {
+     "description": "The page or pages it stands on, as the PDF numbers them (`12`, `12-13`), at most three; needed from a PDF and refused from the source.",
+     "type": "string"
+    },
+    "stub": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "stub",
+    "body"
+   ],
+   "type": "object"
+  },
+  "name": "loom_library_fill"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom library node",
+  "description": "A statement or a proof of the library with its neighbours: its header, its text, what it uses and mentions, its proofs, and what rests on it. NODE is its id.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "node": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "node"
+   ],
+   "type": "object"
+  },
+  "name": "loom_library_node"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom library propose",
+  "description": "Propose a node at a place of a work no node holds: a new statement of REF, its words checked to stand there; it reads as not checked until the person compares it.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "body": {
+     "description": "The result's text, as LaTeX, pointing at other nodes by their ids.",
+     "type": "string"
+    },
+    "from": {
+     "default": "pdf",
+     "description": "Read from the work's PDF, or from its TeX source.",
+     "enum": [
+      "pdf",
+      "tex"
+     ],
+     "type": "string"
+    },
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "mention": {
+     "description": "A node the text mentions without resting on it.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "number": {
+     "description": "Its number as the work prints it.",
+     "type": "string"
+    },
+    "pages": {
+     "description": "The page or pages it stands on, as the PDF numbers them, at most three; needed from a PDF and refused from the source.",
+     "type": "string"
+    },
+    "ref": {
+     "type": "string"
+    },
+    "taxon": {
+     "description": "What it is: lemma, theorem, definition, ...",
+     "type": "string"
+    },
+    "title": {
+     "description": "The name the work gives it.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "ref",
+    "taxon",
+    "body"
+   ],
+   "type": "object"
+  },
+  "name": "loom_library_propose"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom library rests-on",
+  "description": "The library's results a draft rests on, through its citations and what those use in turn: WHAT is a draft's result (its id or label) or a document's path. Each says how it stands; a stub is one nobody has read.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "what": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "what"
+   ],
+   "type": "object"
+  },
+  "name": "loom_library_rests-on"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom library search",
+  "description": "Search the library's statements, stubs among them, by their words, name, title and work.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "proofs": {
+     "description": "Look in proofs' words too.",
+     "type": "boolean"
+    },
+    "tag": {
+     "description": "Only statements with this tag.",
+     "type": "string"
+    },
+    "taxon": {
+     "description": "Only statements of this taxon (lemma, theorem, ...).",
+     "type": "string"
+    },
+    "words": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "work": {
+     "description": "Only this work's statements: its id or its entry's key.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "name": "loom_library_search"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom library stubs",
+  "description": "The library's stubs: results known to stand in a work whose text nobody has read yet, which `loom library fill` gives their text.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "work": {
+     "description": "Only this work's stubs.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "name": "loom_library_stubs"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom library uses",
+  "description": "What a node's text uses and mentions, and which nodes use and mention it. NODE is its id.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "node": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "node"
+   ],
+   "type": "object"
+  },
+  "name": "loom_library_uses"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom library work",
+  "description": "A work: what loom holds of it and its outline, every result of its source digested or not. REF is its id.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "ref": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "ref"
+   ],
+   "type": "object"
+  },
+  "name": "loom_library_work"
  },
  {
   "annotations": {

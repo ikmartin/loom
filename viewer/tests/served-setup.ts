@@ -1,0 +1,39 @@
+// Global setup for the write and reading suites: stage the suite's copy of the app once, and copy the config's quilt once from what git tracks, so untracked files in loom's working tree never reach a test, then build that copy. Each test's copy is taken from this pristine one (served.ts).
+
+import type { FullConfig } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { VIEWER, LOOM, scratchDir, suiteOf, reviewerEnv } from './served';
+
+export default function setup(config: FullConfig): void {
+	const suite = suiteOf({ config });
+	const dir = scratchDir(suite);
+	rmSync(dir, { recursive: true, force: true });
+	// the suite's own copy of the app, which LOOM_VIEWER_BUNDLE points every server at: VIEWER_PREBUILT's, or a fresh build's
+	try {
+		execFileSync(process.execPath, [join(VIEWER, 'scripts', 'bundle.mjs'), join(dir, 'bundle')], { cwd: VIEWER, stdio: 'pipe' });
+	} catch (err) {
+		throw new Error(`scripts/bundle.mjs failed:\n${(err as { stdout?: Buffer }).stdout}\n${(err as { stderr?: Buffer }).stderr}`);
+	}
+	const repo = join(VIEWER, '..');
+	const prefix = `loom/tests/quilts/${suite.quilt}/`;
+	const tracked = execFileSync('git', ['ls-files', '-z', '--', prefix], { cwd: repo }).toString().split('\0').filter(Boolean);
+	if (!tracked.length) throw new Error(`git tracks nothing under ${prefix}`);
+	for (const file of tracked) {
+		// a tracked file deleted in the working tree is copied as the working tree has it: absent
+		if (!existsSync(join(repo, file))) continue;
+		const to = join(dir, 'template', file.slice(prefix.length));
+		mkdirSync(dirname(to), { recursive: true });
+		copyFileSync(join(repo, file), to);
+	}
+	// the pages TeX made of the quilt's documents (loom/scripts/gen_pages.py), since the suites run no TeX: without them every document shows as its source
+	const pages = join(VIEWER, 'tests', 'pages', suite.quilt);
+	if (existsSync(pages)) cpSync(pages, join(dir, 'template', '.loom', 'cache'), { recursive: true });
+	// built once here, so each served copy starts from a warm cache; the quilt's own errors make loom exit 1, which is not a failure to build
+	try {
+		execFileSync(LOOM, ['build', '--no-compile', '--quilt', join(dir, 'template')], { cwd: VIEWER, stdio: 'pipe', env: reviewerEnv(suite, join(dir, 'config')) });
+	} catch (err) {
+		if ((err as { status?: number }).status !== 1) throw err;
+	}
+}

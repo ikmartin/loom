@@ -1,6 +1,6 @@
 # WQ-60 · Annotation anchors: a mark from the source span, a re-anchor, and saying where a mark landed
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
@@ -20,7 +20,7 @@ A replacement longer than its anchor left with the payload: a suggested edit is 
 
 ## Blast radius
 
-`render/changes.py`, `render/marks.py`, `render/build.py`, `records/log.py`, `cli/review.py`, `cli/ai.py`, the lint diagnostics; the dialect if a placement is published; arras only if mark markup changes shape.
+`render/changes.py`, `render/marks.py`, `render/build.py`, `records/log.py`, `cli/review.py`, `cli/ai.py`, the lint diagnostics; the dialect if a placement is published; the viewer only if mark markup changes shape.
 
 ## Related
 

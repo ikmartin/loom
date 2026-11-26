@@ -20,10 +20,10 @@ class QuickServer(ThreadingHTTPServer):
 
 
 def fake_bundle(tmp_path: Path) -> Path:
-    """An arras bundle of two files: the app shell and one script."""
+    """A viewer bundle of two files: the app shell and one script."""
     b = tmp_path / "bundle"
     (b / "_app").mkdir(parents=True)
-    (b / "index.html").write_text("<!doctype html><title>arras</title><div id=app></div>")
+    (b / "index.html").write_text("<!doctype html><title>viewer</title><div id=app></div>")
     (b / "_app" / "x.js").write_text("console.log(1)")
     return b
 

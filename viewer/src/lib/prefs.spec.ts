@@ -1,0 +1,108 @@
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import { attributes, coerce, COLUMN_MAX, COLUMN_MIN, DEFAULTS, read, write } from './prefs.svelte';
+
+function stub(initial: Record<string, string> = {}) {
+	const map = new Map(Object.entries(initial));
+	const ls = {
+		getItem: (k: string) => map.get(k) ?? null,
+		setItem: (k: string, v: string) => void map.set(k, v),
+		removeItem: (k: string) => void map.delete(k)
+	};
+	vi.stubGlobal('localStorage', ls);
+	return map;
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('the display preferences', () => {
+	it("defaults to serif, medium, mid, system, the compiled page, no ids, the margin's markers shown, LaTeX's aux files hidden and the agents' config documents shown", () => {
+		expect(DEFAULTS).toEqual({
+			divider: 0.5,
+			outline: 0.55,
+			column: 252,
+			panel: true,
+			ids: false,
+			marginMarks: true,
+			hideAux: true,
+			hideAgentConfig: false,
+			zoom: { pdf: 1.4 },
+			face: 'serif',
+			size: 'm',
+			textSize: 16,
+			width: 'mid',
+			theme: 'system',
+			format: 'p1'
+		});
+	});
+
+	it("starts a new HTML draft at the text size kept, else at Settings' size, within bounds", () => {
+		expect(coerce({ textSize: 18 }).textSize).toBe(18);
+		expect(coerce({ textSize: 99 }).textSize).toBe(32);
+		expect(coerce({ size: 'l' }).textSize).toBe(19);
+		expect(coerce({ textSize: 'big', size: 's' }).textSize).toBe(13.5);
+	});
+
+	it('keeps the divider inside the range a pane is usable in', () => {
+		// a ratio outside it leaves one pane too narrow to read, which a stored value from a dragged-off-screen divider or a hand-edited blob could otherwise do; one inside it is kept
+		expect(coerce({ divider: 0.42 }).divider).toBe(0.42);
+		expect(coerce({ divider: 0.95 }).divider).toBe(0.8);
+		expect(coerce({ divider: 0.01 }).divider).toBe(0.2);
+		expect(coerce({ divider: 'wide' }).divider).toBe(DEFAULTS.divider);
+		// hiding the agents' config documents is asked for, never assumed from a stray value
+		expect(coerce({ hideAgentConfig: true }).hideAgentConfig).toBe(true);
+		expect(coerce({ hideAgentConfig: 'yes' }).hideAgentConfig).toBe(false);
+		// zoom is per renderer kind and remembered, and is clamped for the same reason the divider is
+		expect(coerce({ zoom: { pdf: 9 } }).zoom).toEqual({ pdf: 3 });
+		expect(coerce({ zoom: { pdf: 0.1, other: 2 } }).zoom).toEqual({ pdf: 0.5, other: 2 });
+		expect(coerce({ zoom: 0.1 }).zoom).toEqual(DEFAULTS.zoom); // zoom is kept per kind, so a bare number is not one
+	});
+
+	it('keeps the line above the outline between 0.15 and 0.85', () => {
+		expect(coerce({ outline: 0.05 }).outline).toBe(0.15);
+		expect(coerce({ outline: 0.99 }).outline).toBe(0.85);
+		expect(coerce({ outline: 'x' }).outline).toBe(DEFAULTS.outline);
+	});
+
+	it("keeps the column's width between its narrowest and widest, in whole pixels", () => {
+		expect(coerce({ column: 320.4 }).column).toBe(320);
+		expect(coerce({ column: 90 }).column).toBe(COLUMN_MIN);
+		expect(coerce({ column: 2000 }).column).toBe(COLUMN_MAX);
+		expect(coerce({ column: 'wide' }).column).toBe(DEFAULTS.column);
+	});
+
+	it('round-trips through storage', () => {
+		stub();
+		const p = { ...DEFAULTS, theme: 'dark' as const, size: 'l' as const };
+		write(p);
+		expect(read()).toEqual(p);
+	});
+
+	it('narrows a stored blob field by field', () => {
+		expect(coerce({ shell: 'z', face: 'serif', size: 42 })).toEqual({ ...DEFAULTS, face: 'serif' });
+		expect(coerce({ format: 'b2' }).format).toBe('b2');
+		expect(coerce({ format: 'web' }).format).toBe(DEFAULTS.format);
+		expect(coerce(null)).toEqual(DEFAULTS);
+	});
+
+	it('survives storage that throws and storage that holds nonsense', () => {
+		vi.stubGlobal('localStorage', {
+			getItem: () => {
+				throw new Error('denied');
+			},
+			setItem: () => {
+				throw new Error('denied');
+			}
+		});
+		expect(read()).toEqual(DEFAULTS);
+		expect(() => write(DEFAULTS)).not.toThrow();
+
+		stub({ 'viewer.prefs': 'not json' });
+		expect(read()).toEqual(DEFAULTS);
+	});
+
+	it('sets no theme attribute when the theme follows the system', () => {
+		expect(attributes({ ...DEFAULTS, theme: 'system' })['data-theme']).toBeNull();
+		expect(attributes({ ...DEFAULTS, theme: 'dark' })['data-theme']).toBe('dark');
+	});
+});
+

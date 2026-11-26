@@ -1,6 +1,6 @@
 """`loom doctor` (DR-288-ikmartin): every item in each of its states, the bundle from each source, the JSON's shape, and the exit codes.
 
-Each case runs on a clean PATH holding only the fake toolchain, a fake git and whatever the case writes, so nothing depends on what `/usr/bin` holds; the author comes from a user config and the bundle from LOOM_ARRAS_BUNDLE unless the case is about them.
+Each case runs on a clean PATH holding only the fake toolchain, a fake git and whatever the case writes, so nothing depends on what `/usr/bin` holds; the author comes from a user config and the bundle from LOOM_VIEWER_BUNDLE unless the case is about them.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ REAL_GIT = shutil.which("git")
 
 
 def stamp(commit: str = "abc1234") -> str:
-    return f"arras {commit} vendored 2026-09-24T00:00:00Z\n"
+    return f"viewer {commit} vendored 2026-09-24T00:00:00Z\n"
 
 
 def bundle(d: Path, version: str | None = None) -> Path:
@@ -97,7 +97,7 @@ def box(tmp_path: Path, fake_bin: Path, monkeypatch: pytest.MonkeyPatch) -> Box:
     b.script("git", FAKE_GIT)
     monkeypatch.setenv("PATH", str(b.bin))
     b.author('[author]\nname = "Ada"\n')
-    monkeypatch.setenv("LOOM_ARRAS_BUNDLE", str(bundle(tmp_path / "arras-build", stamp())))
+    monkeypatch.setenv("LOOM_VIEWER_BUNDLE", str(bundle(tmp_path / "viewer-build", stamp())))
     (tmp_path / "away").mkdir()
     return b
 
@@ -256,18 +256,18 @@ def test_an_empty_tracked_author_does_not_override_local_identity(box: Box) -> N
 
 
 def vendored_at(box: Box, d: Path | None) -> None:
-    """Point the vendored lookup at `d` and clear LOOM_ARRAS_BUNDLE."""
-    box.mp.delenv("LOOM_ARRAS_BUNDLE")
-    box.mp.setattr("loom.arras_bundle.vendored_path", lambda: d or box.tmp / "no-bundle")
+    """Point the vendored lookup at `d` and clear LOOM_VIEWER_BUNDLE."""
+    box.mp.delenv("LOOM_VIEWER_BUNDLE")
+    box.mp.setattr("loom.viewer_bundle.vendored_path", lambda: d or box.tmp / "no-bundle")
 
 
 def checkout(box: Box, version: str) -> Path:
-    """A loom-arras checkout whose vendored bundle carries `version`; returns its root."""
+    """A checkout of this repository whose vendored bundle carries `version`; returns its root."""
     root = box.tmp / "ws"
     (root / ".git").mkdir(parents=True)
-    (root / "arras" / "src").mkdir(parents=True)
-    (root / "arras" / "package.json").write_text("{}")
-    vendored_at(box, bundle(root / "loom" / "src" / "loom" / "assets" / "arras", version))
+    (root / "viewer" / "src").mkdir(parents=True)
+    (root / "viewer" / "package.json").write_text("{}")
+    vendored_at(box, bundle(root / "loom" / "src" / "loom" / "assets" / "viewer", version))
     return root
 
 
@@ -281,20 +281,20 @@ def env_valid(box: Box) -> None:
 def env_invalid(box: Box) -> None:
     vendored_at(box, bundle(box.tmp / "vendored", stamp()))
     (box.tmp / "empty").mkdir()
-    box.mp.setenv("LOOM_ARRAS_BUNDLE", str(box.tmp / "empty"))
+    box.mp.setenv("LOOM_VIEWER_BUNDLE", str(box.tmp / "empty"))
 
 
 def env_invalid_alone(box: Box) -> None:
     vendored_at(box, None)
-    box.mp.setenv("LOOM_ARRAS_BUNDLE", str(box.tmp / "nowhere"))
+    box.mp.setenv("LOOM_VIEWER_BUNDLE", str(box.tmp / "nowhere"))
 
 
 def env_unversioned(box: Box) -> None:
-    box.mp.setenv("LOOM_ARRAS_BUNDLE", str(bundle(box.tmp / "dev-build")))
+    box.mp.setenv("LOOM_VIEWER_BUNDLE", str(bundle(box.tmp / "dev-build")))
 
 
 def vendored(box: Box) -> None:
-    vendored_at(box, bundle(box.tmp / "site-packages" / "loom" / "assets" / "arras", stamp()))
+    vendored_at(box, bundle(box.tmp / "site-packages" / "loom" / "assets" / "viewer", stamp()))
 
 
 def none(box: Box) -> None:
@@ -307,18 +307,25 @@ def dirty_checkout(box: Box) -> None:
 
 BUNDLES: list[tuple[str, Case, str, str | None, str, str]] = [
     # id, setup, status, source, detail starts with, remedy contains
-    ("env", env_valid, "ok", "LOOM_ARRAS_BUNDLE", "the viewer LOOM_ARRAS_BUNDLE names, built from arras abc1234", ""),
-    ("env-invalid", env_invalid, "fail", None, "LOOM_ARRAS_BUNDLE=", "unset it"),
-    ("env-invalid-alone", env_invalid_alone, "fail", None, "LOOM_ARRAS_BUNDLE=", "unset it"),
+    (
+        "env",
+        env_valid,
+        "ok",
+        "LOOM_VIEWER_BUNDLE",
+        "the viewer LOOM_VIEWER_BUNDLE names, built from commit abc1234",
+        "",
+    ),
+    ("env-invalid", env_invalid, "fail", None, "LOOM_VIEWER_BUNDLE=", "unset it"),
+    ("env-invalid-alone", env_invalid_alone, "fail", None, "LOOM_VIEWER_BUNDLE=", "unset it"),
     (
         "unversioned",
         env_unversioned,
         "warn",
-        "LOOM_ARRAS_BUNDLE",
-        "the viewer LOOM_ARRAS_BUNDLE names, unversioned: its stamp",
-        "vendor_arras.py",
+        "LOOM_VIEWER_BUNDLE",
+        "the viewer LOOM_VIEWER_BUNDLE names, unversioned: its stamp",
+        "vendor_viewer.py",
     ),
-    ("vendored", vendored, "ok", "vendored", "the viewer loom ships, built from arras abc1234", ""),
+    ("vendored", vendored, "ok", "vendored", "the viewer loom ships, built from commit abc1234", ""),
     ("none", none, "fail", None, "not found: loom serve refuses", "reinstall loom"),
     (
         "dirty-checkout",
@@ -326,7 +333,7 @@ BUNDLES: list[tuple[str, Case, str, str | None, str, str]] = [
         "warn",
         "vendored",
         "the viewer loom ships, stamped abc1234-dirty",
-        "commit arras, then",
+        "commit the viewer's changes, then",
     ),
 ]
 
@@ -336,7 +343,7 @@ def test_the_bundle_from_each_source(
     box: Box, setup: Case, status: str, source: str | None, detail: str, remedy: str
 ) -> None:
     setup(box)
-    got = item(doctor(box), "arras bundle")
+    got = item(doctor(box), "viewer bundle")
     assert (got["status"], got["source"]) == (status, source), got
     assert got["detail"].startswith(detail), got
     assert remedy in got["remedy"], got
@@ -344,18 +351,18 @@ def test_the_bundle_from_each_source(
         assert got["path"] is None
 
 
-def test_an_invalid_loom_arras_bundle_is_a_refusal_not_a_fallback(box: Box) -> None:
+def test_an_invalid_loom_viewer_bundle_is_a_refusal_not_a_fallback(box: Box) -> None:
     env_invalid(box)
-    got = item(doctor(box), "arras bundle")
-    assert got["detail"] == f"LOOM_ARRAS_BUNDLE={box.tmp / 'empty'} has no index.html; loom serve refuses"
+    got = item(doctor(box), "viewer bundle")
+    assert got["detail"] == f"LOOM_VIEWER_BUNDLE={box.tmp / 'empty'} has no index.html; loom serve refuses"
     assert got["status"] == "fail" and got["source"] is None
 
 
-def test_a_vendored_bundle_behind_the_checkouts_arras_warns(box: Box) -> None:
+def test_a_vendored_bundle_behind_the_checkouts_viewer_warns(box: Box) -> None:
     box.real_git()
     root = box.tmp / "ws"
-    (root / "arras" / "src").mkdir(parents=True)
-    (root / "arras" / "package.json").write_text("{}")
+    (root / "viewer" / "src").mkdir(parents=True)
+    (root / "viewer" / "package.json").write_text("{}")
 
     def git(*args: str) -> str:
         return subprocess.run(
@@ -367,17 +374,19 @@ def test_a_vendored_bundle_behind_the_checkouts_arras_warns(box: Box) -> None:
         ).stdout.strip()
 
     git("init", "-q")
-    (root / "arras" / "src" / "app.ts").write_text("1")
+    (root / "viewer" / "src" / "app.ts").write_text("1")
     git("add", ".")
     git("commit", "-qm", "one")
     built = git("rev-parse", "--short", "HEAD")
-    vendored_at(box, bundle(root / "loom" / "src" / "loom" / "assets" / "arras", stamp(built)))
-    assert item(doctor(box), "arras bundle")["status"] == "ok"
-    (root / "arras" / "src" / "app.ts").write_text("2")
+    vendored_at(box, bundle(root / "loom" / "src" / "loom" / "assets" / "viewer", stamp(built)))
+    assert item(doctor(box), "viewer bundle")["status"] == "ok"
+    (root / "viewer" / "src" / "app.ts").write_text("2")
     git("commit", "-qam", "two")
-    got = item(doctor(box), "arras bundle")
-    assert got["status"] == "warn" and f"built from {built}, but arras's sources changed in " in got["detail"], got
-    assert got["remedy"].endswith("scripts/vendor_arras.py ../arras/build") and "commit arras" not in got["remedy"]
+    got = item(doctor(box), "viewer bundle")
+    assert got["status"] == "warn" and f"built from {built}, but the viewer's sources changed in " in got["detail"], got
+    assert (
+        got["remedy"].endswith("scripts/vendor_viewer.py ../viewer/build") and "commit the viewer" not in got["remedy"]
+    )
 
 
 # ---- the quilt section

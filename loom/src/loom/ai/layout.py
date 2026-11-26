@@ -38,6 +38,11 @@ AGENT_COMMANDS = frozenset(
         "session new", "session rename", "session list", "session say",
         # what is asked of agents and what they ask of the person, and what is known of a result; comparing, attesting and answering an agent are the person's
         "tasks", "tasks take", "tasks done", "tasks answer", "tasks withdraw", "ask", "evidence",
+        # whether formalization is on here, and asking loom to check the Lean, whose record is loom's own; turning it on or off is the person's
+        "formal", "formal check",
+        # the library's web: reading it, giving a stub its text, proposing a node or a correction, and having loom digest a work from its source; comparing a node with its paper is the person's
+        "library node", "library search", "library uses", "library rests-on", "library stubs", "library work",
+        "library fill", "library propose", "library correct", "library digest",
         # the MCP server an agent's app starts, often from a shell that already marks an agent
         "mcp",
     }
@@ -48,7 +53,8 @@ ACTS: dict[str, str] = {
         (
             "deps", "doctor", "downstream", "here", "history", "history show", "history verify", "link", "lint", "search",
             "source", "status", "changes", "ai annotations", "ai drafts", "ai mode", "ai orient", "session list",
-            "tasks", "evidence",
+            "tasks", "evidence", "formal", "library node", "library search", "library uses", "library rests-on",
+            "library stubs", "library work",
         ),
         "read",
     ),
@@ -57,7 +63,8 @@ ACTS: dict[str, str] = {
         (
             "annotate", "suggest", "draft", "new", "since", "ai refresh", "session new", "session rename", "session say",
             "mcp", "ask", "tasks take", "tasks done",
-            "tasks answer", "tasks withdraw",
+            "tasks answer", "tasks withdraw", "formal check", "library fill", "library propose", "library correct",
+            "library digest",
         ),
         "write",
     ),

@@ -24,6 +24,7 @@ from loom.app import registry
 from loom.app.registry import HOME_PORT, Entry, address
 from loom.app.supervise import SETTLE, Supervisor, tail
 from loom.files import FILES_URL
+from loom.identity import at_the_viewer
 from loom.render.endpoints.base import ApiError
 from loom.render.serve import BUILD_URL, LIBRARY_PDF_URL, LIBRARY_THUMB_URL, HeldBundle, LoomHandler, from_elsewhere
 from loom.version import code_stamp
@@ -32,6 +33,11 @@ from loom.version import code_stamp
 MAX_BODY = 1024 * 1024
 #: How many finished and running jobs `quilt-list` keeps.
 KEPT_JOBS = 20
+
+
+def _carried() -> Path:
+    """Where the jobs that ended wait for the home that starts after an update."""
+    return registry.folder() / "jobs.json"
 
 
 class HomeRunning(Exception):
@@ -179,6 +185,7 @@ def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(name, str) or not all(v is None or isinstance(v, str) for v in (place, drop, main)):
         raise ApiError("bad-field", "name, and place, drop and main where given, are strings")
     where = create.target(name, place)
+    registry.entries()  # a list that cannot be read refuses the create, which could not put its quilt on it
     home.makings.claim(where)
     try:
         paper = create.paper(drop, main) if drop else None
@@ -299,7 +306,10 @@ class HomeHandler(LoomHandler):
             self._json(HTTPStatus.BAD_REQUEST, {"error": {"code": "bad-json", "message": str(exc)}})
             return
         try:
-            self._json(HTTPStatus.OK, handler(self.home, body))
+            # a request from the home page is the person at a browser, whichever shell started the home
+            with at_the_viewer():
+                answer = handler(self.home, body)
+            self._json(HTTPStatus.OK, answer)
         except ApiError as exc:
             self._json(exc.status, exc.answer())
         except registry.Unreadable as exc:
@@ -365,8 +375,30 @@ class Home:
         """The jobs running or done, newest first."""
         return [dict(job) for job in reversed(self.jobs.values())]
 
+    def hand_on(self) -> None:
+        """Keep the jobs that ended in `app/jobs.json` for the home that starts in this one's place after an update, which lists them as its own (`take_on`)."""
+        ended = [job for job in self.jobs_listing() if job["state"] != "running"]
+        try:
+            _carried().write_text(json.dumps(ended) + "\n", encoding="utf-8")
+        except (OSError, TypeError, ValueError):
+            traceback.print_exc()  # the restart goes on: the page loses the jobs' answers, never a quilt
+
+    def take_on(self) -> None:
+        """List the jobs the home before this one handed on (`hand_on`), once."""
+        try:
+            said = json.loads(_carried().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            said = []
+        _carried().unlink(missing_ok=True)
+        for job in reversed(said if isinstance(said, list) else []):
+            if isinstance(job, dict) and isinstance(job.get("job"), str) and job.get("state") in ("done", "failed"):
+                self.jobs[job["job"]] = job
+
     def start_job(self, kind: str, work: Callable[[Callable[[str], None]], dict[str, Any]]) -> str:
-        """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, then `done` with what `work` answered or `failed` with `why` and `said`."""
+        """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, then `done` with what `work` answered or `failed` with `why` and `said`.
+
+        The thread runs `at_the_viewer`, since a job is the home page's request and a new thread starts outside the one that asked: a quilt made from a drop is the person's act whichever shell started the home.
+        """
         key = secrets.token_hex(6)
         job: dict[str, Any] = {"job": key, "kind": kind, "state": "running", "step": ""}
         self.jobs[key] = job
@@ -378,7 +410,9 @@ class Home:
 
         def go() -> None:
             try:
-                job.update(work(step), state="done")
+                with at_the_viewer():
+                    done = work(step)
+                job.update(done, state="done")
             except ApiError as exc:
                 job.update(state="failed", why=exc.code, said=exc.message)
             except Exception as exc:  # noqa: BLE001
@@ -397,6 +431,7 @@ class Home:
             self.claimed.enter_context(locked(registry.folder() / "home.lock", wait=0))
         except EnvError as exc:
             raise HomeRunning from exc
+        self.take_on()
         for clear in (recover, sweep):
             try:
                 clear()
@@ -432,13 +467,15 @@ class Home:
             traceback.print_exc()
 
     def run(self, reexec: Callable[[], None] | None = None) -> None:
-        """Keep the quilts the person left open served, once a second, until `stop`; once loom's own code has moved and been still for `SETTLE`, and no quilt is being made, call `reexec`."""
+        """Keep the quilts the person left open served, once a second, until `stop`; once loom's own code has moved and been still for `SETTLE`, and no quilt is being made and no job runs, hand the jobs that ended on and call `reexec`."""
         while not self.stopping.wait(1.0):
             self.beat()
             sup = self.supervisor
             moved = sup.stamp != self.code and time.monotonic() - sup.still_since >= SETTLE
-            if reexec is not None and moved and not self.makings.running:
+            running = self.makings.running or any(job["state"] == "running" for job in list(self.jobs.values()))
+            if reexec is not None and moved and not running:
                 self.close()
+                self.hand_on()
                 reexec()
 
     def close(self) -> None:

@@ -1,0 +1,11 @@
+# Contributing to the viewer
+
+The viewer is loom's: it is built here and vendored inside loom, and the two are one tool (`docs/design/principles.md`, P11). What it reads is what loom writes into `.loom/cache/site/`, specified in `docs/specs/`; a change to what crosses changes loom, the viewer and those specs in one commit, and regenerates the fixture.
+
+- Every page kind renders generically for unknown states, diagnostic codes, taxa, and labels; a new label in the manifest must not need a code change to appear.
+- `npm run check`, `npm run test:unit -- --run`, `npm run build`, and `npm run test:e2e` must pass; the end-to-end tests run against the vendored fixture in `tests/fixture/`, refreshed from the workspace with `docs/specs/tools/refresh-fixture.sh`, and the write and reading suites against a served quilt with the pages TeX made of it (`tests/pages/`, from `loom/scripts/gen_pages.py`).
+- To try a change, no vendoring is needed. Two ways, both against a running `loom serve` on a quilt you may write to (a copy, never one you care about):
+  - **The dev server, with hot reload.** `VIEWER_LOOM=http://127.0.0.1:PORT npm run dev:loom` proxies the write API and its stream, the build directory, the fetched works and the project's files to that server (`vite.config.ts`), so every control that writes can be tried; `npm run dev` alone still shows the static fixture and writes nothing. One limit: an HTML page of the quilt shown in a frame cannot tell this viewer of a link clicked or words selected in it, because the frames' origin speaks only to loom's own pages.
+  - **The built viewer, served by loom.** `npm run build`, then `loom serve --viewer PATH/TO/viewer/build`: the server reads the build on every request, so the next `npm run build` shows on a reload, and an open tab is told it is behind. It is for trying a change only: the server may be older than the viewer it hands out, which the default, a copy of the vendored bundle held from the start, exists to prevent.
+- A branch does not vendor the viewer into loom. The bundle loom ships (`loom/src/loom/assets/viewer/`, written by `loom/scripts/vendor_viewer.py`) is vendored at a release, and by CI on `main` (not built yet); until that is built, whoever merges vendors when `main` is to be used with a changed viewer.
+- Prose in comments and Markdown is never hard-wrapped.

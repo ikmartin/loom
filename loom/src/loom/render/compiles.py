@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from loom.scan.model import Diagnostic, Location
-from loom.tex.runner import CompileResult, stop_run, tex_errors
+from loom.tex.runner import CompileResult, fence_refused, stop_run, tex_errors
 
 #: The line of the log that says where TeX was when it stopped: `l.12 \hlind{...}`.
 _AT = re.compile(r"^l\.\d+ .*$", re.M)
@@ -159,7 +159,10 @@ def compile_problems(result: Any) -> list[Diagnostic]:
             continue
         res = CompileResult(False, "", log.parent, 1, errors=errors, log=log, cwd=root / result.base_of(doc))
         place = error_place(res, root) or {}
-        said = errors[0].removeprefix("!").strip().rstrip(".").rstrip()
+        said = (
+            fence_refused(errors[0], root / result.base_of(doc), root)
+            or errors[0].removeprefix("!").strip().rstrip(".").rstrip()
+        )
         if place.get("macro"):
             said += f" {place['macro']}"
         reading, line = place.get("file"), place.get("line")

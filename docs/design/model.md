@@ -138,7 +138,7 @@ The viewer's chat composer and agent launching are retired (plan 0.20.1): conver
 
 ## The viewer
 
-Arras shows what loom publishes and lets a person read and decide: read documents and works, follow links between them, see annotations and notes where they belong, review and accept. It writes nothing itself; every write goes through a control the publisher advertises, and only when the publisher serves it (P11). It works offline, from a static build, on any host.
+The viewer shows what loom publishes and lets a person read and decide: read documents and works, follow links between them, see annotations and notes where they belong, review and accept. It writes nothing itself; every write goes through a control the publisher advertises, and only when the publisher serves it (P11). It works offline, from a static build, on any host.
 
 The principles that govern it are the V and A sets. In short: open on the thing itself, show less, claim only what is known, and never lose the thing you followed a link from.
 

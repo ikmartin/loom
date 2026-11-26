@@ -34,7 +34,7 @@ def bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (b / "_app").mkdir(parents=True)
     (b / "index.html").write_text("<p>viewer</p>")
     (b / "_app" / "version.json").write_text(json.dumps({"version": "1"}))
-    monkeypatch.setenv("LOOM_ARRAS_BUNDLE", str(b))
+    monkeypatch.setenv("LOOM_VIEWER_BUNDLE", str(b))
     return b
 
 

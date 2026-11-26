@@ -2,11 +2,11 @@
 """Run the workspace's verification: one command, one table, CI's state last (docs/contributing.md).
 
 Usage:
-    scripts/verify [fast|full|paper|client] [--only loom|arras|docs] [--workers N]
-    scripts/verify --steps NAME[,NAME...] [--only loom|arras|docs] [--workers N]
+    scripts/verify [fast|full|paper|client] [--only loom|viewer|docs] [--workers N]
+    scripts/verify --steps NAME[,NAME...] [--only loom|viewer|docs] [--workers N]
 
-    fast     the everyday lane: loom lint, types and unit tier; arras check and vitest; the docs checks that judge what a change wrote
-    full     before a commit: fast, plus the checks that compare the working tree with git and with the generators' output, loom's TeX tier and every arras Playwright suite
+    fast     the everyday lane: loom lint, types and unit tier; the viewer's check and vitest; the docs checks that judge what a change wrote
+    full     before a commit: fast, plus the checks that compare the working tree with git and with the generators' output, loom's TeX tier and every viewer Playwright suite
     paper    the paper tier, which needs LOOM_PAPER_FIXTURES; run by hand
     client   the client tier: a quilt's generated agent configuration tried against the real Claude Code, which calls a hosted model on your account; run by hand
     --steps  exactly the named steps (the table's names without the lane, e.g. "pytest tex"), whatever their tier
@@ -14,9 +14,9 @@ Usage:
 
 CI runs this script and nothing else, each lane's workflow in `.github/workflows/` with the arguments it names (docs/contributing.md). Under GitHub Actions (`GITHUB_ACTIONS` set) a failing step's output is printed whole and the CI state is not printed.
 
-The machine is shared, so a run keeps to a budget of workers (`budget`): loom's pytest and the Playwright suites divide it, and a suite started by hand reads the same `VERIFY_WORKERS` (`arras/tests/sites.ts`). Under GitHub Actions there is no budget and every suite takes what it takes alone.
+The machine is shared, so a run keeps to a budget of workers (`budget`): loom's pytest and the Playwright suites divide it, and a suite started by hand reads the same `VERIFY_WORKERS` (`viewer/tests/sites.ts`). Under GitHub Actions there is no budget and every suite takes what it takes alone.
 
-Lanes run in parallel and the steps within a lane in order, except that consecutive steps marked `concurrent` run together once the steps before them are done: arras builds once, then its three Playwright suites and the figure script run at the same time, each on its own copy of that build and its own ports (`arras/tests/sites.ts`). Those ports are the machine's, so a run takes the first slot no other run or server holds, and keeps it until it ends. Every deselection and skip lives here with its reason, never in a plan.
+Lanes run in parallel and the steps within a lane in order, except that consecutive steps marked `concurrent` run together once the steps before them are done: the viewer builds once, then its three Playwright suites and the figure script run at the same time, each on its own copy of that build and its own ports (`viewer/tests/sites.ts`). Those ports are the machine's, so a run takes the first slot no other run or server holds, and keeps it until it ends. Every deselection and skip lives here with its reason, never in a plan.
 """
 
 from __future__ import annotations
@@ -37,11 +37,11 @@ ROOT = Path(__file__).resolve().parent.parent
 #: The unit tier: what needs no real TeX, paper, network or client, and does not compare the working tree with git or with a generator's output (`tree`), which a session with files not yet added, or a branch that leaves generated files to the integrator, fails for no fault of its change.
 UNIT = "not tex and not paper and not network and not client and not tree"
 LOOM_XDIST = ["-n", "auto", "--dist", "loadgroup"]
-# the one arras build of a run, which every Playwright suite copies; a slot gives the suites ports and scratch directories apart from a suite started by hand and from another worktree's run (arras/tests/sites.ts); `{slot}` is filled in by `in_slot`
-ARRAS_BUILD = ".tmp-e2e/slot-{slot}/bundle"
-ARRAS_SUITE_ENV = {"ARRAS_SLOT": "{slot}", "ARRAS_PREBUILT": str(ROOT / "arras" / ARRAS_BUILD)}
+# the one viewer build of a run, which every Playwright suite copies; a slot gives the suites ports and scratch directories apart from a suite started by hand and from another worktree's run (viewer/tests/sites.ts); `{slot}` is filled in by `in_slot`
+VIEWER_BUILD = ".tmp-e2e/slot-{slot}/bundle"
+VIEWER_SUITE_ENV = {"VIEWER_SLOT": "{slot}", "VIEWER_PREBUILT": str(ROOT / "viewer" / VIEWER_BUILD)}
 # where the figure script writes when verify runs it
-SHOTS_OUT = str(ROOT / "arras" / ".tmp-e2e" / "slot-{slot}" / "shots-out")
+SHOTS_OUT = str(ROOT / "viewer" / ".tmp-e2e" / "slot-{slot}" / "shots-out")
 #: The slots a run may take; slot 0 is a suite started by hand, and CI's fresh runner takes slot 1, where its workflow looks for the build.
 SLOTS = range(1, 60)
 #: Bound for the length of a run to claim a slot: the base port no suite serves on, shifted by the slot as the others are.
@@ -81,11 +81,11 @@ STEPS = [
     Step("loom", "pytest paper", "loom", ["uv", "run", "pytest", *LOOM_XDIST, "-m", "paper"], ("paper",)),
     # choosing the tier is the consent its gate stands for, so the step sets it; one turn at a time, not on xdist workers, since each spends on the account of whoever runs it
     Step("loom", "pytest client", "loom", ["uv", "run", "pytest", "-m", "client"], ("client",), env={"LOOM_CLIENT_TESTS": "1"}),
-    Step("arras", "svelte-check", "arras", ["npm", "run", "check"], ("fast", "full")),
-    Step("arras", "vitest", "arras", ["npx", "vitest", "--run"], ("fast", "full")),
-    Step("arras", "build", "arras", ["node", "scripts/bundle.mjs", ARRAS_BUILD], ("full",)),
+    Step("viewer", "svelte-check", "viewer", ["npm", "run", "check"], ("fast", "full")),
+    Step("viewer", "vitest", "viewer", ["npx", "vitest", "--run"], ("fast", "full")),
+    Step("viewer", "build", "viewer", ["node", "scripts/bundle.mjs", VIEWER_BUILD], ("full",)),
     *(
-        Step("arras", name, "arras", cmd, ("full",), env=ARRAS_SUITE_ENV, concurrent=True)
+        Step("viewer", name, "viewer", cmd, ("full",), env=VIEWER_SUITE_ENV, concurrent=True)
         for name, cmd in (
             ("e2e", ["npx", "playwright", "test"]),
             ("write", ["npm", "run", "test:write"]),
@@ -94,7 +94,7 @@ STEPS = [
     ),
     # the figure script, run to check it still runs, into scratch rather than over the committed figures, which a re-run does not reproduce byte for byte; a stale script otherwise surfaces only at the next re-shoot
     *(
-        Step("arras", name, "arras", cmd, ("full",), env=ARRAS_SUITE_ENV | {"ARRAS_SHOTS_OUT": SHOTS_OUT}, concurrent=True)
+        Step("viewer", name, "viewer", cmd, ("full",), env=VIEWER_SUITE_ENV | {"VIEWER_SHOTS_OUT": SHOTS_OUT}, concurrent=True)
         for name, cmd in (
             ("shots", ["npm", "run", "shots"]),
         )
@@ -191,12 +191,12 @@ def share_workers(chosen: list[Step], workers: int | None) -> list[Step]:
 
 
 def slot_ports() -> list[int]:
-    """The base ports the suites serve on, from `arras/tests/sites.ts`, which owns them."""
-    source = (ROOT / "arras" / "tests" / "sites.ts").read_text(encoding="utf-8")
+    """The base ports the suites serve on, from `viewer/tests/sites.ts`, which owns them."""
+    source = (ROOT / "viewer" / "tests" / "sites.ts").read_text(encoding="utf-8")
     table = re.search(r"const PORTS = \{(.*?)\}", source)
     ports = [int(p) for p in re.findall(r":\s*(\d+)", table.group(1))] if table else []
     if not ports or CLAIM_PORT in ports:
-        raise SystemExit(f"verify: arras/tests/sites.ts names no PORTS table apart from the claim port {CLAIM_PORT}")
+        raise SystemExit(f"verify: viewer/tests/sites.ts names no PORTS table apart from the claim port {CLAIM_PORT}")
     return ports
 
 
@@ -312,7 +312,7 @@ def ci_state() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("tier", nargs="?", choices=("fast", "full", "paper", "client"), help="default fast")
-    parser.add_argument("--only", choices=("loom", "arras", "docs"))
+    parser.add_argument("--only", choices=("loom", "viewer", "docs"))
     parser.add_argument("--steps", help="comma-separated step names to run whatever their tier, instead of a tier")
     parser.add_argument("--workers", type=int, help="test workers the run may use in all; default from the cores and the load")
     args = parser.parse_args()
@@ -332,13 +332,13 @@ def main() -> int:
     if workers is not None:
         print(f"{workers} test workers ({os.cpu_count() or 4} cores; --workers or VERIFY_WORKERS chooses)", flush=True)
     # held until the process ends; only a run that serves anything needs one
-    if any("ARRAS_SLOT" in s.env for s in chosen):
+    if any("VIEWER_SLOT" in s.env for s in chosen):
         slot, claim = claim_slot()
         chosen = [in_slot(s, slot) for s in chosen]
         # no build in this run means none in this slot to copy, so each suite's `scripts/bundle.mjs` builds, under its lock
         if not any(s.name == "build" for s in chosen):
-            chosen = [replace(s, env={k: v for k, v in s.env.items() if k != "ARRAS_PREBUILT"}) for s in chosen]
-        print(f"arras suites in slot {slot}, on ports from {min(slot_ports()) + 100 * slot}", flush=True)
+            chosen = [replace(s, env={k: v for k, v in s.env.items() if k != "VIEWER_PREBUILT"}) for s in chosen]
+        print(f"viewer suites in slot {slot}, on ports from {min(slot_ports()) + 100 * slot}", flush=True)
     lanes: dict[str, list[Step]] = {}
     for s in chosen:
         lanes.setdefault(s.lane, []).append(s)

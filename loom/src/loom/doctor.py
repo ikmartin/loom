@@ -1,4 +1,4 @@
-"""The checks behind `loom doctor`: the machine's tools and what they can do, the author name, the arras bundle, and, inside a quilt, the quilt's own setup.
+"""The checks behind `loom doctor`: the machine's tools and what they can do, the author name, the viewer bundle, and, inside a quilt, the quilt's own setup.
 
 Every item is `ok`, `warn` (it works, but the person will hit something) or `fail` (a command they need will refuse or misbehave), and every item that is not ok carries a one-line remedy. The quilt's items call the functions the owning commands use -- `loom upgrade`, `loom lint` -- rather than restating them. Tools are found through shutil.which, so tests point PATH at the fake TeX shim; the probes run at once and share one deadline, PROBE_TIMEOUT, so a hung tool is reported rather than waited on.
 """
@@ -45,7 +45,7 @@ REPAIR = "Repair TeX: loom doctor --repair installs loom's own TeX, Ghostscript 
 _TEX_REMEDIES = (TEX, "tlmgr install biber", "tlmgr install make4ht tex4ht", *((POPPLER, GHOSTSCRIPT) if _MAC else ()))
 #: Seconds biber is given on top of `PROBE_TIMEOUT`: TeX Live's biber unpacks itself on its first run, which takes longer.
 BIBER_GRACE = 30.0
-VENDOR = "cd arras && npm run build && cd ../loom && uv run python scripts/vendor_arras.py ../arras/build"
+VENDOR = "cd viewer && npm run build && cd ../loom && uv run python scripts/vendor_viewer.py ../viewer/build"
 
 
 @dataclass
@@ -218,15 +218,15 @@ class Report:
 
 
 def _bundle_words(source: str, version: str) -> str:
-    """Which viewer `loom serve` serves, in words: where it comes from, and the arras commit it was built from and when."""
-    from loom.arras_bundle import STAMP
+    """Which viewer `loom serve` serves, in words: where it comes from, and the commit it was built from and when."""
+    from loom.viewer_bundle import STAMP
 
     whose = _whose(source)
     m = STAMP.fullmatch(version.strip())
     when = re.search(r"vendored (\d{4}-\d{2}-\d{2})", version)
     if m is None:
         return f"{whose}, {version}" if version else whose
-    return f"{whose}, built from arras {m.group(1)}" + (f" on {when.group(1)}" if when else "")
+    return f"{whose}, built from commit {m.group(1)}" + (f" on {when.group(1)}" if when else "")
 
 
 def _whose(source: str) -> str:
@@ -531,8 +531,8 @@ def check_author(quilt: Any) -> Item:
 
 
 def check_bundle() -> Item:
-    """Which arras bundle `loom serve` would serve, and whether it reads this loom's manifests."""
-    from loom.arras_bundle import (
+    """Which viewer bundle `loom serve` would serve, and whether it reads this loom's manifests."""
+    from loom.viewer_bundle import (
         BundleEnvError,
         checkout_of,
         env_problem,
@@ -552,27 +552,27 @@ def check_bundle() -> Item:
         "source": info.source if info else None,
         "path": str(info.path) if info else None,
     }
-    item = Item("arras bundle", OK, REQUIRED, _bundle_words(info.source, info.version) if info else "", "", extra)
+    item = Item("viewer bundle", OK, REQUIRED, _bundle_words(info.source, info.version) if info else "", "", extra)
     bad_env = env_problem()
     if bad_env:
         item.status = FAIL
         item.detail = f"{bad_env}; loom serve refuses"
-        item.remedy = "point LOOM_ARRAS_BUNDLE at a built arras (the directory holding index.html), or unset it"
+        item.remedy = "point LOOM_VIEWER_BUNDLE at a built viewer (the directory holding index.html), or unset it"
     elif info is None:
         item.status, item.detail = FAIL, "not found: loom serve refuses"
         item.remedy = (
-            VENDOR if checkout else "reinstall loom, whose package carries the viewer, or set LOOM_ARRAS_BUNDLE"
+            VENDOR if checkout else "reinstall loom, whose package carries the viewer, or set LOOM_VIEWER_BUNDLE"
         )
     elif stamp is None:
         item.status = WARN
-        item.detail += ": its stamp names no arras commit, so whether it is current cannot be told"
-        item.remedy = "use a bundle loom/scripts/vendor_arras.py stamped"
+        item.detail += ": its stamp names no commit, so whether it is current cannot be told"
+        item.remedy = "use a bundle loom/scripts/vendor_viewer.py stamped"
     elif checkout is not None:
         why = staleness(checkout, stamp, PROBE_TIMEOUT)
         if why:
             item.status, item.detail = WARN, f"{_whose('vendored')}, {'; '.join(why)}"
-            # vendor_arras.py refuses an arras with uncommitted changes
-            item.remedy = ("commit arras, then " if stamp.endswith("-dirty") else "") + VENDOR
+            # vendor_viewer.py refuses a viewer with uncommitted changes
+            item.remedy = ("commit the viewer's changes, then " if stamp.endswith("-dirty") else "") + VENDOR
     return item
 
 

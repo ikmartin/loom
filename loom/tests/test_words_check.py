@@ -21,7 +21,7 @@ def words(tmp_path, monkeypatch):
     git("init", "-q")
     git("config", "user.email", "t@example.org")
     git("config", "user.name", "t")
-    old = tmp_path / "arras" / "src" / "Old.svelte"
+    old = tmp_path / "viewer" / "src" / "Old.svelte"
     old.parent.mkdir(parents=True)
     old.write_text("<p>Some words a person reads here, and more of them.</p>\n" * 20)
     git("add", "-A")
@@ -31,15 +31,21 @@ def words(tmp_path, monkeypatch):
 
 def test_a_rename_moves_a_listed_component(words):
     module, git, old = words
-    git("mv", "arras/src/Old.svelte", "arras/src/New.svelte")
-    assert module.moved_since("HEAD", {"arras/src/New.svelte"}) == {"arras/src/Old.svelte": "arras/src/New.svelte"}
+    git("mv", "viewer/src/Old.svelte", "viewer/src/New.svelte")
+    assert module.moved_since("HEAD", {"viewer/src/New.svelte"}) == {"viewer/src/Old.svelte": "viewer/src/New.svelte"}
+
+
+def test_a_component_whose_folder_moved_keeps_its_place(words):
+    module, git, old = words
+    git("mv", "viewer", "client")
+    assert module.moved_since("HEAD", {"client/src/Old.svelte"}) == {"viewer/src/Old.svelte": "client/src/Old.svelte"}
 
 
 def test_a_copy_leaves_its_listed_source_in_place(words):
     module, git, old = words
     (old.parent / "Copy.svelte").write_text(old.read_text())
     git("add", "-A")
-    assert module.moved_since("HEAD", {"arras/src/Old.svelte"}) == {}
+    assert module.moved_since("HEAD", {"viewer/src/Old.svelte"}) == {}
 
 
 def test_a_copy_whose_source_left_the_list_is_a_move(words):
@@ -47,7 +53,9 @@ def test_a_copy_whose_source_left_the_list_is_a_move(words):
     (old.parent / "Moved.svelte").write_text(old.read_text())
     old.write_text("<script>\n\timport X from './Moved.svelte';\n</script>\n\n<X />\n")
     git("add", "-A")
-    assert module.moved_since("HEAD", {"arras/src/Moved.svelte"}) == {"arras/src/Old.svelte": "arras/src/Moved.svelte"}
+    assert module.moved_since("HEAD", {"viewer/src/Moved.svelte"}) == {
+        "viewer/src/Old.svelte": "viewer/src/Moved.svelte"
+    }
 
 
 def test_an_attachment_in_a_tag_is_read(words):

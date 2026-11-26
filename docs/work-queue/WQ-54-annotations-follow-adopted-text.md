@@ -1,6 +1,6 @@
 # WQ-54 · Open annotations follow the text a person adopts
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 

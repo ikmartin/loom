@@ -219,6 +219,24 @@ def test_a_link_to_a_file_outside_the_quilt_is_neither_read_nor_written_by_loom_
     assert part.read_bytes() == was
 
 
+def test_a_file_the_fence_kept_out_is_said_as_that_by_a_fenced_compile(tmp_path: Path) -> None:
+    """A link in the document's folder to a file outside the quilt fails a fenced compile, PDF and HTML alike, with the fence named as the reason and not with TeX's "not found"."""
+    from loom.tex.tex4ht import compile_html
+
+    outside = _outside(tmp_path)
+    q = tmp_path / "q"
+    (q / "drafting").mkdir(parents=True)
+    (q / "drafting/part.tex").symlink_to(outside / "secret.tex")
+    (q / "drafting/main.tex").write_text(
+        "\\documentclass{article}\\begin{document}\\input{part}\\end{document}\n", encoding="utf-8"
+    )
+    said = "the fence kept TeX from reading part.tex, which is outside the quilt; put a copy of it in the document's folder"
+    res = compile_document(q, "drafting", "drafting/main.tex", tmp_path / "pdf")
+    assert not res.ok and "not found" in res.errors[0] and res.first_error == said
+    page = compile_html(q, "drafting", "drafting/main.tex", tmp_path / "html", envs=[])
+    assert page.first_error == said
+
+
 @pytest.mark.parametrize("where", [".git/config", ".loom/records/kept.txt"])
 def test_a_link_into_a_dot_named_folder_of_the_quilt_is_left_out_of_a_fenced_stage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, where: str

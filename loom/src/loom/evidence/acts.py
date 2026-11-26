@@ -1,6 +1,6 @@
 """The acts that write the evidence log's records (`docs/specs/evidence.md` §3): how a node was made, a person's match of it with its paper, an agent's correction and the person's taking or declining it, a person's own correction, and a person's attestation of a Lean statement.
 
-This module is the one writer of these records, for this lane and the node store's alike: digesting and filling a stub write their `digested` through `digested`, and an agent's correction goes through `propose`, which alone decides whether it is written at once or waits. Each act holds the library's lock and then the evidence log's, the one order every writer of both takes, and decides under them from the texts now; a node it writes goes through the store's checks (`store.write_node`), and a refusal leaves the store and the log as they were.
+This module is the one writer of these records, for this lane and the node store's alike: loom's digest writes its `digested` through `digested`, an agent's filled stub or proposed node is written and recorded through `give`, and an agent's correction goes through `propose`, which alone decides whether it is written at once or waits. Each act holds the library's lock and then the evidence log's, the one order every writer of both takes, and decides under them from the texts now; a node it writes goes through the store's checks (`store.write_node`), and a refusal leaves the store and the log as they were.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from loom.evidence.web import Web
+    from loom.library.index import NodeIndex
     from loom.library.node import Node
     from loom.scan.scan import ScanResult
 
@@ -55,17 +56,17 @@ def _only(by: Who, kind: str) -> None:
         raise ActRefused(code, f"only {'a person' if kind == 'person' else 'an agent'} does this")
 
 
-def _text(root: Path, node: str) -> tuple[str, Node]:
-    """The node's hash and file now; refused when the library holds no statement or proof of that id."""
-    got = LibraryWeb(root).file(node)
+def _text(root: Path, node: str, library: LibraryWeb | None = None) -> tuple[str, Node]:
+    """The node's hash and file now, read through `library` where the caller holds one for this moment; refused when the library holds no statement or proof of that id."""
+    got = (library or LibraryWeb(root)).file(node)
     if got is None:
         raise ActRefused("no-such-node", f"the library has no statement or proof {node}")
     return got
 
 
-def _shown(root: Path, node: str, shown: str) -> Node:
+def _shown(root: Path, node: str, shown: str, library: LibraryWeb | None = None) -> Node:
     """The node now, when its text is still the one the person was shown; refused `changed` otherwise and `stub` for a text not read."""
-    now, found = _text(root, node)
+    now, found = _text(root, node, library)
     if now != shown:
         raise ActRefused("changed", f"{node} has changed since it was shown")
     if found.empty:
@@ -179,10 +180,10 @@ def _checked(kind: str, by: Who, **fields: Any) -> None:
 _TAKER = Who("person", "the person")
 
 
-def _takeable(node: str, data: bytes, root: Path) -> tuple[Node, dict[str, Any]]:
+def _takeable(node: str, data: bytes, root: Path, index: NodeIndex | None = None) -> tuple[Node, dict[str, Any]]:
     """A correction's file as `take` would write it, and the document it is compared with; refused as `take` refuses it: `refused` where the file fails the library's checks, sets or clears `awaiting` or numbers an anchor that waits (loom's digest alone does, after the person's compile), or the `compared` record taking it makes would be refused by the log, `stub` where it gives the node no text, `no-document` where its work holds no document.
 
-    `propose` calls it before filing a correction and `take` before writing one, so a correction is filed only where it can be taken, and the record is checked before any file changes.
+    `propose` calls it before filing a correction and `take` before writing one, so a correction is filed only where it can be taken, and the record is checked before any file changes; `index`, one the caller holds open, is the library it is checked against.
     """
     from loom.library.checks import check_file
     from loom.library.store import check_against, read
@@ -200,7 +201,7 @@ def _takeable(node: str, data: bytes, root: Path) -> tuple[Node, dict[str, Any]]
             f"the proposed file changes which of {node}'s anchors wait for a compile, which only loom's digest does",
         )
     # and against the library as it stands, as the store will check it when it is written
-    problems = check_against(root, new)
+    problems = check_against(root, new, index)
     if problems:
         raise ActRefused("refused", "the proposed file fails the library's checks against the library now", problems)
     if new.empty:
@@ -212,13 +213,18 @@ def _takeable(node: str, data: bytes, root: Path) -> tuple[Node, dict[str, Any]]
     return new, document
 
 
-def take_refusal(root: Path, proposal: str) -> ActRefused | None:
-    """Why `take` would refuse an agent's correction now, by take's own checks, writing nothing; None where it would take it: for Review, which offers the take only then, a correction filed while it could be taken may stop being one, as when a result its file uses leaves the library."""
+def take_refusal(
+    root: Path, proposal: str, index: NodeIndex | None = None, library: LibraryWeb | None = None
+) -> ActRefused | None:
+    """Why `take` would refuse an agent's correction now, by take's own checks, writing nothing; None where it would take it: for Review, which offers the take only then, a correction filed while it could be taken may stop being one, as when a result its file uses leaves the library.
+
+    Review passes the one `index` and `library` it reads all its corrections through; without them each call opens and refreshes an index, which stats every node file, and lists the nodes folder.
+    """
     try:
         found = _proposal(root, proposal)
         assert found.on is not None
-        _shown(root, found.on.name, found.on.hash)
-        _takeable(found.on.name, str(found.get("bytes")).encode("utf-8"), root)
+        _shown(root, found.on.name, found.on.hash, library)
+        _takeable(found.on.name, str(found.get("bytes")).encode("utf-8"), root, index)
     except ActRefused as exc:
         return exc
     return None
@@ -231,12 +237,12 @@ def _to_store(found: Node) -> str:
     return node_hash(node_bytes(found))
 
 
-def _store(root: Path, found: Node) -> str:
+def _store(root: Path, found: Node, *, new: bool = False) -> str:
     """Write a node through the store's checks; its new hash, or refused with the checks' diagnostics."""
     from loom.library.store import NodeRefused, write_node
 
     try:
-        return write_node(root, found)
+        return write_node(root, found, new=new)
     except NodeRefused as exc:
         raise ActRefused("refused", "the node's file fails the library's checks", list(exc.diagnostics)) from None
 
@@ -284,6 +290,62 @@ def digested(root: Path, node: str, written: str, by: Who, how: str, source: dic
         if found.empty:
             raise ActRefused("stub", f"{node} has no text yet: a stub is made by no one")
         return _write(root, "digested", by, on=Subject("node", node, digest), how=how, **{"from": source})
+
+
+#: How an agent's own reading of a work makes a node's text: from its PDF's pages, or from its TeX source.
+GIVEN = ("transcribed", "read")
+
+
+def give(root: Path, node: Node, by: Who, how: str, source: dict[str, Any], *, fresh: bool = False) -> Record:
+    """An agent gives a node its text: a stub filled, or with `fresh` a node proposed at a place no node holds, written through the store's checks and recorded `digested` as the agent's.
+
+    The caller has checked that the text's words stand in `source`; this act checks the rest, and a refusal leaves the store and the log as they were.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    node : Node
+        The statement or proof as it is to be written: a stub's file with its text, pages and what it points at given, nothing else of it changed; or, with `fresh`, a new node.
+    by : Who
+        An agent.
+    how : str
+        One of `GIVEN`: `transcribed` from the PDF's pages, `read` from the TeX source.
+    source : dict
+        The work's document read, `{ref, pdf, pages}` or `{ref, tex}`; `ref` must be the node's work.
+    fresh : bool, default False
+        A node the library does not hold yet, refused where it holds its id.
+
+    Returns
+    -------
+    Record
+        The `digested` record on the text written.
+
+    Raises
+    ------
+    ActRefused
+        `agent-only`; `no-such-node` for a stub the library does not hold; `refused` for a node that has its text already (correct it with `propose`), more than a stub's text given, an anchor made to wait, a source not the node's work, or a file the store's checks refuse.
+    """
+    _only(by, "agent")
+    if how not in GIVEN:
+        raise ActRefused("refused", f"an agent's text is {' or '.join(GIVEN)}, not {how}")
+    if source.get("ref") != node.source:
+        raise ActRefused("refused", f"{node.id} is read from its own work, not {source.get('ref')}")
+    if node.empty:
+        raise ActRefused("stub", f"the text given to {node.id} is empty")
+    if node.awaiting:
+        raise ActRefused("refused", f"{node.id} makes an anchor wait for a compile, which only loom's digest does")
+    with _held(root):
+        if not fresh:
+            _now, was = _text(root, node.id)
+            if not was.empty:
+                raise ActRefused("refused", f"{node.id} has its text already; propose a correction of it")
+            given = replace(node, body=was.body, pages=was.pages, uses=was.uses, mentions=was.mentions)
+            if given != was:
+                raise ActRefused("refused", f"filling {node.id} gives it its text, pages and pointers, and changes nothing else of it")  # fmt: skip
+        _checked("digested", by, on=Subject("node", node.id, _to_store(node)), how=how, **{"from": source})
+        written = _store(root, node, new=fresh)
+        return _write(root, "digested", by, on=Subject("node", node.id, written), how=how, **{"from": source})
 
 
 def only_numbers(was: Node, new: Node) -> str | None:

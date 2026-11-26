@@ -1,6 +1,6 @@
 # WQ-51 · A view's macros stay its own
 
-**Repo:** arras
+**Repo:** viewer
 
 ## Trigger
 
@@ -8,7 +8,7 @@ A quilt other than the synthetic fixture has two macro sets in its manifest that
 
 ## Why deferred
 
-The leak shows only when two sets disagree on a name, and no real quilt's sets do yet. Plan 0.16 found the mechanism while fixing the landmark formula bug: `typeset()` in `arras/src/lib/math/mathjax.ts` gives a fragment its macros by typesetting one formula of `\renewcommand` definitions, off the page, just before the fragment's own formulas, and MathJax keeps those definitions in one page-wide table. Every view typeset afterwards, in either pane, sees the last set defined, so a document opened after another can render a shared macro name with the other's meaning. The review comparison already avoids this: it passes macros through `isolatedMacros` (`arras/src/lib/math/scoped.ts`) and places nothing in a formula.
+The leak shows only when two sets disagree on a name, and no real quilt's sets do yet. Plan 0.16 found the mechanism while fixing the landmark formula bug: `typeset()` in `viewer/src/lib/math/mathjax.ts` gives a fragment its macros by typesetting one formula of `\renewcommand` definitions, off the page, just before the fragment's own formulas, and MathJax keeps those definitions in one page-wide table. Every view typeset afterwards, in either pane, sees the last set defined, so a document opened after another can render a shared macro name with the other's meaning. The review comparison already avoids this: it passes macros through `isolatedMacros` (`viewer/src/lib/math/scoped.ts`) and places nothing in a formula.
 
 ## Rough design
 
@@ -18,4 +18,4 @@ Give every fragment that names a macro set the scoped path the comparison uses: 
 
 ## Blast radius
 
-`arras/src/lib/math/mathjax.ts` (`typeset`, `define`, `macroPrefix`), `arras/src/lib/math/scoped.ts`, the callers in `fragments/Fragment.svelte` and `NodePreview.svelte`; an e2e test on the fixture's `\Hom`.
+`viewer/src/lib/math/mathjax.ts` (`typeset`, `define`, `macroPrefix`), `viewer/src/lib/math/scoped.ts`, the callers in `fragments/Fragment.svelte` and `NodePreview.svelte`; an e2e test on the fixture's `\Hom`.

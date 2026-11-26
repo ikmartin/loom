@@ -16,6 +16,7 @@ import pytest
 
 from loom.app import registry, server, supervise
 from loom.app.server import Home
+from tests.helpers import PATIENCE
 from tests.unit.app.conftest import until
 from tests.unit.render._serve import get, post
 
@@ -186,6 +187,36 @@ def test_a_list_the_home_cannot_read_is_said_and_left_as_it_is(home: Home, tmp_p
     assert not any(c in refused["error"]["message"] for c in ("`", "--", "/"))  # type: ignore[index]  # words, no command or path
     home.beat()
     assert listed.read_text() == "{"
+
+
+def test_the_jobs_that_ended_outlive_the_homes_restart_after_an_update_which_waits_on_one_running(
+    home: Home, bundle: Path
+) -> None:
+    go = threading.Event()
+    ended = home.start_job("repair", lambda step: {"tex": "mine"})
+    held = home.start_job("repair", lambda step: {"tex": "loom"} if go.wait(PATIENCE) else {})
+    until(lambda: home.jobs[ended]["state"] == "done", "the first job ended")
+    home.code = (0, 0)  # loom's code moved under the home long ago
+    home.supervisor.still_since = time.monotonic() - 3600
+    restarted = threading.Event()
+
+    def reexec() -> None:
+        restarted.set()
+        home.stopping.set()
+
+    threading.Thread(target=home.run, args=(reexec,), daemon=True).start()
+    time.sleep(2.5)
+    assert not restarted.is_set()
+    go.set()
+    until(restarted.is_set, "the restart once no job ran")
+    again = Home(bundle, port=0, extra=("--no-compile",))
+    again.listen()
+    try:
+        jobs: list[dict[str, object]] = call(again, "quilt-list")[1]["jobs"]  # type: ignore[assignment]
+        assert [(j["job"], j["state"], j["tex"]) for j in jobs] == [(held, "done", "loom"), (ended, "done", "mine")]
+    finally:
+        again.stop()
+    assert not (registry.folder() / "jobs.json").exists()
 
 
 def test_the_homes_loop_goes_on_past_any_fault(home: Home, monkeypatch: pytest.MonkeyPatch) -> None:

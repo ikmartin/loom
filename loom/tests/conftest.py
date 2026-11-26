@@ -42,6 +42,8 @@ def _real_bin(tool: str) -> Path | None:
 
 
 REAL_TEX_BIN = _real_bin("latexmk")
+#: elan's home on this machine, read before a test's HOME is replaced, which the Lean tier keeps so it finds the toolchain loom pins.
+REAL_ELAN = Path(os.environ.get("ELAN_HOME") or Path.home() / ".elan")
 REAL_POPPLER_BIN = _real_bin("pdftotext")
 NOTES = Path.home() / "notes"
 
@@ -102,7 +104,7 @@ def par_cache(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(autouse=True)
 def isolated_env(request: pytest.FixtureRequest, tmp_path: Path, fake_bin: Path, par_cache: Path) -> Iterator[Path]:
-    """Isolate PATH, HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, every TeX tree, every LOOM_* variable but the tier gates and every agent marker; yield the temporary HOME. `tex` puts the real TeX first on PATH, `poppler` the real pdftotext, and each skips when it is absent.
+    """Isolate PATH, HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, every TeX tree, elan's home, every LOOM_* variable but the tier gates and every agent marker; yield the temporary HOME. `tex` puts the real TeX first on PATH, `poppler` the real pdftotext, `lean` keeps the real elan's home, and each skips when what it needs is absent.
 
     The isolation is a `MonkeyPatch` of its own, undone after the test's: a test's `monkeypatch.undo()` takes back only what the test patched, so no test ever runs on in the shell's own HOME or with the markers of an agent that runs the suite.
     """
@@ -158,6 +160,14 @@ def isolated_env(request: pytest.FixtureRequest, tmp_path: Path, fake_bin: Path,
     monkeypatch.setattr("loom.overleaf.PROTOCOLS", ("https", "http", "file"))
     # the dialog that confirms a new-note command is never raised on the machine running the suite: unanswered, it is Cancel, and a test that needs Set says so
     monkeypatch.setattr("loom.notes.confirm", lambda command, quilt: False)
+    if request.node.get_closest_marker("lean"):
+        from loom.formal.install import TOOLCHAIN
+
+        if not (REAL_ELAN / "toolchains" / TOOLCHAIN.replace(":", "---").replace("/", "--") / "bin" / "lake").is_file():
+            pytest.skip(f"Lean tier: {TOOLCHAIN} is not installed under {REAL_ELAN}")
+        monkeypatch.setenv("ELAN_HOME", str(REAL_ELAN))
+    else:
+        monkeypatch.delenv("ELAN_HOME", raising=False)
     if not request.node.get_closest_marker("network"):
         monkeypatch.setattr(socket.socket, "connect", _loopback_only(socket.socket.connect))
     # a fresh shim's first run waits on macOS for the system's check of a new executable, which a parallel suite can make longer than doctor's timeout; the hang test sets its own

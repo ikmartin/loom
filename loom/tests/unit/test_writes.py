@@ -722,6 +722,103 @@ def test_a_commit_put_back_while_a_link_cannot_be_followed_raises_its_own_failur
     assert (root / "real.md").read_text(encoding="utf-8") == "before\n" and (root / "link.md").is_symlink()
 
 
+def test_a_temporary_the_failed_commit_cannot_remove_neither_masks_its_failure_nor_is_left_silently(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A commit that fails, whose temporary cannot be removed just then (its folder being swapped), raises its own failure rather than the removal's, and leaves the act begun, so recovery clears the temporary and undoes the act."""
+    import errno
+
+    root, history = q
+    real_rename, real_unlink, real_os_unlink, calls = writes._rename, Path.unlink, os.unlink, [0]
+
+    def rename(tmp: Path, target: Path) -> None:
+        calls[0] += 1
+        if calls[0] == 2:
+            raise RuntimeError("the disk is full")
+        real_rename(tmp, target)
+
+    def swapped(name: str) -> bool:
+        return name.startswith(".b.tex.") and name.endswith(writes.TEMP)
+
+    def unlink(self: Path, missing_ok: bool = False) -> None:
+        if swapped(self.name):
+            raise OSError(errno.EBUSY, "the folder is being swapped", str(self))
+        real_unlink(self, missing_ok=missing_ok)
+
+    def os_unlink(path: Any, *args: Any, **kw: Any) -> None:
+        if swapped(os.path.basename(path)):
+            raise OSError(errno.EBUSY, "the folder is being swapped", path)
+        real_os_unlink(path, *args, **kw)
+
+    monkeypatch.setattr(writes, "_rename", rename)
+    monkeypatch.setattr(Path, "unlink", unlink)
+    monkeypatch.setattr(writes.os, "unlink", os_unlink)
+    with pytest.raises(RuntimeError, match="the disk is full"), writes.act(root, history, "restore") as w:
+        w.replace("drafting/a.tex", b"A\n")
+        w.replace("drafting/b.tex", b"B\n")
+    monkeypatch.undo()
+    assert (root / "drafting/a.tex").read_bytes() == b"one\r\ntwo\r\nthree\r\n"
+    assert (root / "drafting/b.tex").read_bytes() == b"alpha\nbeta\n"
+    assert len(temps(root)) == 1 and [e["kind"] for e in writes.unsettled(root, history)] == ["restore"]
+    (said,) = writes.recover(root, history)
+    assert said.startswith("undid restore"), said
+    assert not temps(root) and not writes.unsettled(root, history)
+
+
+def _moved_once_checked(monkeypatch: pytest.MonkeyPatch, move: Any) -> None:
+    """Run `move` once, the instant after the write of `x.md` checks it may write the file: a folder on its way renamed or swapped between the door's judgment and its write."""
+    real, moved = os.access, [False]
+
+    def access(path: Any, how: int, *args: Any, **kw: Any) -> bool:
+        ok = real(path, how, *args, **kw)
+        if os.path.basename(path) == "x.md" and not moved[0]:
+            moved[0] = True
+            move()
+        return ok
+
+    monkeypatch.setattr(writes.os, "access", access)
+
+
+def test_the_folder_of_a_file_an_act_replaces_is_never_made_again_once_it_is_gone(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A folder renamed away while the act writes the file in it is not made again: the act is refused (`changed`), the person's folder keeps its file, and no folder of loom's stands in its place."""
+    root, history = q
+    (root / "notes/d").mkdir(parents=True)
+    (root / "notes/d/x.md").write_bytes(b"before\n")
+    _moved_once_checked(monkeypatch, lambda: (root / "notes/d").rename(root / "notes/aside"))
+    with pytest.raises(WriteRefused) as exc, writes.act(root, history, "restore") as w:
+        w.replace("notes/d/x.md", b"after\n")
+    monkeypatch.undo()
+    assert exc.value.code == "changed"
+    assert not (root / "notes/d").exists() and (root / "notes/aside/x.md").read_bytes() == b"before\n"
+    assert not temps(root) and events(history) == ["begin", "aborted"]
+
+
+def test_a_folder_swapped_for_a_link_once_opened_is_never_written_through(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A folder swapped for a link to elsewhere, holding the same bytes, after the act opened it is not written through: the temporary is only in the folder opened, so the act is refused (`changed`) and neither file changes."""
+    root, history = q
+    (root / "notes/d").mkdir(parents=True)
+    (root / "notes/d/x.md").write_bytes(b"before\n")
+    elsewhere = root.parent / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "x.md").write_bytes(b"before\n")
+
+    def swap() -> None:
+        (root / "notes/d").rename(root / "notes/aside")
+        (root / "notes/d").symlink_to(elsewhere)
+
+    _moved_once_checked(monkeypatch, swap)
+    with pytest.raises(WriteRefused) as exc, writes.act(root, history, "restore") as w:
+        w.replace("notes/d/x.md", b"after\n")
+    monkeypatch.undo()
+    assert exc.value.code == "changed"
+    assert (elsewhere / "x.md").read_bytes() == b"before\n" and (root / "notes/aside/x.md").read_bytes() == b"before\n"
+    assert [p.name for p in elsewhere.iterdir()] == ["x.md"] and not temps(root / "notes/aside")
+
+
 def test_a_link_that_cannot_be_followed_is_written_through_by_no_act(
     q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

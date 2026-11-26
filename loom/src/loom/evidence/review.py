@@ -16,6 +16,7 @@ from loom.evidence.status import Status, brief, gate, status
 from loom.evidence.web import DraftWeb, Here, Joined, LibraryWeb, Web
 
 if TYPE_CHECKING:
+    from loom.library.index import NodeIndex
     from loom.scan.scan import ScanResult
 
 #: Each kind, by its key, in its rank by who waits: an agent stopped until the person acts first, then what a draft rests on, then the rest (the integrator's ruling). The column draws them alphabetically by the viewer's words; this order is the list's under Everything.
@@ -289,10 +290,11 @@ def _check(
     No draft rests on a library result until citations resolve to results, so `rests` names no document yet and the rows are in the order of their works.
     """
     from loom.evidence.subjects import is_node
+    from loom.library.index import opened
     from loom.library.store import node_ids, read
 
     by_work: dict[str, list[dict[str, Any]]] = {}
-    corrections: list[Row] = []
+    proposals: list[tuple[str, Any, str]] = []
     for node in node_ids(root):
         if not is_node(node, "statement"):
             continue
@@ -313,7 +315,12 @@ def _check(
                 }  # fmt: skip
             )
         if found.proposal is not None:
-            corrections.append(_correction(root, evidence, library, node, held[1], found.proposal))
+            proposals.append((node, held[1], found.proposal))
+    corrections: list[Row] = []
+    if proposals:
+        # one index and one library for every correction's take check: one per row stats every node file and lists the folder each time
+        with opened(root) as index:
+            corrections = [_correction(root, evidence, library, n, held, p, index) for n, held, p in proposals]
     out = []
     for ref, nodes in sorted(by_work.items()):
         work = read(root, ref) if ref else None
@@ -357,7 +364,9 @@ def _cited(
     return out
 
 
-def _correction(root: Path, evidence: Evidence, library: LibraryWeb, node: str, held: Any, proposal: str) -> Row:
+def _correction(
+    root: Path, evidence: Evidence, library: LibraryWeb, node: str, held: Any, proposal: str, index: NodeIndex
+) -> Row:
     """An open correction as a `check` row: whose it is, why taking it would be refused now (`refusal`, by take's own check, `acts.take_refusal`; null where it would be taken, the take offered only then), and as its body when the person compared the text it would replace and the word diff of the two bodies (`runs`, `=` kept, `-` the person's words, `+` the agent's)."""
     from loom.evidence.acts import take_refusal
     from loom.library.node import NodeUnreadable, read_node
@@ -379,7 +388,7 @@ def _correction(root: Path, evidence: Evidence, library: LibraryWeb, node: str, 
         at = o1
     runs += [["=", old[at:]]] if at < len(old) else []
     compared = [r.at for r in evidence.compared("node", node, found.on.hash)]
-    refused = take_refusal(root, proposal)
+    refused = take_refusal(root, proposal, index, library)
     fields = {"correction": proposal, "node": node, "name": node_name(held), "ref": held.source, "short": library.short(held.source), "by": found.by.name, "refusal": str(refused) if refused else None}  # fmt: skip
     return Row(f"check:{proposal}", "check", (), since=found.at, fields=fields, body={"compared_at": compared[-1] if compared else None, "runs": runs})  # fmt: skip
 

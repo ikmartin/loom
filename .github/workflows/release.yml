@@ -28,18 +28,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: arras/package-lock.json
+          cache-dependency-path: viewer/package-lock.json
       - uses: astral-sh/setup-uv@v5
       - name: the viewer, built from this commit
-        working-directory: arras
+        working-directory: viewer
         run: npm ci && npm run build
-      - name: vendored into loom; vendor_arras.py refuses an arras with uncommitted changes
+      - name: vendored into loom; vendor_viewer.py refuses a viewer with uncommitted changes
         working-directory: loom
-        run: uv run python scripts/vendor_arras.py ../arras/build
+        run: uv run python scripts/vendor_viewer.py ../viewer/build
       - name: the bundle names this commit, never -dirty
         run: |
-          cat loom/src/loom/assets/arras/VERSION
-          if grep -q -- '-dirty' loom/src/loom/assets/arras/VERSION; then echo "the vendored viewer is stamped -dirty" >&2; exit 1; fi
+          cat loom/src/loom/assets/viewer/VERSION
+          if grep -q -- '-dirty' loom/src/loom/assets/viewer/VERSION; then echo "the vendored viewer is stamped -dirty" >&2; exit 1; fi
       - name: the version a tag names is the package's
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -54,7 +54,7 @@ jobs:
           uv tool install --managed-python --python 3.13 dist/*.whl
           loom --version
           installed="$(uv tool dir)/loomtex"
-          cmp loom/src/loom/assets/arras/VERSION "$(find "$installed" -path '*loom/assets/arras/VERSION' | head -1)"
+          cmp loom/src/loom/assets/viewer/VERSION "$(find "$installed" -path '*loom/assets/viewer/VERSION' | head -1)"
       - name: what the install line reads
         run: |
           wheel="$(basename dist/*.whl)"
