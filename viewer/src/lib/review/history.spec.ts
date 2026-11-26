@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const calls: [string, Record<string, unknown>][] = [];
+/** While set, every write waits for it before loom answers, as a slow publisher's does. */
+let gate: Promise<void> | null = null;
 vi.mock('$lib/write', () => ({
 	capabilities: async () => null,
 	write: async (endpoint: string, body: Record<string, unknown>) => {
 		calls.push([endpoint, body]);
+		if (gate) await gate;
 		if (endpoint === 'annotate' || endpoint === 'reply') return { ok: true, result: 'a-new  key  untyped' };
 		if (endpoint === 'delete') return { ok: true, result: 'deleted', removed: [{ event: 'created', id: body.annotation }] };
 		return { ok: true, result: 'done' };
@@ -48,6 +51,20 @@ describe('the history of annotation writes', () => {
 		await edit(a, { message: 'After.', type: null, look: { color: 'blue' } });
 		await undo();
 		expect(calls.at(-1)).toEqual(['edit', { annotation: 'a1', message: 'Before.', type: 'gone', look: { color: 'red', style: 'highlight', weight: 2, opacity: 65 } }]);
+	});
+
+	it('takes back the act done last, waiting for one loom has not yet answered rather than taking back the one before it', async () => {
+		await resolve('a1');
+		let answer = () => {};
+		gate = new Promise<void>((r) => (answer = r));
+		const editing = edit({ id: 'a2', body_html: '<p>Before.</p>' } as never, { message: 'After.' });
+		const undoing = undo();
+		gate = null;
+		answer();
+		await editing;
+		expect(await undoing).toBe('');
+		expect(calls.at(-1)).toEqual(['edit', { annotation: 'a2', message: 'Before.' }]);
+		expect(history.done).toHaveLength(1);
 	});
 
 	it('holds a delete at the foot of the window while it stands, whose Undo is the same step', async () => {

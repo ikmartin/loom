@@ -52,6 +52,25 @@ async function run(endpoint: string, body: Record<string, unknown>): Promise<Wri
 	return res;
 }
 
+/** The acts on their way: each is recorded once loom answers it, so Undo and Redo wait for them (`answered`) rather than take back the step before. */
+const unanswered = new Set<Promise<unknown>>();
+
+/** `act`, an act the history records once loom answers it, made one Undo and Redo wait for. */
+function recorded<A extends unknown[], R>(act: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
+	return (...args) => {
+		const p = act(...args);
+		const gone = () => void unanswered.delete(p);
+		unanswered.add(p);
+		p.then(gone, gone);
+		return p;
+	};
+}
+
+/** Wait until every act on its way has been answered, and so recorded. */
+async function answered(): Promise<void> {
+	while (unanswered.size) await Promise.allSettled([...unanswered]);
+}
+
 function push(step: Step): void {
 	history.done = [...history.done, step];
 	history.undone = [];
@@ -144,20 +163,20 @@ function created(id: string, label: string): Step {
  * WriteResult
  *     loom's answer; `result` begins with the new annotation's id.
  */
-export async function annotate(body: Record<string, unknown>): Promise<WriteResult> {
+export const annotate = recorded(async (body: Record<string, unknown>): Promise<WriteResult> => {
 	const res = await run('annotate', body);
 	const id = res.ok ? idOf(res) : '';
 	if (id) push(created(id, 'new annotation'));
 	return res;
-}
+});
 
 /** Reply to annotation `id`, kept so it can be undone. */
-export async function reply(id: string, message: string): Promise<WriteResult> {
+export const reply = recorded(async (id: string, message: string): Promise<WriteResult> => {
 	const res = await run('reply', { annotation: id, message });
 	const made = res.ok ? idOf(res) : '';
 	if (made) push(created(made, 'reply'));
 	return res;
-}
+});
 
 /** What puts `a` back as it stands now, for the fields `change` touches: its words, where a mark on a page stands, its type, and its look, as its type's when it is drawn so, else its own. */
 function before(a: Annotation, change: Record<string, unknown>, types: Parameters<typeof typeById>[0]): Record<string, unknown> {
@@ -179,24 +198,24 @@ export function sameLook(x: Partial<Look>, y: Partial<Look>): boolean {
 }
 
 /** Edit annotation `a` (`message`, `type`, `look`, a null look dropping its own), kept so it can be undone by an edit back. */
-export async function edit(a: Annotation, change: Record<string, unknown>): Promise<WriteResult> {
+export const edit = recorded(async (a: Annotation, change: Record<string, unknown>): Promise<WriteResult> => {
 	const back = before(a, change, store.manifest);
 	const res = await run('edit', { annotation: a.id, ...change });
 	if (res.ok) push({ label: 'edit', undo: () => run('edit', { annotation: a.id, ...back }), redo: () => run('edit', { annotation: a.id, ...change }) });
 	return res;
-}
+});
 
 /** Resolve annotation `id`, or with `reopen` open it again, kept so it can be undone by the other. */
-export async function resolve(id: string, reopen = false): Promise<WriteResult> {
+export const resolve = recorded(async (id: string, reopen = false): Promise<WriteResult> => {
 	const there = () => run('resolve', { annotation: id, ...(reopen ? { undo: true } : {}) });
 	const back = () => run('resolve', { annotation: id, ...(reopen ? {} : { undo: true }) });
 	const res = await there();
 	if (res.ok) push({ label: reopen ? 'reopen' : 'resolve', undo: back, redo: there });
 	return res;
-}
+});
 
 /** Delete annotation `id` and its replies, kept so it can be undone; '' when it is done, else loom's refusal in its words. */
-export async function remove(id: string, said: string): Promise<string> {
+export const remove = recorded(async (id: string, said: string): Promise<string> => {
 	let removed: Events = [];
 	const del = async () => {
 		const res = await run('delete', { annotation: id });
@@ -207,7 +226,7 @@ export async function remove(id: string, said: string): Promise<string> {
 	if (!res.ok) return res.error?.message ?? 'the publisher refused it';
 	push({ label: 'delete', undo: () => run('restore', { events: removed }), redo: del, deleted: { id, said } });
 	return '';
-}
+});
 
 /** What `change-keep`, `change-discard` and `change-undo` answer: the changes done, by id, and each refused with why. */
 export type ChangeAnswer = WriteResult & { done?: string[]; refused?: { id: string; why: string; code?: string }[] };
@@ -291,7 +310,7 @@ function kept(ids: string[], quilt: string): Step {
  * ChangeAnswer
  *     loom's answer, with the changes done and each refused.
  */
-export async function keepChanges(which: Which): Promise<ChangeAnswer> {
+export const keepChanges = recorded(async (which: Which): Promise<ChangeAnswer> => {
 	// what loom will write in: a suggestion the manifest lists ready; one taken already is kept with nothing written
 	const writes = new Set(pending(store.manifest).filter((c) => c.kind === 'suggested' && c.state === 'ready').map((c) => c.id));
 	const { res, suggested } = await act('change-keep', which);
@@ -302,7 +321,7 @@ export async function keepChanges(which: Which): Promise<ChangeAnswer> {
 		if (serving) push(kept(wrote, serving));
 	}
 	return res;
-}
+});
 
 /**
  * Discard pending changes: an edit in the file has the person's words written back, a version kept first; a suggestion is dropped and the text left as it is, kept so it can be undone.
@@ -318,7 +337,7 @@ export async function keepChanges(which: Which): Promise<ChangeAnswer> {
  * -------
  * ChangeAnswer
  */
-export async function discardChanges(which: Which, why?: string): Promise<ChangeAnswer> {
+export const discardChanges = recorded(async (which: Which, why?: string): Promise<ChangeAnswer> => {
 	const { res, done, suggested } = await act('change-discard', which, why ? { why } : {});
 	// an edit in the file is not undone here: the words it had are in History, kept before they were replaced
 	const edits = done.length - suggested.length;
@@ -335,7 +354,7 @@ export async function discardChanges(which: Which, why?: string): Promise<Change
 		});
 	}
 	return res;
-}
+});
 
 /** Take a step back or forward: '' when it is done, else loom's refusal. A delete leaves the foot of the window when undone and comes back when done again. */
 async function move(from: 'done' | 'undone', step: Step): Promise<string> {
@@ -366,16 +385,18 @@ async function move(from: 'done' | 'undone', step: Step): Promise<string> {
 	return '';
 }
 
-/** Undo the last write still done. */
-export function undo(): Promise<string> {
+/** Undo the last write still done, once every act on its way is answered: the last done is the one the person did last. */
+export async function undo(): Promise<string> {
+	await answered();
 	const step = history.done.at(-1);
-	return step ? move('done', step) : Promise.resolve('');
+	return step ? move('done', step) : '';
 }
 
-/** Do again the last write undone. */
-export function redo(): Promise<string> {
+/** Do again the last write undone, once every act on its way is answered, since a new one clears what is undone. */
+export async function redo(): Promise<string> {
+	await answered();
 	const step = history.undone.at(-1);
-	return step ? move('undone', step) : Promise.resolve('');
+	return step ? move('undone', step) : '';
 }
 
 /** Undo the delete of annotation `id`, wherever it stands in the history. */
