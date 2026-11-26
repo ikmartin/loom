@@ -61,6 +61,8 @@ TEX_URL = f"{BUILD_URL}{TEX_ADDRESS}/"
 #: The library's stored PDFs and their thumbnails, by hash (library-views.md §2, "Bytes"): what never changes once made, served with no token, since pdf.js and an <img> send none.
 LIBRARY_PDF_URL = "/_api/library/pdf/"
 LIBRARY_THUMB_URL = "/_api/library/thumb/"
+#: A node drawn by TeX, by its hash and its macros node's, made on first ask once the person has given their word for its work (`library.drawn`).
+LIBRARY_DRAWN_URL = "/_api/library/drawn/"
 #: How often an idle stream says it is still open, so a proxy or a sleeping laptop does not drop it unseen.
 HEARTBEAT = 15.0
 #: The headers everything but the viewer's bundle is served with -- `/build/`, `/_files/` and every JSON answer -- so a page there runs no script and has an opaque origin, never the viewer's: an agent running as the person can write what loom derives and the project's files, and a page that ran as the viewer could read the token and post the author's acts.
@@ -637,7 +639,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
             root = self.shown.root.resolve()
             target = (root / rel).resolve()
             return target if target.is_relative_to(root) and target.is_file() else None
-        if path.startswith((LIBRARY_PDF_URL, LIBRARY_THUMB_URL)):
+        if path.startswith((LIBRARY_PDF_URL, LIBRARY_THUMB_URL, LIBRARY_DRAWN_URL)):
             return self._library_file(path)
         if path == "/_api" or path.startswith("/_api/"):
             return None  # answered by do_GET and do_POST, never from the file tree
@@ -656,8 +658,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
         )  # every other path is a viewer route, dots included (`/node/ro-thm-1.0.1`)
 
     def _library_file(self, path: str) -> Path | None:
-        """A stored PDF by its hash's 64 digits, or its first page as a PNG, made when first asked for; None for any other name or one the store lacks."""
-        from loom.library import documents, thumbs
+        """A stored PDF by its hash's 64 digits, its first page as a PNG, or a node drawn by TeX, the last two made when first asked for; None for any other name, one the store lacks, or a drawing nobody's word allows."""
+        from loom.library import documents, drawn, thumbs
 
         if self.quilt_root is None:
             return None
@@ -667,6 +669,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 return None
             target = documents.path_of(self.quilt_root, f"sha256:{digits}", "pdf")
             return target if target.is_file() else None
+        if path.startswith(LIBRARY_DRAWN_URL):
+            return drawn.drawn(self.quilt_root, path[len(LIBRARY_DRAWN_URL) :])
         m = re.fullmatch(r"([0-9a-f]{64})\.png", path[len(LIBRARY_THUMB_URL) :])
         return thumbs.thumb(self.quilt_root, f"sha256:{m.group(1)}") if m else None
 
@@ -943,9 +947,11 @@ class LoomHandler(SimpleHTTPRequestHandler):
         ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
         if target.suffix in (".html", ".js", ".css", ".json", ".svg"):
             ctype += "; charset=utf-8"
-        held = self.path.split("?", 1)[0].startswith((BUILD_URL, FILES_URL, LIBRARY_PDF_URL, LIBRARY_THUMB_URL))
+        held = self.path.split("?", 1)[0].startswith(
+            (BUILD_URL, FILES_URL, LIBRARY_PDF_URL, LIBRARY_THUMB_URL, LIBRARY_DRAWN_URL)
+        )
         # a document named by its hash never changes
-        forever = self.path.split("?", 1)[0].startswith((LIBRARY_PDF_URL, LIBRARY_THUMB_URL))
+        forever = self.path.split("?", 1)[0].startswith((LIBRARY_PDF_URL, LIBRARY_THUMB_URL, LIBRARY_DRAWN_URL))
         etag = '"' + hashlib.sha256(data).hexdigest()[:32] + '"'
         if self.headers.get("If-None-Match") == etag:
             self.send_response(HTTPStatus.NOT_MODIFIED)

@@ -1,6 +1,6 @@
 """The machine's own place: what loom keeps for this machine and this person outside any quilt.
 
-Loom's TeX and tools are there (`tex/private.py`), the one copy of a tool TeX unpacks on its first run (`unpacked`), the one copy of each version of the viewer that a running server serves (`viewers`, held by `render/serve.HeldBundle`), and the token each running server's writes must carry, one file a quilt, so that a quilt committed or copied whole carries no token and grants nothing.
+Loom's TeX and tools are there (`tex/private.py`), the one copy of a tool TeX unpacks on its first run (`unpacked`), the one copy of each version of the viewer that a running server serves (`viewers`, held by `render/serve.HeldBundle`), the token each running server's writes must carry, and the person's word for what loom may run in a quilt, one file a quilt each, so that a quilt committed or copied whole carries no token and no word, and grants nothing.
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ from pathlib import Path
 TOKENS = "tokens"
 #: The folder of `data_dir` a tool that unpacks itself on its first run unpacks into, once for the machine: TeX Live's `biber`, about 200 MB.
 UNPACKED = "unpacked"
+#: The folder of `data_dir` that holds the person's word for what loom may run in a quilt, one file a quilt: each work whose source they compiled (`library.drawn`).
+WORDS = "words"
 #: The folder of `data_dir` that holds the viewer a running server serves, one copy a version, about 11 MB each, kept until the first server to start after no live server holds it.
 VIEWERS = "viewers"
 
@@ -57,6 +59,12 @@ def token_file(root: Path) -> Path:
     """Where the write token of the server on the quilt at `root` is kept: `tokens/<key>.json` in `data_dir`, keyed by the quilt's resolved path."""
     key = hashlib.sha256(str(Path(root).resolve()).encode("utf-8")).hexdigest()[:24]
     return data_dir() / TOKENS / f"{key}.json"
+
+
+def words_file(root: Path) -> Path:
+    """Where the person's word for what loom may run in the quilt at `root` is kept: `words/<key>.json` in `data_dir`, keyed by the quilt's resolved path, so a copy of the quilt carries none."""
+    key = hashlib.sha256(str(Path(root).resolve()).encode("utf-8")).hexdigest()[:24]
+    return data_dir() / WORDS / f"{key}.json"
 
 
 def write_token(root: Path, token: str) -> None:

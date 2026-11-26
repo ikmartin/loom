@@ -134,6 +134,31 @@ def _library_node(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     refuses(s, "library-node", {}, 400, "missing-field", "node is required")
 
 
+@case("library-compile")
+def _library_compile(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom import machine
+    from loom.library import drawn
+    from loom.library.jobs import jobs_of
+    from loom.library.store import read
+
+    s = serve(showcase(tmp_path))
+    q = s.quilt.root
+    builds = s.builds
+    work = read(q, ARDEN)
+    assert work is not None and work.tex and not drawn.given(q, ARDEN, work.tex)
+    started = succeeds(s, "library-compile", {"ref": ARDEN})
+    assert started["job"] and jobs_of(q).idle(120) and isinstance(started["gen"], int), started
+    assert drawn.given(q, ARDEN, work.tex) and not machine.words_file(q).resolve().is_relative_to(q.resolve()), (
+        "the person's word, kept on this machine"
+    )
+    assert "job" not in succeeds(s, "library-compile", {"ref": ARDEN}), "a compile judged it already"
+    assert s.builds == builds, "a compile publishes nothing"
+    refuses(s, "library-compile", {"ref": BELLAMY}, 409, "no-source", "no TeX source")
+    refuses(s, "library-compile", {"ref": "sh-0ZZZ-ref"}, 404, "no-such-ref", "no work")
+    refuses(s, "library-compile", {}, 400, "missing-field", "ref")
+    refuses(s, "library-compile", {"ref": ARDEN, "author": "Claude Code Agent"}, 403, "author-only", "only the author")
+
+
 @case("library-digest")
 def _library_digest(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     from loom.evidence.asks import replay
@@ -164,6 +189,11 @@ def _library_digest(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
     towers = succeeds(s, "library-take", {"items": [{"incoming": drop}], "online": False})["rows"][0]["ref"]
     started = succeeds(s, "library-digest", {"refs": [towers], "scope": "all"})
     assert started["job"] and started["made"] == 0 and jobs_of(q).idle(120), started
+    from loom.library.drawn import given
+    from loom.library.store import read
+
+    held = read(q, towers)
+    assert held is not None and held.tex and given(q, towers, held.tex), "the compile is the person's word"
     refuses(
         s,
         "library-digest",

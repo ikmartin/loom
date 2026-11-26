@@ -48,13 +48,27 @@ def publish_graphic(root: Path, name: str, svg_dir: Path, base: str = "") -> tup
     if out.exists():
         _named_again(out)
         return f"svg/{out.name}", None
+    made, readable = pdf_to_svg(src, out)
+    if made:
+        return f"svg/{out.name}", None
+    if readable:
+        # a converter that can read a PDF here failed, and may not fail again; one that cannot is a state of the machine a key names (`converters`)
+        passing()
+    return None, f"could not convert {name} to SVG (pdftocairo or dvisvgm --pdf needed)"
+
+
+def pdf_to_svg(src: Path, out: Path) -> tuple[bool, bool]:
+    """Convert the PDF `src` to the SVG `out`: poppler's `pdftocairo -svg`, else `dvisvgm --pdf`.
+
+    Returns whether `out` was made, and, where it was not, whether a converter that can read a PDF here failed (`_reads_pdf`), which a figure's key does not name.
+    """
     pdftocairo = shutil.which("pdftocairo")
     if pdftocairo:
         proc = subprocess.run(
             [pdftocairo, "-svg", str(src), str(out)], capture_output=True, text=True, errors="replace", check=False
         )
         if proc.returncode == 0 and out.exists():
-            return f"svg/{out.name}", None
+            return True, False
     said = ""
     dvisvgm = shutil.which("dvisvgm")
     if dvisvgm:
@@ -67,12 +81,9 @@ def publish_graphic(root: Path, name: str, svg_dir: Path, base: str = "") -> tup
             env=tex_env(),
         )
         if proc.returncode == 0 and out.exists():
-            return f"svg/{out.name}", None
+            return True, False
         said = proc.stdout + proc.stderr
-    if pdftocairo or (dvisvgm and _reads_pdf(said)):
-        # a converter that can read a PDF here failed, and may not fail again; one that cannot is a state of the machine a key names (`converters`)
-        passing()
-    return None, f"could not convert {name} to SVG (pdftocairo or dvisvgm --pdf needed)"
+    return False, bool(pdftocairo or (dvisvgm and _reads_pdf(said)))
 
 
 def converters() -> tuple[str | None, str | None, str | None, tuple[str, int, int] | None]:

@@ -3,6 +3,7 @@
 	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
+	import { compile, drawing } from '$lib/library/drawing.svelte';
 	import { Read } from '$lib/library/read.svelte';
 	import type { NodeAnswer, NodePlace, PlacesAnswer } from '$lib/library/types';
 	import NodeBody from '$lib/node/NodeBody.svelte';
@@ -25,6 +26,7 @@
 	});
 
 	const n = $derived(read.value);
+	const tex = $derived(n ? drawing(n) : null);
 	const place = $derived(at.value?.places.find((p): p is NodePlace => 'node' in p && p.node === node) ?? null);
 	const how = $derived.by(() => {
 		const d = n?.digested;
@@ -55,7 +57,7 @@
 				</span>
 			</div>
 			{#if n.body !== undefined}
-				<div class="stmt"><NodeBody body={n.body} macros={n.macros?.body ?? null} points={n.points ?? {}} plain={rv.plain} italic={THEOREMS.has(n.taxon)} drawn={n.hash ? api.drawnUrl(n.hash, n.macros?.hash ?? null) : null} /></div>
+				<div class="stmt"><NodeBody body={n.body} macros={n.macros?.body ?? null} points={n.points ?? {}} plain={rv.plain} italic={THEOREMS.has(n.taxon)} drawn={tex?.drawn ?? null} ask={tex?.ask ? { short: n.work.short, compile: () => void compile(n.work) } : null} /></div>
 			{/if}
 			{#if n.paper === 'unchecked'}
 				<p class="ask">{words.check.ask}</p>
