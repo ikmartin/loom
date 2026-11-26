@@ -50,3 +50,24 @@ def test_a_mode_the_author_edited_is_marked_and_its_line_is_the_quilts(tmp_path:
     got = {m["name"]: m for m in built(q)["modes"]}
     assert got["referee"]["edited"] is True and got["referee"]["fits"] == "refereeing, as this quilt does it."
     assert got["referee"]["path"] == ".loom/agents/instructions/modes/referee.md" and got["quick"]["edited"] is False
+
+
+def test_each_mode_carries_its_text_as_a_person_edits_it_and_whether_a_newer_one_waits(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    ok("upgrade", cwd=q)
+    mode = q / ".loom/agents/instructions/modes/referee.md"
+    mode.write_text(mode.read_text() + "\nThis quilt's own last line.\n")
+    ok("upgrade", cwd=q)
+    got = {m["name"]: m for m in built(q)["modes"]}
+    assert got["referee"]["text"] == mode.read_text() and "{type:" in got["referee"]["text"]
+    assert got["referee"]["newer"] is True and got["quick"]["newer"] is False
+
+
+def test_a_quilt_with_no_agent_layer_shows_loom_s_own_text_of_each_mode(tmp_path: Path) -> None:
+    from loom.ai.layout import tracked_docs
+
+    ok("init", str(tmp_path / "q"), "--yes", cwd=tmp_path)
+    shipped = tracked_docs()
+    got = built(tmp_path / "q")["modes"]
+    assert all(m["text"] == shipped[m["path"]] for m in got)
+    assert not any(m["newer"] or m["edited"] for m in got)

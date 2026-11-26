@@ -661,6 +661,10 @@ export interface AgentMode {
   path: string;
   /** Whether the quilt's copy is the author's own, differing from what loom wrote. */
   edited: boolean;
+  /** The file as a person edits it, the quilt's copy else loom's, each `{type:ID}` as written; absent from an older publisher. */
+  text?: string;
+  /** Whether `loom upgrade` left a newer version of loom's beside the quilt's edited copy; absent from an older publisher. */
+  newer?: boolean;
 }
 
 /** How agents are set up in the quilt and what they are told first. */

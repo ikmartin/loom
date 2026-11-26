@@ -157,6 +157,78 @@ def tracked_docs(root: Path | None = None) -> dict[str, str]:
     return out
 
 
+def save_mode(root: Path, name: str, text: str | None, *, was: str | None = None, actor: str | None = None) -> str:
+    """Write the quilt's copy of mode `name` through the door (`writes.act`): `text`, or with None loom's own, as Settings › Modes saves and puts back.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    name : str
+        One of the quilt's `modes`.
+    text : str or None
+        The mode's whole new text; None puts loom's back, recording it as loom's in `.loom-modes-version` so that `loom upgrade` refreshes it again, and taking away a `<name>.md.new` loom wrote beside the edit (one the person began merging into stays).
+    was : str, optional
+        The text the person was shown, the quilt's copy else loom's: refused (`changed`) when the file holds anything else under the lock.
+    actor : str, optional
+        Who asked, for the journal.
+
+    Returns
+    -------
+    str
+        What was done, in a sentence.
+
+    Raises
+    ------
+    WriteRefused
+        `no-such-mode` (404), `no-agent-layer` where the quilt has no agents' instructions yet, `not-a-file` where the copy is reached through a link or is no regular file, `changed`, or the door's own.
+    """
+    from loom.writes import WriteRefused, act, history_of
+
+    if name not in modes(root):
+        raise WriteRefused("no-such-mode", f"{name} is not one of this quilt's modes ({', '.join(modes(root))})", 404)
+    if not (root / AI).is_dir() or blocker(root, AI, folder=True):
+        raise WriteRefused(
+            "no-agent-layer",
+            "this quilt has no instructions for agents yet, so its modes are loom's own; set an agent's app up here first",
+        )
+    rel = f"{AI}/modes/{name}.md"
+    if why := blocker(root, rel) or blocker(root, f"{rel}.new"):
+        raise WriteRefused("not-a-file", f"{why}, so nothing was written")
+    shipped = tracked_docs(root)[rel]
+    want = shipped if text is None else text
+    with act(root, history_of(root), "agents", actor) as w:
+        now = w.text(rel)
+        if was is not None and (shipped if now is None else now) != was:
+            raise WriteRefused(
+                "changed", f"the {name} mode changed since it was shown, so nothing was written; look at it again"
+            )
+        wrote = now != want
+        if wrote:
+            w.replace(rel, want.encode("utf-8"))
+        if text is None:
+            versions_rel = f"{AI}/{VERSION_FILE}"
+            before = w.text(versions_rel) or ""
+            recorded = dict(line.split() for line in before.splitlines() if len(line.split()) == 2)
+            recorded[f"{name}.md"] = sha(shipped)
+            beside = w.text(f"{rel}.new")
+            if beside is not None and (beside == shipped or sha(beside) == recorded.get(f"{name}.md.new")):
+                w.remove_own(f"{rel}.new")
+                recorded.pop(f"{name}.md.new", None)
+                wrote = True
+            after = "".join(f"{k} {v}\n" for k, v in sorted(recorded.items()))
+            if after != before:
+                w.replace(versions_rel, after.encode("utf-8"))
+                wrote = True
+    if text is None:
+        return (
+            f"put the {name} mode back to loom's"
+            if wrote
+            else f"the {name} mode is loom's already; nothing was written"
+        )
+    return f"saved the {name} mode" if wrote else f"the {name} mode reads so already; nothing was written"
+
+
 def sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
