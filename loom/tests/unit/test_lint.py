@@ -287,3 +287,19 @@ def test_every_check_of_the_library_s_store_is_said(tmp_path: Path) -> None:
         d for d in json.loads(run("lint", "--json", cwd=q).stdout)["diagnostics"] if d["code"].startswith("loom:node-")
     ]
     assert rows and {d["locations"][0]["file"] for d in rows} == {f"{LIBRARY_NODES}/dm-0Z02.node"}, rows
+
+
+def test_a_bib_entry_gathering_cannot_keep_is_said_at_its_line_and_nothing_is_written(tmp_path: Path) -> None:
+    """The review's M-23: lint runs gathering's checks of the entries the drafts read without writing, and says each it cannot keep where the build's Problems does."""
+    from tests.unit.library.test_gather import BAD, BIB, quilt
+
+    root = quilt(tmp_path)
+    (root / "refs.bib").write_text(BIB + BAD)
+    (root / "main.tex").write_text((root / "main.tex").read_text().replace("\\cite{Jon19}", "\\cite{Jon19,Bad1}"))
+    [row] = _rows(root, "loom:bib-entry-refused")
+    assert (row["locations"][0]["file"], row["locations"][0]["line"]) == (
+        "refs.bib",
+        (BIB + BAD).splitlines().index("@article{Bad1,") + 1,
+    )
+    assert "jnotdefined" in row["message"] and row["owner"] == "person"
+    assert not (root / ".loom/library/nodes").exists(), "lint writes no reference"

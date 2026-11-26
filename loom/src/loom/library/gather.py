@@ -228,7 +228,7 @@ def gather(result: ScanResult, *, write: bool = True) -> Gathered:
     result : ScanResult
         The quilt's scan. What gathering makes or follows is added to its citekeys (`bib`, `refs`), as a scan made after it would read them.
     write : bool, default True
-        Write the references; False says what would be made, and takes no lock.
+        Write the references; False says what would be made and what would be refused, and takes no lock.
 
     Returns
     -------
@@ -260,7 +260,7 @@ def gather(result: ScanResult, *, write: bool = True) -> Gathered:
 
 
 def _settle(result: ScanResult, found: dict[str, Candidate], out: Gathered, *, write: bool) -> None:
-    """Decide each candidate against the library as it is now, writing what is due when `write`; an entry the checks refuse is said in `out.refused` and the rest go on."""
+    """Decide each candidate against the library as it is now, writing what is due when `write`; an entry the checks refuse is said in `out.refused` and the rest go on, and not writing, an entry whose text they would refuse is said there too."""
     root = result.quilt.root
     acts = log.replay(root)
     deleted = {k.casefold() for k in acts.deleted_keys()}
@@ -271,6 +271,10 @@ def _settle(result: ScanResult, found: dict[str, Candidate], out: Gathered, *, w
             out.deleted.append(cand.key)
             continue
         ref = held.get(folded)
+        if not write and (ref is None or (bodies.get(ref) != cand.text and acts.follows(ref))) and _faulty(cand):
+            # what the write would refuse, said without writing, as lint asks
+            out.refused.append(_refused(cand, ref or ""))
+            continue
         if ref is None:
             if not write:
                 out.made.append(cand.key)
@@ -297,6 +301,11 @@ def _settle(result: ScanResult, found: dict[str, Candidate], out: Gathered, *, w
                     continue
                 log.record(root, "followed", ref, by="loom", kind="loom", source=cand.source)
             out.followed.append(ref)
+
+
+def _faulty(cand: Candidate) -> bool:
+    """Whether the entry holds what the store's checks refuse in a work's entry (`entries.entry_fault`)."""
+    return entry_fault(cand.text) is not None
 
 
 def _refused(cand: Candidate, ref: str = "") -> Refused:
