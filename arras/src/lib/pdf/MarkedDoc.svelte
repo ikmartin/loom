@@ -114,8 +114,8 @@
 		};
 	});
 
-	/** Turn to annotation `id`'s page and open its popup at its mark once the page has drawn it; false when it has no place on a page. */
-	function show(id: string): boolean {
+	/** Turn to annotation `id`'s page and open its popup at its mark once the page has drawn it, while `still` holds; false when it has no place on a page. */
+	function show(id: string, still: () => boolean = () => true): boolean {
 		const m = desk.marks.find((x) => x.id === id);
 		if (!m || !paper) return false;
 		const host = paper;
@@ -123,6 +123,7 @@
 		if (!at()) view.goTo(m.page);
 		let tries = 0;
 		const look = () => {
+			if (!still()) return;
 			if (at() && popup) {
 				popup.open(host, id, true);
 				return;
@@ -133,9 +134,10 @@
 		return true;
 	}
 
-	/** Open the popup on an annotation just written, once it is drawn, which is once the manifest that holds it arrives, so this keeps trying for a few seconds. */
+	/** Open the popup on an annotation just written, once it is drawn, which is once the manifest that holds it arrives, so this keeps trying for a few seconds; a draft opened meanwhile ends the trying. */
 	function showWhenDrawn(id: string, tries = 60): void {
-		if (show(id) || tries <= 0) return;
+		const still = () => !drafting;
+		if (!still() || show(id, still) || tries <= 0) return;
 		setTimeout(() => showWhenDrawn(id, tries - 1), 100);
 	}
 
@@ -361,17 +363,23 @@
 	{#snippet extra()}{@render more?.({ page: o.page, text: o.text, rects: o.rects, hold: () => (kept = true), done: letGo })}{/snippet}
 {/if}
 {#if drafting}
-	<aside class="ann-popup-host" use:placed={drafting.at} data-testid="draft-host">
-		<AnnotationPopup
-			draft={drafting.draft}
-			onclose={closeDraft}
-			onwritten={(id) => {
-				closeDraft();
-				if (!id) return;
-				void store.refresh().then(() => showWhenDrawn(id));
-			}}
-		/>
-	</aside>
+	{@const mine = drafting}
+	<!-- each draft its own popup, so a write still on its way from the last one neither holds this one's button nor closes it -->
+	{#key mine}
+		<aside class="ann-popup-host" use:placed={mine.at} data-testid="draft-host">
+			<AnnotationPopup
+				draft={mine.draft}
+				onclose={closeDraft}
+				onwritten={(id) => {
+					// written after the reader moved on: the draft open now, or none, stays as it is
+					if (drafting !== mine) return;
+					closeDraft();
+					if (!id) return;
+					void store.refresh().then(() => showWhenDrawn(id));
+				}}
+			/>
+		</aside>
+	{/key}
 {/if}
 
 <style>
