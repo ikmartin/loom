@@ -1249,7 +1249,9 @@ def test_a_lone_token_before_an_unnumbered_heading_continues_no_sequence(tmp_pat
     assert "s1" not in got, (
         "X continues nothing: no heading was found at its level before it, and it is not where one begins"
     )
-    assert "s2" not in got and got["l:a"] == ("1.1", 1), "nor does 2, with no heading found before it at its level"
+    assert got["s2"] == ("2", 1) and got["l:a"] == ("1.1", 1), (
+        "2 is loom's own reading, so kept with none found before it"
+    )
     numbered = _cycles(tmp_path, f"Some words before it.\n\n1\nCycles\nLemma 1.1. {L_A}\n\n2\nPaths\n")
     assert (numbered["s1"], numbered["s2"]) == (("1", 1), ("2", 1)), (
         "where the sequence begins and goes on, each is kept"
@@ -1554,3 +1556,34 @@ def test_a_section_straight_after_its_chapter_s_title_is_read(tmp_path: Path) ->
     assert ("1.1", 1) not in after_prose.values(), (
         "a number alone after a line that is no heading's title, opening no block, heads nothing"
     )
+
+
+#: An article with a contents page, its sections numbered from `first`.
+def _opening_matters(first: int) -> str:
+    return (
+        "\\documentclass{article}\n"
+        + (f"\\setcounter{{section}}{{{first - 1}}}\n" if first != 1 else "")
+        + "\\begin{document}\n\\tableofcontents\n\\section{Opening matters here}\nText.\n\\section{Closing matters here}\nText.\n\\end{document}\n"
+    )
+
+
+def _matters_pdf(first: int) -> str:
+    """The article's page as `pdftotext` writes it: the contents' entries, each page number after an empty line, then the body, an empty line between each heading's number and its title."""
+    a, b = first, first + 1
+    return (
+        f"Contents\n{a} Opening matters here\n\n1\n\n{b} Closing matters here\n\n1\n\n"
+        f"{a}\n\nOpening matters here\n\nText.\n\n{b}\n\nClosing matters here\n\nText.\n\n1\n"
+    )
+
+
+@pytest.mark.parametrize(("first", "contents"), [(1, True), (4, False), (4, True), (0, False)])
+def test_a_first_heading_continues_loom_s_reading_and_a_contents_page_ends_at_the_body_s_first(
+    tmp_path: Path, first: int, contents: bool
+) -> None:
+    """The review's D-26: a first section numbered by `\\setcounter`, 4 or 0, is loom's own reading; article's contents page ends before the body's first number alone, an empty line between it and its title."""
+    s = survey.read(_one_file(tmp_path, _opening_matters(first)), "main.tex", TEX)
+    page = _matters_pdf(first)
+    if not contents:
+        page = page.split("\n\n1\n\n", 2)[2]
+    got = survey.place(s, survey.Pages([page]))
+    assert sorted(got.values()) == [(str(first), 1), (str(first + 1), 1)], got

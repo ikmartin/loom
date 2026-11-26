@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 17
+VERSION = 18
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -961,7 +961,7 @@ class Pages:
 def place(s: Survey, pages: Pages) -> dict[str, tuple[str | None, int]]:
     """Each heading's and result's printed number and page, read in the work's stored PDF.
 
-    A result's line is identified by its kind and its own words: a line opening with its printed name and a number (`Lemma 2.2.`, `Lemma 2.2 (Title).`), the number then the name (`2.2 Lemma.`), or the name alone (`Claim.`), whose rest and the lines after it, never past the next line that heads a result or a section, hold the statement's opening words, or its first words outside its mathematics in order (`Item.words`). A result with too few words to go by is identified by its place between two results so identified, where the source and the PDF hold as many results' headings between them. A heading's line is identified by its title, on its line or, after its number alone on a line that opens a block or follows straight on the title of the heading above it, on the next; a number alone is kept only where it continues the sequence of the headings already found at its level. Never by a number: the number is read from the line once it is found, whatever loom's reading of it. Results and headings are looked for in the source's order, a result found by its words before the last mark where it is not after it; a contents page holds no place. A mark nothing identifies keeps nothing.
+    A result's line is identified by its kind and its own words: a line opening with its printed name and a number (`Lemma 2.2.`, `Lemma 2.2 (Title).`), the number then the name (`2.2 Lemma.`), or the name alone (`Claim.`), whose rest and the lines after it, never past the next line that heads a result or a section, hold the statement's opening words, or its first words outside its mathematics in order (`Item.words`). A result with too few words to go by is identified by its place between two results so identified, where the source and the PDF hold as many results' headings between them. A heading's line is identified by its title, on its line or, after its number alone on a line that opens a block or follows straight on the title of the heading above it, on the next; a number alone is kept only where it is loom's own reading or continues the sequence of the headings already found at its level. Never by a number: the number is read from the line once it is found, whatever loom's reading of it. Results and headings are looked for in the source's order, a result found by its words before the last mark where it is not after it; a contents page holds no place. A mark nothing identifies keeps nothing.
 
     Parameters
     ----------
@@ -1085,13 +1085,12 @@ def _contents(pages: Pages, titles: list[str]) -> range:
         title = next((t for t in known if line.startswith(t)), None)
         if title is not None:
             if title in seen:
-                # the body's first heading: its number alone, just before its title on the same page, is the body's too
-                if (
-                    k - 1 > start
-                    and pages.lines[k - 1][0] == pages.lines[k][0]
-                    and _HEADING.fullmatch(pages.lines[k - 1][1])
-                ):
-                    k -= 1
+                # the body's first heading: its number alone, just before its title on the same page, empty lines between, is the body's too
+                j = k - 1
+                while j > start and not pages.lines[j][1]:
+                    j -= 1
+                if j > start and pages.lines[j][0] == pages.lines[k][0] and _HEADING.fullmatch(pages.lines[j][1]):
+                    k = j
                 break
             seen.add(title)
         elif line.strip("."):
@@ -1137,7 +1136,9 @@ def _heading(
 
 
 def _continues(number: str, sec: Section, found: dict[int, str]) -> bool:
-    """Whether a heading's number continues the sequence of those found at its level: the next after the last, or the first under the heading above it."""
+    """Whether a heading's number continues the sequence of those found at its level: loom's own reading of it, the next after the last, or the first under the heading above it."""
+    if number == sec.emulated:
+        return True
     parts = re.split(r"[.\-]", number)
     last = found.get(sec.level)
     if last is not None:
