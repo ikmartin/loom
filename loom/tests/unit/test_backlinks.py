@@ -53,6 +53,25 @@ def test_every_link_in_the_shown_files_is_indexed_by_what_it_names(tmp_path: Pat
     assert next(b for b in manifest["backlinks"] if b["from"] == "notes/plain.txt")["href"] == "quilt:dm-0003"
 
 
+def test_an_org_link_with_spaces_an_html_amp_and_a_markdown_heading_are_read(tmp_path: Path) -> None:
+    from loom.backlinks import backlinks
+    from loom.cli._quilt import open_scan
+
+    q = demo(tmp_path)
+    put(q, "notes/a.org", "* A\n[[quilt:drafting/main.tex#dm-0003&quote=finite widget][see]]\n")
+    put(q, "notes/b.html", '<p><a href="quilt:drafting/main.tex#dm-0003&amp;quote=a%20b">x</a></p>\n')
+    md = "# Intro\n\n```\n# not a heading\n```\n\n## Orbits\n\nSee [it](quilt:dm-0002).\n\n## Orbits\n\n[again](quilt:dm-0003)\n"
+    put(q, "notes/c.md", md)
+    put(q, "notes/d.md", "Before any heading, quilt:dm-0002.\n")
+    kinds = {"notes/a.org": "text", "notes/b.html": "html", "notes/c.md": "markdown", "notes/d.md": "markdown"}
+    got = {(b["from"], b["line"]): b for b in backlinks(open_scan(str(q)), q, kinds)}
+    assert got[("notes/a.org", 2)]["quote"] == "finite widget"
+    assert (got[("notes/b.html", 1)]["place"], got[("notes/b.html", 1)]["quote"]) == ("dm-0003", "a b")
+    # a Markdown note opens at the heading above its link, as its page names it, a repeat by its count; a fence holds no heading
+    assert (got[("notes/c.md", 9)]["at"], got[("notes/c.md", 13)]["at"]) == ("orbits", "orbits-1")
+    assert got[("notes/d.md", 1)]["at"] == "" and got[("notes/a.org", 2)]["at"] == ""
+
+
 def test_a_quilt_whose_files_link_nowhere_has_none(tmp_path: Path) -> None:
     from loom.backlinks import backlinks
     from loom.cli._quilt import open_scan

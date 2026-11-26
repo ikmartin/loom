@@ -5,6 +5,8 @@ The index is computed at each build and nobody edits it. A link that names nothi
 
 from __future__ import annotations
 
+import html
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,11 +31,11 @@ def backlinks(result: Any, root: Path, kinds: dict[str, str]) -> list[dict[str, 
     Returns
     -------
     list of dict
-        One per link: `from` the file, `line` 1-based, `href` as written, and what it names, `kind`, `key`, `place` and `quote` (`links.Target`). A file's links to itself are left out.
+        One per link: `from` the file, `line` 1-based, `at` the id of the heading above it in a Markdown file ('' for none, and in any other kind), `href` as written, and what it names, `kind`, `key`, `place` and `quote` (`links.Target`). A file's links to itself are left out.
     """
     from loom.links import LinkError, raw_links, resolve
 
-    found: list[tuple[str, int, str]] = []
+    found: list[tuple[str, int, str, str]] = []
     for rel in sorted(kinds):
         if kinds[rel] not in READ:
             continue
@@ -46,7 +48,11 @@ def backlinks(result: Any, root: Path, kinds: dict[str, str]) -> list[dict[str, 
             continue
         if kinds[rel] == "notebook":
             text = _cells(text)
-        found.extend((rel, line, href) for line, href in raw_links(text))
+        elif kinds[rel] == "html":
+            # an attribute's `&amp;` is the `&` between a link's place and its words
+            text = html.unescape(text)
+        heads = _headings(root, rel, text) if kinds[rel] == "markdown" else []
+        found.extend((rel, line, href, _above(heads, line)) for line, href in raw_links(text))
     if not found:
         return []
     from loom.records.annotations import load_records
@@ -54,7 +60,7 @@ def backlinks(result: Any, root: Path, kinds: dict[str, str]) -> list[dict[str, 
     records, _ = load_records(root)
     seen: dict[str, Any] = {}
     out: list[dict[str, Any]] = []
-    for rel, line, href in found:
+    for rel, line, href, at in found:
         if href not in seen:
             try:
                 seen[href] = resolve(result, root, href, records)
@@ -67,6 +73,7 @@ def backlinks(result: Any, root: Path, kinds: dict[str, str]) -> list[dict[str, 
             {
                 "from": rel,
                 "line": line,
+                "at": at,
                 "href": href,
                 "kind": target.kind,
                 "key": target.key,
@@ -90,3 +97,31 @@ def _cells(raw: str) -> str:
         src = cell.get("source", "") if isinstance(cell, dict) else ""
         out.append("".join(src) if isinstance(src, list) else str(src))
     return "\n".join(out)
+
+
+#: An ATX heading's line, and a code fence's.
+_HEADING = re.compile(r"^ {0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
+_FENCE = re.compile(r"^ {0,3}(```|~~~)")
+
+
+def _headings(root: Path, rel: str, text: str) -> list[tuple[int, str]]:
+    """The Markdown file's headings by line, each with the id its page gives it (`files.slug`), those the page does not draw with that id left out; code fences skipped."""
+    from loom.files import headings_of, slug
+
+    drawn = headings_of(root, rel, "markdown")
+    seen: dict[str, int] = {}
+    out: list[tuple[int, str]] = []
+    fenced = False
+    for n, line in enumerate(text.split("\n"), start=1):
+        if _FENCE.match(line):
+            fenced = not fenced
+        elif not fenced and (m := _HEADING.match(line)):
+            sid = slug(m.group(1), seen)
+            if sid in drawn:
+                out.append((n, sid))
+    return out
+
+
+def _above(heads: list[tuple[int, str]], line: int) -> str:
+    """The id of the last heading at or above `line`; '' for none."""
+    return next((sid for n, sid in reversed(heads) if n <= line), "")

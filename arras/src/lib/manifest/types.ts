@@ -82,6 +82,8 @@ export interface Backlink {
   from: string;
   /** Its 1-based line there. */
   line: number;
+  /** In a Markdown file, the id of the heading above it, where the note opens; '' for none. Absent from an older publisher. */
+  at?: string;
   href: string;
   /** What it names: `document`, `node`, `work`, `file`, `annotation`, `session`, `page` or `library`. */
   kind: string;

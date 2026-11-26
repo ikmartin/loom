@@ -19,7 +19,10 @@ from loom.records import ids
 LINK = re.compile(r"\]\(((?:quilt|cited):[^)\s]+)\)")
 #: A link written raw in any text, as an org file, a plain note or a Markdown link holds one: it ends at whitespace, `]`, `)`, `>` or a quotation mark, so org's `[[quilt:…][name]]`, Markdown's `[name](quilt:…)` and `<quilt:…>` all read; punctuation a sentence puts after it is not part of it.
 RAW = re.compile(r"(?<![A-Za-z0-9])(?:quilt|cited):[^\s\])>\"<]+")
-_TRAILING = ".,;:!?'"
+#: An org link in brackets, whose target may hold spaces (`[[quilt:a.md#quote=two words][name]]`): read whole before the raw form.
+ORG = re.compile(r"\[\[((?:quilt|cited):[^\]]+)\]")
+#: What a sentence or a markup puts after a raw link and is not part of it: punctuation, and Markdown's and org's emphasis and code markers.
+_TRAILING = ".,;:!?'*_~=`/"
 ANNOTATION = re.compile(rf"^{ids.ANNOTATION}$")
 SESSION = re.compile(rf"^{ids.SESSION}$")
 
@@ -293,13 +296,15 @@ def quilt_link(key: str, place: str = "", words: str | None = None) -> str:
 
 
 def raw_links(text: str) -> list[tuple[int, str]]:
-    """Every `quilt:` and `cited:` link written in `text`, raw or inside a Markdown or org link, with its 1-based line, in order; a sentence's punctuation after a link is left off it."""
+    """Every `quilt:` and `cited:` link written in `text`, raw or inside a Markdown or org link, with its 1-based line, in order; an org link in brackets is read whole, spaces and all, and a sentence's punctuation or a markup's emphasis after a raw link is left off it."""
     out: list[tuple[int, str]] = []
     for n, line in enumerate(text.split("\n"), start=1):
+        found = [(m.start(1), m.end(1), m.group(1).strip()) for m in ORG.finditer(line)]
+        taken = [(a, b) for a, b, _ in found]
         for m in RAW.finditer(line):
-            href = m.group(0).rstrip(_TRAILING)
-            if href.partition(":")[2]:
-                out.append((n, href))
+            if not any(a <= m.start() < b for a, b in taken):
+                found.append((m.start(), m.end(), m.group(0).rstrip(_TRAILING)))
+        out.extend((n, href) for _, _, href in sorted(found) if href.partition(":")[2])
     return out
 
 

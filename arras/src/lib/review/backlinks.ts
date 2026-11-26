@@ -46,8 +46,9 @@ export function noteFiles(m: Pick<Manifest, 'backlinks' | 'keys' | 'regions' | '
 	return [...by.keys()].sort().map((path) => ({ path, links: by.get(path)! }));
 }
 
-/** Where a note's link to the item is read: the note file at the link's line, where a file of its kind has lines to go to (`L` and the line), else whole. */
+/** Where a note's link to the item is read: a plain-text note at the link's line (`L` and the line), a Markdown note at the heading above the link, else the note whole. */
 export function noteHref(m: Pick<Manifest, 'files'>, b: Backlink): string {
 	const kind = m.files?.find((f) => f.path === b.from)?.kind;
-	return `quilt:${b.from.split('/').map(encodeURIComponent).join('/')}${kind === 'text' ? `#L${b.line}` : ''}`;
+	const at = kind === 'text' ? `L${b.line}` : kind === 'markdown' ? (b.at ?? '') : '';
+	return `quilt:${b.from.split('/').map(encodeURIComponent).join('/')}${at ? `#${encodeURIComponent(at)}` : ''}`;
 }

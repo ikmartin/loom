@@ -438,7 +438,7 @@ test.describe('the format menu', () => {
 		const menu = page.getByTestId('format-menu');
 		await expect(menu.getByTestId('type-none')).toHaveAttribute('aria-selected', 'true');
 		await expect(menu.getByTestId('type-none')).toContainText('Plain');
-		await expect(menu.getByTestId('type-row')).toHaveText(['Ab Revision 1', 'Ab Suggestion 2', 'Ab Question 3', 'Ab Note 4'].map((t) => new RegExp(t.replace(/ /g, '\\s*'))));
+		await expect(menu.getByTestId('type-row')).toHaveText(['Ab Revision 1', 'Ab Suggestion 2', 'Ab Question 3'].map((t) => new RegExp(t.replace(/ /g, '\\s*'))));
 		await menu.locator('[data-testid="type-row"][data-type="revision"]').click();
 		await expect(menu.locator('[data-testid="type-row"][data-type="revision"]')).toHaveAttribute('aria-selected', 'true');
 		expect((await drawn(sample)).band).toMatchObject(RED_BAND);

@@ -79,6 +79,18 @@ def test_raw_links_are_read_in_any_text() -> None:
     ]
     # a word ending in the scheme's letters is not a link, and a scheme with nothing after it is none
     assert raw_links("unquilt:x and quilt: alone") == []
+    # an org link in brackets is read whole, though it holds a space; emphasis and code markers after a raw link are not part of it
+    assert raw_links("[[quilt:dm-0003#quote=finite widget][see]] then quilt:dm-0004") == [
+        (1, "quilt:dm-0003#quote=finite widget"),
+        (1, "quilt:dm-0004"),
+    ]
+    assert [h for _, h in raw_links("**quilt:notes/a.md** `quilt:x` =quilt:y= /quilt:z/ _quilt:w_")] == [
+        "quilt:notes/a.md",
+        "quilt:x",
+        "quilt:y",
+        "quilt:z",
+        "quilt:w",
+    ]
 
 
 def test_what_the_viewer_does_not_show_is_refused(q: Path) -> None:

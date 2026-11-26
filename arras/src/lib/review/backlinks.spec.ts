@@ -41,5 +41,7 @@ describe('the notes beside an item', () => {
 	it('open the note at its link, at the line in a plain-text file', () => {
 		expect(noteHref(m, m.backlinks![0])).toBe('quilt:notes/reading.org#L2');
 		expect(noteHref(m, m.backlinks![2])).toBe('quilt:notes/lemma.md');
+		// a Markdown note at the heading above its link
+		expect(noteHref(m, { ...m.backlinks![2], at: 'the-lemma' })).toBe('quilt:notes/lemma.md#the-lemma');
 	});
 });
