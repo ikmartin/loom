@@ -1,6 +1,6 @@
-"""The fence around a TeX compile on macOS: Apple's `sandbox-exec` with the one profile loom ships (`assets/fence/tex.sb`), so a file loom compiles, one the person did not write among them, reads only its run's folders, the TeX in use and what TeX's own scripts need, writes only its run's folders and TeX's font cache, and reaches no network.
+"""The fence around what loom runs on macOS: Apple's `sandbox-exec` with a profile loom ships for each kind of run, so a file loom runs, one the person did not write among them, reads and writes only the places its profile names and reaches no network.
 
-Where the fence is not up (`state`), a compile runs as it would without it. A fenced compile that fails is never tried again unfenced, since a file could fail on purpose to get the unfenced run.
+A TeX compile (`assets/fence/tex.sb`) reads only its run's folders, the TeX in use and what TeX's own scripts need, and writes only its run's folders and TeX's font cache; where the fence is not up (`state`) it runs as it would without it. Lean's certifying check (`assets/fence/lean.sb`) reads the quilt's Lake project, its one toolchain, the developer tools' git and loom's probe, and writes only the project; it runs fenced or not at all (`lean_state`). A fenced run that fails is never tried again unfenced, since a file could fail on purpose to get the unfenced run.
 """
 
 from __future__ import annotations
@@ -10,12 +10,15 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 #: Apple's program that runs a command under a profile; macOS ships it, and no other system has it.
 SANDBOX = "/usr/bin/sandbox-exec"
 #: The one profile every fenced TeX compile runs under.
 PROFILE = Path(__file__).parent / "assets" / "fence" / "tex.sb"
+#: The profile Lean's certifying check runs under.
+LEAN_PROFILE = Path(__file__).parent / "assets" / "fence" / "lean.sb"
 #: The environment variable that turns the fence off, set to `off`: for a person whose honest paper it breaks.
 OFF = "LOOM_FENCE"
 #: `sandbox-exec`'s exit when it may not apply a profile, as inside another sandbox.
@@ -39,11 +42,37 @@ def state() -> str | None:
 
 @functools.cache
 def _tried() -> str | None:
-    """`state` but `off`, found by trying the real profile once: `/bin/cat` must read a file in its run and fail to read one outside it."""
+    """`state` but `off`, found by trying the real profile once (`_trial`)."""
     if not os.access(SANDBOX, os.X_OK) or not PROFILE.is_file():
         return "absent"
     if _holds_the_person_s(_machine()):
         return "leaks"
+    return _trial(lambda a, argv: _argv(argv, a, a))
+
+
+def lean_state() -> str | None:
+    """Whether Lean's certifying check can run fenced on this machine.
+
+    Returns
+    -------
+    str or None
+        None when it can; otherwise why not, as `state` words it: `absent`, `nested` or `leaks`. Never `off`: the check runs fenced or not at all, so the switch that turns the TeX fence off does not reach it.
+    """
+    return _lean_tried()
+
+
+@functools.cache
+def _lean_tried() -> str | None:
+    """`lean_state`, found once in a process by trying the Lean profile (`_trial`)."""
+    if not LEAN_PROFILE.is_file():
+        return "absent"
+    return _trial(lambda a, argv: lean_argv(argv, lean_places(project=a, toolchain=Path(_NOWHERE), probe=a)))
+
+
+def _trial(argv_in: Callable[[Path, list[str]], list[str]]) -> str | None:
+    """Try a profile once: `/bin/cat` run as `argv_in(folder, argv)` must read a file in `folder` and fail to read one outside it; None when it does, else `absent`, `nested` or `leaks`."""
+    if not os.access(SANDBOX, os.X_OK):
+        return "absent"
     with tempfile.TemporaryDirectory(prefix="loom-fence-") as a, tempfile.TemporaryDirectory(prefix="loom-fence-") as b:
         inside, outside = Path(a) / "inside", Path(b) / "outside"
         inside.write_text("inside\n", encoding="utf-8")
@@ -52,7 +81,7 @@ def _tried() -> str | None:
         def cat(p: Path) -> subprocess.CompletedProcess[bytes] | None:
             try:
                 return subprocess.run(
-                    _argv(["/bin/cat", str(p)], Path(a), Path(a)), capture_output=True, timeout=30, check=False
+                    argv_in(Path(a), ["/bin/cat", str(p)]), capture_output=True, timeout=30, check=False
                 )
             except (OSError, subprocess.SubprocessError):
                 return None
@@ -90,6 +119,29 @@ def fenced(argv: list[str], *, stage: Path, out: Path, var: Path | None = None) 
         The command to start: `sandbox-exec` with the profile and its parameters, then `argv`; or `argv` unchanged.
     """
     return argv if state() is not None else _argv(argv, stage, out, var)
+
+
+def lean_places(*, project: Path, toolchain: Path, probe: Path) -> dict[str, str]:
+    """The Lean profile's parameters for one check, each resolved: the Lake project, the toolchain's folder, the developer tools' folder (`xcode-select -p`) and the folder of loom's probe."""
+    dev = _ask(["/usr/bin/xcode-select", "-p"], {"PATH": "/usr/bin:/bin"}).strip()
+    at = {"PROJECT": str(project), "TOOLCHAIN": str(toolchain), "DEVDIR": dev, "PROBE": str(probe)}
+    return {name: os.path.realpath(place).rstrip("/") if place else _NOWHERE for name, place in at.items()}
+
+
+def lean_leaks(places: dict[str, str]) -> bool:
+    """Whether a folder the Lean profile would read whole holds the home folder, `~/Library` or loom's own data folder, as a project at the root of the home folder would."""
+    return _holds_the_person_s(places)
+
+
+def lean_argv(argv: list[str], places: dict[str, str]) -> list[str]:
+    """`sandbox-exec` running `argv` under the Lean profile with `places` (`lean_places`) as its parameters; never `argv` alone, since the check runs fenced or not at all."""
+    return [
+        SANDBOX,
+        "-f",
+        str(LEAN_PROFILE),
+        *(x for name, at in places.items() for x in ("-D", f"{name}={at}")),
+        *argv,
+    ]
 
 
 def _argv(argv: list[str], stage: Path, out: Path, var: Path | None = None) -> list[str]:
