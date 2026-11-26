@@ -1110,7 +1110,11 @@ def test_a_display_s_number_is_kept_where_the_stored_pdf_shows_it_in_order(
     }, (
         "a number opening its formula's line read too; a tag's text loom cannot compare, and a mention at a line's end never"
     )
-    lost = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("(1.3) h = i", "h = i (1.3)"))
+    ending = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("(1.3) h = i", "h = i (1.3)"))
+    assert {k for k, v in ending.labels.items() if v.kind == "equation" and v.number} == set(kept), (
+        "a number ending its formula's line read too"
+    )
+    lost = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("(1.3) h = i", "h = i"))
     kept = {k for k, v in lost.labels.items() if v.kind == "equation" and v.number}
     assert kept == {"e:two"}, (
         "a number not where loom reads one leaves its window, here the whole of section One, unkept; the next window keeps its own"
@@ -1351,3 +1355,31 @@ def test_a_display_begun_on_the_line_after_a_heading_labels_itself(tmp_path: Pat
     s = survey.read(_one_file(tmp_path, src), "main.tex", TEX)
     assert s.sections[0].label is None and s.labels["eq:first"].kind == "equation"
     assert s.labels["eq:first"].emulated == "1.1"
+
+
+#: Three displays in a row, the last a formula too wide for its number to stand apart.
+WIDE = r"""\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+\section{One}
+\begin{equation}\label{e:a} a \end{equation}
+\begin{equation}\label{e:b} b \end{equation}
+\begin{equation}\label{e:c} c + c + c \end{equation}
+\end{document}
+"""
+
+
+def test_a_number_at_the_end_of_a_wide_display_s_line_is_counted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's C-8: `pdftotext` sets a wide display's number at its line's end; uncounted, it let one display loom does not count balance the window, and every number after it slid by one."""
+
+    def kept(text: str) -> dict[str, str | None]:
+        monkeypatch.setattr(survey.Pages, "of", classmethod(lambda cls, _pdf: cls([text])))
+        root = tmp_path / ("q" + str(len(list(tmp_path.iterdir()))))
+        root.mkdir()
+        done = survey.confirmed(root, TEX, _one_file(root, WIDE), "main.tex", pdf=TEX, pdf_path=root / "x.pdf")
+        return {k: v.number for k, v in done.labels.items() if v.kind == "equation" and v.number}
+
+    assert kept("1 One\na\n(1)\nb\n(2)\nc + c + c (3)\n") == {"e:a": "1", "e:b": "2", "e:c": "3"}
+    assert kept("1 One\na\n(1)\nv\n(2)\nb\n(3)\nc + c + c (4)\n") == {}, "e:b and e:c would read (2) and (3)"
