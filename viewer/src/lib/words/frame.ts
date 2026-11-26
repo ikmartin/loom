@@ -149,6 +149,13 @@ export const frame = {
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
 		unreachable: 'The service that looks papers up could not be reached. Try again later.'
 	} as Record<string, string>,
+	/** The note above the document in the left pane, for what the quilt's first page has to say. */
+	note: {
+		/** A quilt just made from a paper whose working copy does not typeset as the paper did (the home page opens it so). */
+		differs: "Loom's working copy of your paper does not typeset exactly as the paper did; your paper is kept as you gave it.",
+		/** The close button on the note. */
+		close: 'close'
+	},
 	/** A quilt an earlier loom made, while the publisher waits on it: the one sentence, its button, and what is said while it runs and if it fails. */
 	upgrade: {
 		said: 'This quilt was made by an earlier version of loom; upgrading it carries its papers over to this one.',

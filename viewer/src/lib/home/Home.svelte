@@ -1,14 +1,53 @@
 <script lang="ts">
-	// Loom's home page, drawn in place of a quilt when `GET /_api` says `home` (`home.svelte.ts`): the person's quilts, each with its state and controls, Open a quilt… and New quilt, the TeX notice with Repair TeX, and the list that cannot be read. It asks for the list once a second while it is in view.
+	// Loom's home page, drawn in place of a quilt when `GET /_api` says `home` (`listing.svelte.ts`): the person's quilts, each with its state and controls, Open a quilt… and New quilt, the TeX notice with Repair TeX, and the list that cannot be read. It asks for the list once a second while it is in view. Files dragged over any part of it cover it with a sheet saying what they will make; dropped, they open the window for a new quilt (`QuiltWindow.svelte`), as New quilt does with no paper.
 	import { onDestroy, onMount } from 'svelte';
 	import { call } from './api';
 	import { homePage, repairOf, rowsOf, shortPath } from './listing.svelte';
 	import QuiltRow from './QuiltRow.svelte';
 	import CopyDetails from './CopyDetails.svelte';
+	import QuiltWindow from './QuiltWindow.svelte';
+	import { draggingPdf, readDrop, type Drop } from './drop';
 	import { home as words } from '$lib/words/home';
 
-	onMount(() => homePage.start());
 	onDestroy(() => homePage.stop());
+
+	/** The window for a new quilt: closed, from New quilt (no drop), or from a drop. */
+	let win = $state<{ drop: Drop | null } | null>(null);
+	/** Whether the window shows a create's steps, which another drop does not replace. */
+	let creating = $state(false);
+	/** The sheet over the page while files are dragged over it, saying what they will make; null when none are. */
+	let cover = $state<'paper' | 'pdf' | null>(null);
+
+	onMount(() => {
+		homePage.start();
+		let timer: ReturnType<typeof setTimeout> | null = null;
+		const carries = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+		// the sheet stays while the drag moves over the window, and goes a moment after the moves stop: leaving the window, or Escape
+		const move = (e: DragEvent) => {
+			if (!carries(e) || unreadable) return;
+			e.preventDefault();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+			cover = draggingPdf(e.dataTransfer?.items) ? 'pdf' : 'paper';
+			if (timer) clearTimeout(timer);
+			timer = setTimeout(() => (cover = null), 200);
+		};
+		const drop = async (e: DragEvent) => {
+			cover = null;
+			if (!carries(e)) return;
+			e.preventDefault();
+			// a create under way keeps its window; another drop waits for it to be put away
+			if (unreadable || (win && creating)) return;
+			const read = await readDrop(e.dataTransfer!);
+			if (read) win = { drop: read };
+		};
+		window.addEventListener('dragover', move);
+		window.addEventListener('drop', drop);
+		return () => {
+			window.removeEventListener('dragover', move);
+			window.removeEventListener('drop', drop);
+			if (timer) clearTimeout(timer);
+		};
+	});
 
 	const listing = $derived(homePage.listing);
 	const unreadable = $derived(listing?.list === 'unreadable');
@@ -42,6 +81,7 @@
 			<div class="hhead">
 				<h1>{words.heading}</h1>
 				<button type="button" class="btn" disabled={unreadable} onclick={() => void openQuilt()} data-testid="home-open-quilt">{words.openQuilt}</button>
+				<button type="button" class="btn primary" disabled={unreadable} onclick={() => (win = { drop: null })} data-testid="home-new-quilt">{words.newQuilt}</button>
 			</div>
 
 			{#if note}
@@ -103,7 +143,40 @@
 	</div>
 </div>
 
+{#if cover}
+	<div class="dragcover" aria-hidden="true" data-testid="home-drop-cover" data-kind={cover}>
+		<div>{cover === 'pdf' ? words.cover.pdf : words.cover.paper}</div>
+	</div>
+{/if}
+
+{#if win}
+	{#key win}
+		<QuiltWindow drop={win.drop} onclose={() => ((win = null), (creating = false))} onsteps={(r) => (creating = r)} />
+	{/key}
+{/if}
+
 <style>
+	.dragcover {
+		position: fixed;
+		inset: 0;
+		z-index: 300;
+		pointer-events: none;
+		background: color-mix(in srgb, var(--leaf) 82%, transparent);
+		backdrop-filter: blur(2px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-family: var(--sans);
+	}
+	.dragcover div {
+		background: var(--sheet);
+		border: 1px solid var(--rule);
+		border-radius: 12px;
+		box-shadow: var(--float-shadow);
+		padding: 16px 24px;
+		font-size: 16px;
+		color: var(--ink);
+	}
 	.homepage {
 		position: fixed;
 		inset: 0;

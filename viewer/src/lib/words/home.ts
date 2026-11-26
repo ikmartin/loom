@@ -95,6 +95,96 @@ export const home = {
 	},
 	/** The notice in place of the list when loom cannot read it. */
 	unreadable: 'Loom cannot read its list of quilts, so it shows none and gives no quilt an address until it can; the list is kept as it was. Quilts already open stay open.',
+	cover: {
+		/** The sheet over the page while a paper, folder or archive is dragged over it. */
+		paper: 'New quilt from your paper',
+		/** The sheet over the page while a PDF is dragged over it. */
+		pdf: 'New quilt for reading this paper'
+	},
+	window: {
+		/** The window's title for a drop of a paper, folder or archive. */
+		paper: 'New quilt from your paper',
+		/** The window's title for a dropped PDF. */
+		pdf: 'New quilt for reading this paper',
+		/** The window's title for New quilt, with no paper. */
+		empty: 'New quilt',
+		/** The window's close button. */
+		close: 'close',
+		/** What the window says was dropped: a folder, before and after its name in bold, with how many files it holds. */
+		droppedFolder: (n: number) => ['You dropped ', `, a folder of ${n.toLocaleString('en')} ${n === 1 ? 'file' : 'files'}.`] as const,
+		/** What the window says was dropped: one file, before and after its name in bold. */
+		droppedFile: ['You dropped ', '.'] as const,
+		/** What the window says was dropped: several files or folders at once. */
+		droppedMany: (n: number) => `You dropped ${n.toLocaleString('en')} files.`,
+		/** The form's label before the quilt's name. */
+		name: 'Name',
+		/** The empty name field's placeholder, in New quilt. */
+		namePlaceholder: 'Name of the quilt',
+		/** The form's label before where the quilt goes. */
+		folder: 'Folder',
+		/** Where the quilt goes, in the form and in New quilt. */
+		place: (where: string) => `In ${where}`,
+		/** The link beside where the quilt goes, which opens the system's folder dialog. */
+		change: 'Change…',
+		/** Hover text on Change…. */
+		changeTip: "Choose where the new quilt's folder goes",
+		/** The window's quiet button that puts it away. */
+		cancel: 'Cancel',
+		/** The window's primary button. */
+		create: 'Create',
+		/** Hover text on Create while no file is chosen as the paper. */
+		chooseFirst: 'Choose the paper first',
+		/** The one question, when several files could be the paper. */
+		question: 'Which file is the paper?',
+		/** The window's steps, in order. */
+		steps: { making: 'Making the quilt', importing: 'Bringing your paper in and typesetting it', starting: 'Opening it' },
+		/** The second line under the typesetting step while it runs. */
+		importingSub: 'The first time can take a few minutes.',
+		/** The step for a PDF, in place of the typesetting step. */
+		reading: 'Bringing the PDF into its library',
+		/** Done: the quilt is made and served. */
+		ready: (name: string) => `${name} is ready.`,
+		/** Done, the paper not typeset, before where TeX stopped. */
+		untypeset: 'Your paper is in, shown as its source:',
+		/** Done, the paper not typeset because loom has no TeX. */
+		noTex: 'Loom has no TeX yet.',
+		/** Done, but its server could not start; its row says why. */
+		madeNotOpen: (name: string) => `${name} is made and on your list, but loom could not open it.`,
+		/** The primary button once done, which opens the quilt in its own tab. */
+		open: 'Open it',
+		/** The window's button that puts a refusal away. */
+		closeButton: 'Close',
+		/** Under the name: a folder of that name is there. */
+		exists: 'A folder of that name is there already.',
+		/** Under the name: a quilt of that name is being made there. */
+		beingMade: 'That quilt is being made already.',
+		/** Under the name: the folder chosen is inside a quilt. */
+		insideQuilt: 'That folder is inside a quilt.',
+		/** Refused: the home is stopping. */
+		stopping: "Loom's home page is stopping.",
+		/** Refused: nothing answered. */
+		unreachable: "Loom's home page did not answer.",
+		/** The hint under either. */
+		stoppingHint: 'Open Loom from your Applications folder or the Dock, then drop it again.',
+		/** Refused: no `.tex` that begins a document. */
+		noPaper: 'That holds no LaTeX file that begins a document.',
+		/** The hint under it, before and after the monospaced `.tex`. */
+		noPaperHint: ["Drop the folder or archive that holds your paper's ", '.tex', ' file, or a PDF to read it.'] as const,
+		/** Refused: an archive loom cannot open safely. */
+		badArchive: 'Loom cannot open that archive.',
+		/** The hint under it. */
+		badArchiveHint: 'Open it yourself, and drop the folder it holds.',
+		/** Refused: more than a drop may hold. */
+		tooLarge: 'That is more than 1 GB.',
+		/** The hint under it. */
+		tooLargeHint: 'Drop only the folder that holds the paper.',
+		/** Refused: the list of quilts cannot be read. */
+		unreadable: 'Loom cannot read its list of quilts, so it made nothing.',
+		/** Failed: the paper could not come in, above what loom said. */
+		failed: 'Loom could not bring your paper in, and made nothing:',
+		/** Failed, with nothing more to say. */
+		failedPlain: 'Loom could not make the quilt, and made nothing.'
+	},
 	report: {
 		/** The first line of what Copy details copies. */
 		head: 'Loom on this machine',
