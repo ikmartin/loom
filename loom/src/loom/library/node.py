@@ -20,21 +20,24 @@ READABLE = frozenset({SCHEMA})
 SUFFIX = ".node"
 FENCE = "+++"
 
-_STR, _IDS, _STRS, _HASH, _TABLE = "a string", "a list of ids", "a list of names", "a hash", "a table of anchors"
-#: The header's keys in the order loom writes them, each with its type, the kinds it is allowed on, and whether it needs a `source` (True), forbids one (False) or neither (None).
+_STR, _IDS, _HASH, _TABLE = "a string", "a list of ids", "a hash", "a table of anchors"
+#: The header's keys in the order loom writes them, each with its type, the kinds it is allowed on, and whether it says where in its `source` the text is (True) or not (None).
 KEYS: dict[str, tuple[str, frozenset[str], bool | None]] = {
     "number": (_STR, frozenset({ids.STATEMENT}), None),
     "title": (_STR, frozenset({ids.STATEMENT}), None),
     "source": (_STR, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "label": (_STR, frozenset({ids.STATEMENT}), True),
     "pages": (_STR, frozenset({ids.STATEMENT, ids.PROOF}), True),
+    "found": (_STR, frozenset({ids.STATEMENT}), True),
     "anchors": (_TABLE, frozenset({ids.STATEMENT, ids.PROOF}), None),
+    "awaiting": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "uses": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "mentions": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
-    "authors": (_STRS, frozenset({ids.STATEMENT, ids.PROOF}), False),
     "pdf": (_HASH, frozenset({ids.REFERENCE}), None),
     "tex": (_HASH, frozenset({ids.REFERENCE}), None),
 }
+#: How loom found a statement's number and page in its work (`found`): its heading identified by its own words in the stored PDF, placed between two so identified, or with no PDF its number loom's reading that a compile of the source agreed with.
+FOUND = ("words", "place", "compile")
 #: The three every node has, which come first.
 REQUIRED = ("schema", "id", "taxon")
 #: A statement's taxon: a word of lower-case ASCII letters and hyphens.
@@ -81,10 +84,11 @@ class Node:
     source: str | None = None
     label: str | None = None
     pages: str | None = None
+    found: str | None = None
     anchors: tuple[tuple[str, str], ...] = ()
+    awaiting: tuple[str, ...] = ()
     uses: tuple[str, ...] = ()
     mentions: tuple[str, ...] = ()
-    authors: tuple[str, ...] = ()
     pdf: str | None = None
     tex: str | None = None
     schema: int = SCHEMA
@@ -296,15 +300,9 @@ def header_problems(header: dict[str, Any], name: str, header_text: str = "") ->
                     5, f"{name} has `{key}` and no `source`; `{key}` says where in its source the text is.", line(key)
                 )
             )
-        elif kind is not None and needs_source is False and sourced:
-            out.append(
-                Problem(
-                    5,
-                    f"{name} has `{key}` and a `source`; the authors of a node read from a work are the work's.",
-                    line(key),
-                )
-            )
         said = pages_problem(value) if key == "pages" else _type_problem(typ, value)
+        if not said and key == "found" and value not in FOUND:
+            said = f"is {value!r}, and is one of {', '.join(FOUND)}"
         if said:
             out.append(Problem(5, f"{name}'s `{key}` {said}.", line(key)))
         elif typ == _TABLE and isinstance(node_id, str):
@@ -314,6 +312,22 @@ def header_problems(header: dict[str, Any], name: str, header_text: str = "") ->
                         5, f"{name}'s `anchors` names {anchor}, which is not one of {node_id}'s anchors.", line(key)
                     )
                 )
+        elif key == "awaiting" and isinstance(node_id, str):
+            table = header.get("anchors")
+            numbered: dict[str, Any] = table if isinstance(table, dict) else {}
+            for anchor in sorted(set(value)):
+                if ids.anchor_owner(anchor) != node_id:
+                    out.append(
+                        Problem(
+                            5,
+                            f"{name}'s `awaiting` names {anchor}, which is not one of {node_id}'s anchors.",
+                            line(key),
+                        )
+                    )
+                elif anchor in numbered:
+                    out.append(
+                        Problem(5, f"{name}'s `awaiting` names {anchor}, which `anchors` numbers already.", line(key))
+                    )
     return out
 
 

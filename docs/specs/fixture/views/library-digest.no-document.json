@@ -1,0 +1,16 @@
+{
+ "answer": {
+  "error": {
+   "code": "no-document",
+   "message": "sh-0404-ref holds neither a PDF nor a TeX source to digest from"
+  },
+  "status": 409
+ },
+ "endpoint": "library-digest",
+ "request": {
+  "refs": [
+   "sh-0404-ref"
+  ],
+  "scope": "all"
+ }
+}

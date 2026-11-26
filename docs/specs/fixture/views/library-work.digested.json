@@ -1,0 +1,204 @@
+{
+ "answer": {
+  "authors": [
+   "Arden"
+  ],
+  "entry": "@article{Arden24,\n  author = {Arden, Elspeth},\n  title = {Cycle spaces of finite quivers},\n  journal = {J. Invented Combin.},\n  year = {2024},\n  eprint = {2504.01234v1},\n  archiveprefix = {arXiv},\n}\n",
+  "gen": 1789808400001,
+  "holds": {
+   "pages": 2,
+   "pdf": "sha256:8c21ed504f947f16b6e2a65bfa9d470795c14ab522320757cb5f27e5b4e59a8f",
+   "tex": true
+  },
+  "link": "https://arxiv.org/abs/2504.01234v1",
+  "marks": [],
+  "ok": true,
+  "outline": {
+   "from": "tex",
+   "items": [
+    {
+     "confirmed": true,
+     "found": "words",
+     "item": "def:quiver",
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Definition 1.1",
+     "node": "sh-0408",
+     "page": 1,
+     "paper": "unchecked",
+     "section": "s1",
+     "taxon": "definition",
+     "title": null
+    },
+    {
+     "confirmed": true,
+     "found": "words",
+     "item": "def:cycle-space",
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Definition 1.2",
+     "node": "sh-0409",
+     "page": 1,
+     "paper": "unchecked",
+     "section": "s1",
+     "taxon": "definition",
+     "title": null
+    },
+    {
+     "confirmed": true,
+     "found": "words",
+     "item": "prop:image",
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Proposition 2.1",
+     "node": "sh-040A",
+     "page": 1,
+     "paper": "unchecked",
+     "section": "s2",
+     "taxon": "proposition",
+     "title": null
+    },
+    {
+     "confirmed": true,
+     "found": "words",
+     "item": "lem:saturated",
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Lemma 2.2",
+     "node": "sh-040B",
+     "page": 2,
+     "paper": "unchecked",
+     "section": "s2",
+     "taxon": "lemma",
+     "title": null
+    },
+    {
+     "confirmed": true,
+     "found": "words",
+     "item": "thm:rank",
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Theorem 3.1",
+     "node": "sh-040C",
+     "page": 2,
+     "paper": "unchecked",
+     "section": "s3",
+     "taxon": "theorem",
+     "title": null
+    },
+    {
+     "confirmed": true,
+     "found": "words",
+     "item": "cor:forest",
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Corollary 3.2",
+     "node": "sh-040D",
+     "page": 2,
+     "paper": "unchecked",
+     "section": "s3",
+     "taxon": "corollary",
+     "title": null
+    },
+    {
+     "confirmed": true,
+     "found": "words",
+     "item": "rem:orientation",
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Remark 4.1",
+     "node": "sh-040E",
+     "page": 2,
+     "paper": "unchecked",
+     "section": "s4",
+     "taxon": "remark",
+     "title": null
+    },
+    {
+     "confirmed": true,
+     "found": "words",
+     "item": "rem:infinite",
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Remark 4.2",
+     "node": "sh-040F",
+     "page": 2,
+     "paper": "unchecked",
+     "section": "s4",
+     "taxon": "remark",
+     "title": null
+    }
+   ],
+   "sections": [
+    {
+     "confirmed": true,
+     "level": 1,
+     "number": "1",
+     "page": 1,
+     "section": "s1",
+     "title": "Introduction"
+    },
+    {
+     "confirmed": true,
+     "level": 1,
+     "number": "2",
+     "page": 1,
+     "section": "s2",
+     "title": "The image of the divergence map"
+    },
+    {
+     "confirmed": true,
+     "level": 1,
+     "number": "3",
+     "page": 2,
+     "section": "s3",
+     "title": "Rank and duality"
+    },
+    {
+     "confirmed": true,
+     "level": 1,
+     "number": "4",
+     "page": 2,
+     "section": "s4",
+     "title": "Examples and remarks"
+    }
+   ],
+   "state": "ready",
+   "why": null
+  },
+  "ref": "sh-0402-ref",
+  "result": "read",
+  "short": "Arden 2024",
+  "title": "Cycle spaces of finite quivers",
+  "unplaced": [],
+  "year": "2024"
+ },
+ "endpoint": "library-work",
+ "request": {
+  "ref": "sh-0402-ref"
+ }
+}

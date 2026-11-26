@@ -72,22 +72,21 @@ def test_each_failure_is_an_error_of_loom_s_records_under_its_check_s_code() -> 
     assert all(class_of(code) == "internal" for code in CODES.values())
 
 
-def test_a_node_stated_in_the_quilt_is_the_person_s_to_put_right() -> None:
-    mine = Node(
-        id="tq-00Q1", taxon="conjecture", authors=("A. Author",), body="Every widget is round \\ref{tq-00Q2}.\n"
-    )
+def test_a_result_with_no_work_is_refused_and_the_person_s_to_put_right() -> None:
+    """The author, 2026-11-24: every result in the library names a work; one of the person's own belongs in a draft."""
+    mine = Node(id="tq-00Q1", taxon="conjecture", body="Every widget is round.\n")
     [d] = check_store(with_(mine))
-    assert (d.code, d.owner) == ("loom:node-body-ref", None)
+    assert (d.code, d.owner) == ("loom:node-incomplete", None) and "has no `source`" in d.message
 
 
 def test_a_problem_in_the_body_names_the_file_s_line() -> None:
     files = with_(
         raw={
-            "tq-00K9.node": b'+++\nschema = 1\nid = "tq-00K9"\ntaxon = "remark"\n# a comment\n+++\nFirst line.\nSee \\ref{tq-00A4}.\n'
+            "tq-00K9.node": b'+++\nschema = 1\nid = "tq-00K9"\ntaxon = "remark"\nsource = "tq-00A1-ref"\n# a comment\n+++\nFirst line.\nSee \\ref{tq-00A4}.\n'
         }
     )
     [d] = check_store(files)
-    assert (d.code, d.locations[0].line) == ("loom:node-body-ref", 8)
+    assert (d.code, d.locations[0].line) == ("loom:node-body-ref", 9)
 
 
 # ---- 1 to 5: reading the file ------------------------------------------------------------------------------------------
@@ -246,6 +245,7 @@ def test_check_8_a_proof_points_at_itself_its_statement_and_their_anchors_freely
     proof = Node(
         id="tq-00K3-proof01",
         taxon="proof",
+        source="tq-00A1-ref",
         body="By \\eqref{tq-00K3-eq00}, \\ref{tq-00K3} and \\eqref{tq-00K3-proof01-eq00}: \\begin{equation}\\label{tq-00K3-proof01-eq00}y\\end{equation}\n",
     )
     assert check_store(with_(proof)) == []
@@ -347,17 +347,24 @@ def test_check_11_a_pointer_says_where_the_proof_is() -> None:
         "tq-00K5-proof01.node is a pointer, a proof with no text, and has no `pages`",
     )
     bare = Node(id="tq-00K5-proof01", taxon="proof")
-    assert says(with_(bare), "loom:node-incomplete", "has no `source` or `pages`")
+    assert says(with_(bare), "loom:node-incomplete", "has no `source`")
+    assert says(with_(bare), "loom:node-incomplete", "has no `pages`")
     assert check_store(with_(Node(id="tq-00K5-proof01", taxon="proof", source="tq-00B1-ref", pages="7-9"))) == []
 
 
-def test_check_11_a_stub_says_which_work_it_stands_in() -> None:
-    stub = Node(id="tq-00B8", taxon="lemma", number="2.2")
-    assert says(
-        with_(stub), "loom:node-incomplete", "tq-00B8.node is a stub, a statement with no text, and has no `source`"
-    )
-    whitespace = Node(id="tq-00B8", taxon="lemma", body="  \n\n")
-    assert says(with_(whitespace), "loom:node-incomplete", "is a stub")
+@pytest.mark.parametrize(
+    "node",
+    [
+        Node(id="tq-00B8", taxon="lemma", number="2.2"),
+        Node(id="tq-00B8", taxon="lemma", body="  \n\n"),
+        Node(id="tq-00B8", taxon="lemma", body="Every widget is bounded.\n"),
+        Node(id="tq-00K3-proof01", taxon="proof", body="By hand.\n"),
+    ],
+    ids=["a stub", "a stub of blank lines", "a statement with text", "a proof with text"],
+)
+def test_check_11_every_statement_and_proof_names_the_work_it_is_read_from(node: Node) -> None:
+    """The author, 2026-11-24: a library of results is a library of works' results, whoever writes the file."""
+    assert says(with_(node), "loom:node-incomplete", f"{node.file_name} has no `source`")
 
 
 # ---- a quilt's store ---------------------------------------------------------------------------------------------------

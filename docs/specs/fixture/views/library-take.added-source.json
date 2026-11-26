@@ -1,6 +1,6 @@
 {
  "answer": {
-  "gen": 1789808400001,
+  "gen": 1789808400002,
   "ok": true,
   "result": "took in 1: 1 added",
   "rows": [
@@ -15,7 +15,7 @@
     "identifier": null,
     "item": 0,
     "name": "gadget-towers.tex",
-    "ref": "sh-0408-ref",
+    "ref": "sh-040G-ref",
     "short": "Halberd and Ravel",
     "state": "added",
     "tex": true,

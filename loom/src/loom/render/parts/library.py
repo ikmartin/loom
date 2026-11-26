@@ -9,10 +9,10 @@ if TYPE_CHECKING:
 
 
 def attach(build: Attaching) -> None:
-    """Gather (`library.gather`), adding a `loom:bib-entry-refused` diagnostic for each entry it could not keep; then add `arriving`: each drop that waits, a question or a file received and not yet taken, as the intake's row (specs/manifest.md §1); empty when none does."""
+    """Say each entry the build's gathering (`library.gather`, run before the fragments with the stubs the drafts' citations want) could not keep, as a `loom:bib-entry-refused` diagnostic; then add `arriving`: each drop that waits, a question or a file received and not yet taken, as the intake's row (specs/manifest.md §1); empty when none does."""
     from loom.library.gather import gather, problems
     from loom.library.intake import waiting
 
-    done = gather(build.result)
+    done = build.gathered if build.gathered is not None else gather(build.result)
     build.manifest["diagnostics"] += [d.to_dict() for d in problems(build.result, done)]
     build.manifest["arriving"] = waiting(build.result.quilt.root)

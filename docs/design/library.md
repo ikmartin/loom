@@ -1,6 +1,6 @@
 # The library as a web of results
 
-**Decided with the author on 2026-11-20.** Built (`loom/src/loom/library/`): the node file, its checks, the index and the tag log; a reference for each work a quilt holds, with its macros node and its documents stored by hash; the intake that adds a work; the library's log; and the carry-over of an earlier loom's library. The rest is not built yet (see [README](README.md#decided-not-yet-built)), and nothing makes a statement or a proof from a work. This document is the design of the library as it is being built: what it is for, what a node is, how nodes are joined, how evidence about them is kept, and how formalization stands on it. The shape of the files is [`docs/specs/nodes.md`](../specs/nodes.md), which wins over this document about a shape, as this one wins about what a thing means. What loom does today is the library section of [`model.md`](model.md#the-library).
+**Decided with the author on 2026-11-20.** Built (`loom/src/loom/library/`): the node file, its checks, the index and the tag log; a reference for each work a quilt holds, with its macros node and its documents stored by hash; the intake that adds a work; the library's log; the carry-over of an earlier loom's library; the survey of a work's TeX source, its numbers and pages confirmed by its stored PDF; digest, which writes a work's results as statements and proofs, and the stubs the drafts' citations make; and the reads the Library's views draw from. The rest is not built yet (see [README](README.md#decided-not-yet-built)). This document is the design of the library as it is being built: what it is for, what a node is, how nodes are joined, how evidence about them is kept, and how formalization stands on it. The shape of the files is [`docs/specs/nodes.md`](../specs/nodes.md), which wins over this document about a shape, as this one wins about what a thing means. What loom does today is the library section of [`model.md`](model.md#the-library).
 
 ## What it is for
 
@@ -35,7 +35,9 @@ Everything in the library is a **node**: one file, named by its id, with a small
 
 **Why this format.** The files are written and read by loom, seldom by hand, so the header is typed and validated, and the body is the text exactly, with no quoting. A LaTeX file with its header in comments cannot hold a list. JSON puts the LaTeX on one escaped line, so any change rewrites the whole body in a diff. Forester's own format was considered and its design is what this takes: an opaque address, one node a file, a small header, everything a node, views computed from links. Its body is its own markup, into which LaTeX goes as a picture, where loom needs words a note can be anchored to; it has no kinds of edge, no evidence and no way to keep two authors' addresses apart; and as a dependency it is another toolchain beside TeX.
 
-**Open.** A node with no source, something stated in the quilt and read from no work, is specified only as far as a list of authors. What it is for, and whether a note that became durable is one, belongs with the notes beyond annotations in [`model.md`](model.md#notes).
+Every result in the library is read from a work (the author, 2026-11-24: otherwise "library" is a misnomer). A statement or a proof names its work's reference as its `source`, and the store refuses one that does not, whoever writes it. A fact from a book the person holds only on paper has the book as its work, and reads as having no document until a scan is added; a colleague's unpublished note is a work. A result of the person's own or an agent's belongs in a draft, not the library.
+
+**Open.** A result with a proof and Lean's check but no published source: whether it lives in a draft, where its own Lean and the person's word make it read formalized, or in the library. The author's to decide.
 
 ## A draft is not in the library
 
@@ -91,7 +93,7 @@ A dependency is written on the node whose text makes it. A proposition depends o
 
 What is true of a node is kept apart from the kinds of edge. "Depends on something unproved" is an edge and a fact about its far end, and is found by a question, not stored as a kind.
 
-**Open.** A `\ref` in a proof does not say whether it is a use or a mention. Digest reads it as a use and marks a plain comparison as a mention; that is a reading of the text, as the taxon is, and checking a node against its source covers it. Whether a mechanical digest may mark a mention at all, or only an agent and a person, is not decided.
+A `\ref` in a proof does not say whether it is a use or a mention, and loom does not guess: every pointer a mechanical digest finds is a use, "see" and "compare" included, and only an agent's proposal or the person moves one to the mentions. A use too many costs a closure one more node; a use read as a mention from the words around it would drop, unchecked, something a result rests on.
 
 ## Evidence
 

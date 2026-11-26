@@ -437,6 +437,9 @@ def _scan(quilt: Quilt, overlay: Mapping[str, str | None] | None, bases: dict[st
                 )
             )
     result.edges = find_edges(result.assembly, result.files)
+    from loom.library.citations import resolve
+
+    resolve(result)
     # relations are resolved beside the edges and stored beside them; nothing that walks the graph can reach one
     seen = find_relations(result.assembly, result.files)
     result.relations = seen.relations

@@ -129,10 +129,13 @@ def _file_end(u: SectionUnit, units: list[SectionUnit], src: SourceFile, exp: Ex
 
 
 def heading_labels(clean: str, heading_end: int) -> list[str]:
-    """Labels on the heading's line, else on the next non-blank line unless it opens an environment or heading."""
+    """Labels on the heading's line, else on the next non-blank line unless it opens an environment or heading.
+
+    On either line only a label before the first `\\begin` is the heading's: one after it labels that environment, a display or a figure begun beside the heading's words.
+    """
     line_end = clean.find("\n", heading_end)
     line_end = len(clean) if line_end < 0 else line_end
-    same_line = _LABEL.findall(clean, heading_end, line_end)
+    same_line = _LABEL.findall(_before_begin(clean[heading_end:line_end]))
     if same_line:
         return [re.sub(r"\s+", " ", x).strip() for x in same_line]
     pos = line_end + 1
@@ -143,6 +146,12 @@ def heading_labels(clean: str, heading_end: int) -> list[str]:
         if line.strip():
             if _OPENER.match(line):
                 return []
-            return [re.sub(r"\s+", " ", x).strip() for x in _LABEL.findall(line)]
+            return [re.sub(r"\s+", " ", x).strip() for x in _LABEL.findall(_before_begin(line))]
         pos = nl + 1
     return []
+
+
+def _before_begin(line: str) -> str:
+    """`line` up to its first `\\begin`, where an environment's own labels start."""
+    at = line.find("\\begin")
+    return line if at < 0 else line[:at]

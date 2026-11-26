@@ -1,6 +1,6 @@
 """A result's status, computed from the evidence and the texts now, and never stored (`docs/specs/evidence.md` §5).
 
-Nothing reads `formalized` without a person's attestation that still holds and every library result under it read and compared with its paper, nothing reads `matches` without a person's comparison of this very text, and a Lean record is believed only while every Lean file it read is unchanged. The gate is computed here from whatever records exist, not trusted to the act that wrote them.
+Nothing reads `formalized` without a person's attestation that still holds and every library result under it read and compared with its paper, nothing reads `matches` without a person's comparison of this very text or of one loom only filled its display numbers into (`Evidence.compared`), and a Lean record is believed only while every Lean file it read is unchanged. The gate is computed here from whatever records exist, not trusted to the act that wrote them.
 """
 
 from __future__ import annotations
@@ -312,7 +312,7 @@ def _read_and_compared(evidence: Evidence, web: Web, node: str) -> str | None:
         return "unknown"
     if stub:
         return "stub"
-    if not any(r.on is not None and r.on.hash == subject.hash for r in evidence.about("node", node, of="compared")):
+    if not evidence.compared("node", node, subject.hash):
         return "unchecked"
     return None
 
@@ -486,12 +486,12 @@ def status(
         compared = evidence.about(kind, name, of="compared")
         if stub:
             reading = "stub"
-        elif any(r.on is not None and r.on.hash == subject.hash for r in compared):
+        elif evidence.compared(kind, name, subject.hash):
             reading = "matches"
         else:
             reading, compared_before = "unchecked", bool(compared)
-        made = [r for r in evidence.about(kind, name, of="digested") if r.on is not None and r.on.hash == subject.hash]
-        how = made[-1].get("how") if made else None
+        made = evidence.made(kind, name, subject.hash)
+        how = made.get("how") if made is not None else None
         sought = stub and any(
             r.on is not None and r.on.hash == subject.hash for r in evidence.about(kind, name, of="sought")
         )

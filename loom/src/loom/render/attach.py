@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from loom.render.parts import agents, formal, library, records, review
 
 if TYPE_CHECKING:
+    from loom.library.gather import Gathered
     from loom.records.store import Records
     from loom.render.fragments import FragmentRenderer
     from loom.scan.scan import ScanResult
@@ -27,6 +28,8 @@ class Attaching:
     manifest: dict[str, Any]
     #: What the publication writes beside the manifest, by path under the build directory.
     files: dict[str, str | bytes]
+    #: What the build's gathering made and refused (`library.gather`), before its fragments were drawn.
+    gathered: Gathered | None = None
 
 
 #: The parts, in the order they are added. Each runs once the records are applied and the changes and versions are attached, and before the previews it asked the renderer for are made; the unresolved rows, the files' list, the published config and the owners of the diagnostics follow, so a part may add a diagnostic to `manifest["diagnostics"]` and have it stamped with the rest.

@@ -1,4 +1,5 @@
 // A node's body (docs/specs/nodes.md §4) drawn as HTML in the browser: its text-mode LaTeX turned into markup, its mathematics left for MathJax with the work's macros. It is not a LaTeX engine. It knows a short list of constructs, reports every other command and environment in `unknown` rather than guessing at it, and never writes markup from the body's text, so a caller shows what it drew or asks the publisher for TeX's drawing of the node instead.
+import { library as words } from '$lib/words/library';
 import { matchGroup, skipSpace, type NodeMacro } from './macros';
 
 /** What a body's pointer to an id is drawn as: the target's `number` for `\ref`, its `name` for `\cref` and `\autoref`, a reference's `name` for a citation. `work` marks a result of another work, drawn as a citation with the result's name as its locator (nodes.md §4 rule 3). */
@@ -7,6 +8,8 @@ export interface Point {
 	number?: string;
 	page?: string;
 	work?: string;
+	/** An anchor loom numbers only after the person compiles the source: drawn in words saying so, never as `??`. */
+	awaiting?: boolean;
 }
 
 export interface LiteOptions {
@@ -698,11 +701,14 @@ class Parser {
 	private refWords(cmd: string, id: string): string {
 		const p = this.point(id);
 		let w: string | undefined;
+		if (p?.awaiting && p.number == null) return words.side.awaitingRef;
 		if (p) {
-			if (cmd === 'eqref') w = p.number === undefined ? undefined : `(${p.number})`;
+			// loom sends a number it does not hold as null: unresolved, as one it does not send
+			const number = p.number ?? undefined;
+			if (cmd === 'eqref') w = number === undefined ? undefined : `(${number})`;
 			else if (cmd === 'pageref') w = p.page;
-			else if (cmd === 'ref' || cmd === 'vref' || cmd === 'Vref') w = p.number;
-			else w = p.name ?? p.number;
+			else if (cmd === 'ref' || cmd === 'vref' || cmd === 'Vref') w = number;
+			else w = p.name ?? number;
 			if (w !== undefined && cmd === 'Cref') w = w.charAt(0).toUpperCase() + w.slice(1);
 			if (w !== undefined && p.work !== undefined) w = `[${p.work}, ${p.name ?? w}]`;
 		}
@@ -903,7 +909,8 @@ class Parser {
 		let tag: string | null = null;
 		let out = src.replaceAll(SEP, '').replace(LABEL_RE, (_, id: string) => {
 			const n = numbering === null ? undefined : this.point(id.trim())?.number;
-			if (n === undefined) return '';
+			// an anchor loom numbers only after the person's compile is drawn with no tag
+			if (n == null) return '';
 			if (numbering === 'rows') return `\\tag{${texText(n)}}`;
 			tag ??= n;
 			return '';

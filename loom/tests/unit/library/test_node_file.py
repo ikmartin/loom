@@ -212,13 +212,16 @@ def test_check_4_a_statement_s_taxon_is_any_such_word() -> None:
         ("tq-00A1-macros.node", 'source = "tq-00A1-ref"\n', "`source` is not a key of a macros node"),
         ("tq-00K3.node", 'label = "lem:test"\n', "has `label` and no `source`"),
         ("tq-00K3.node", 'pages = "12"\n', "has `pages` and no `source`"),
-        ("tq-00K3.node", 'authors = ["Smith"]\nsource = "tq-00A1-ref"\n', "has `authors` and a `source`"),
+        (
+            "tq-00K3.node",
+            'authors = ["Smith"]\nsource = "tq-00A1-ref"\n',
+            "has a key `authors`, which a node's file does not have.",
+        ),
         ("tq-00K3.node", "number = 3.2\n", "`number` is not a string"),
         ("tq-00K3.node", 'title = ""\n', "`title` is empty, where a key with nothing to say is left out"),
         ("tq-00K3.node", 'uses = "tq-00A4"\n', "`uses` is not a list of ids"),
         ("tq-00K3.node", "uses = []\n", "`uses` is an empty list"),
         ("tq-00K3.node", 'mentions = ["tq-00A4", 3]\n', "`mentions` is not a list of ids"),
-        ("tq-00K3.node", 'authors = [""]\n', "`authors` holds an empty string"),
         ("tq-00A1-ref.node", 'pdf = "sha256:ABC"\n', "`pdf` is not `sha256:` and 64 lower-case hexadecimal digits"),
         ("tq-00A1-ref.node", 'tex = "' + "a" * 64 + '"\n', "`tex` is not `sha256:`"),
         ("tq-00K3.node", "[extra]\nkey = 1\n", "has a key `extra`"),
@@ -286,3 +289,13 @@ def test_anchors_are_not_a_reference_s() -> None:
         "tq-00A1-ref.node",
     )
     assert any(c == 5 and "`anchors` is not a key of a reference" in m for c, m in found), found
+
+
+def test_found_says_one_of_three_ways() -> None:
+    """How loom found a statement's number and page in its work: words, place or compile, and nothing else."""
+    from loom.library.node import header_problems
+
+    good = {"schema": 1, "id": "tq-00K3", "taxon": "lemma", "source": "tq-00A1-ref", "found": "place"}
+    assert header_problems(good, "tq-00K3.node") == []
+    said = header_problems({**good, "found": "guessed"}, "tq-00K3.node")
+    assert [p.check for p in said] == [5] and "words, place, compile" in said[0].message

@@ -144,3 +144,32 @@ def match(postnote: str, candidates: list[tuple[str, set[str]]]) -> list[str]:
     if not wanted:
         return []
     return [key for key, forms in candidates if forms & wanted]
+
+
+#: The words a locator uses for what is no result of a work: a part of it, a page, a display, a picture.
+NOT_RESULTS = frozenset(
+    {"section", "subsection", "chapter", "appendix", "paragraph", "equation", "figure", "table", "tag", "page"}
+)
+_NUMBER = re.compile(r"(?:[A-Za-z]?\d+(?:[.\-]\d+)*[a-z]?|[IVXLCDM]+|[A-Z](?:\.\d+)+)(?![\w.])")
+
+
+def located(postnote: str) -> list[tuple[str, str]]:
+    """Each result a postnote names, as its taxon and its number as the postnote prints it: `Lemma~2.1 and Theorem 3` gives `("lemma", "2.1")` and `("theorem", "3")`.
+
+    A part, a page, an equation or a figure names no result, and neither does a postnote with no number; a bare number takes the taxon before it, as `parts` reads it.
+    """
+    text = re.sub(r"\\href\s*\{[^}]*\}\s*\{([^}]*)\}", r"\1", postnote)
+    text = re.sub(r"\\S\b|§", " section ", text)
+    text = re.sub(r"\\[A-Za-z@]+\*?\s*", " ", text).replace("~", " ").replace("{", "").replace("}", "")
+    out: list[tuple[str, str]] = []
+    last: str | None = None
+    for raw in _SPLIT.split(_PAGE.sub(" ", text)):
+        words = [w for w in re.split(r"[\s()]+", raw) if w]
+        taxon = next((ABBREV[w.lower().rstrip(".")] for w in words if w.lower().rstrip(".") in ABBREV), None)
+        if taxon is not None:
+            last = taxon
+        number = next((m.group(0) for w in words if (m := _NUMBER.fullmatch(w.rstrip(".,;:")))), None)
+        kind = taxon or last
+        if number is not None and kind is not None and kind not in NOT_RESULTS:
+            out.append((kind, number))
+    return out

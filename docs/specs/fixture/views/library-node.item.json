@@ -1,0 +1,25 @@
+{
+ "answer": {
+  "digested": null,
+  "found": "words",
+  "gen": 1789808400000,
+  "item": "lem:saturated",
+  "name": "Lemma 2.2",
+  "ok": true,
+  "pages": "2",
+  "paper": null,
+  "result": "read",
+  "taxon": "lemma",
+  "title": null,
+  "work": {
+   "pdf": "sha256:8c21ed504f947f16b6e2a65bfa9d470795c14ab522320757cb5f27e5b4e59a8f",
+   "ref": "sh-0402-ref",
+   "short": "Arden 2024"
+  }
+ },
+ "endpoint": "library-node",
+ "request": {
+  "item": "lem:saturated",
+  "ref": "sh-0402-ref"
+ }
+}

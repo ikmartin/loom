@@ -10,7 +10,7 @@ import pytest
 
 from loom.render.serve import ServeSession
 from tests.unit._quilts import showcase
-from tests.unit.render._serve import get
+from tests.unit.render._serve import get, post
 from tests.unit.render.write_api._cases import (
     Serve,
     case,
@@ -36,6 +36,156 @@ def _library_places(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
     refuses(s, "library-places", {"ref": "sh-0ZZZ-ref"}, 404, "no-such-ref", "no work")
     refuses(s, "library-places", {"ref": "sh-0403-ref", "pages": [0]}, 400, "bad-field", "page numbers")
     refuses(s, "library-places", {}, 400, "missing-field", "ref")
+    # M-21: `since` answers `unchanged` to the whole work's ask alone, never to another ask under the same generation
+    assert "places" in succeeds(s, "library-places", {"ref": "sh-0403-ref", "pages": [2], "since": said["gen"]})
+    got, gone = post(s.url + "_api/library-places", {"ref": "sh-0ZZZ-ref" + "x" * 5000})
+    assert got == 404 and len(gone["error"]["message"]) < 200, "a refused name is not echoed whole"
+    # the nodes of a work, once digested, on the pages asked for, as the digest marks ask; never on the whole work's ask; and one node's place alone
+    lemma = _digested(s.quilt.root)
+    placed = succeeds(s, "library-places", {"ref": ARDEN, "pages": [1, 2]})
+    nodes = [p for p in placed["places"] if "node" in p]
+    assert nodes and all(set(p) == {"node", "name", "number", "page", "rects", "paper", "lean", "lacks"} for p in nodes)
+    assert not [p for p in succeeds(s, "library-places", {"ref": ARDEN})["places"] if "node" in p]
+    one = succeeds(s, "library-places", {"node": lemma})
+    assert [p["node"] for p in one["places"]] == [lemma] and one["places"][0]["lacks"] == [], (
+        "every word of it on its page"
+    )
+    refuses(s, "library-places", {"node": "sh-0ZZZ"}, 404, "no-such-node", "no statement")
+    refuses(s, "library-places", {"ref": BELLAMY, "node": lemma}, 404, "no-such-node", "of that work")
+
+
+#: The showcase's works: one holding a PDF and its source, one a PDF alone, one neither.
+ARDEN, BELLAMY, CORTEZ = "sh-0402-ref", "sh-0403-ref", "sh-0404-ref"
+
+
+def _digested(root: Path) -> str:
+    """Arden 2024's results digested from its source, by the library's own function: the id of its Lemma 2.2."""
+    from loom.library.digest import digest, of_work
+    from loom.library.reads import surveyed
+    from loom.library.store import read
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+
+    work = read(root, ARDEN)
+    assert work is not None
+    s = surveyed(root, work)
+    assert s is not None and s.state == "ready", s
+    done = digest(scan(load_quilt(root)), ARDEN, [i.item for i in s.items], s)
+    assert not done.waiting, done.waiting
+    return next(n.id for n in of_work(root, ARDEN) if n.label == "lem:saturated")
+
+
+@case("library-work")
+def _library_work(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s = serve(showcase(tmp_path))
+    builds = s.builds
+    arden = succeeds(s, "library-work", {"ref": ARDEN})
+    assert (arden["short"], arden["holds"]["tex"], arden["holds"]["pages"]) == ("Arden 2024", True, 2), arden["holds"]
+    outline = arden["outline"]
+    assert (outline["from"], outline["state"]) == ("tex", "ready")
+    assert [i["name"] for i in outline["items"] if i["item"]][:3] == [
+        "Definition 1.1",
+        "Definition 1.2",
+        "Proposition 2.1",
+    ]
+    assert all(i["confirmed"] for i in outline["items"] if i["item"]), "numbered as the stored PDF prints them"
+    assert [i["section"] for i in outline["sections"]][:1] == ["s1"] and outline["sections"][0]["page"] == 1
+    assert [i for i in outline["items"] if i["item"] is None], "a stub its source does not print comes last"
+    assert succeeds(s, "library-work", {"ref": BELLAMY})["outline"]["from"] == "pdf"
+    assert succeeds(s, "library-work", {"ref": CORTEZ})["outline"]["from"] is None
+    assert s.builds == builds, "a read publishes nothing"
+    refuses(s, "library-work", {"ref": "sh-0ZZZ-ref"}, 404, "no-such-ref", "no work")
+    refuses(s, "library-work", {}, 400, "missing-field", "ref")
+
+
+@case("library-digest-scopes")
+def _library_digest_scopes(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s = serve(showcase(tmp_path))
+    said = succeeds(s, "library-digest-scopes", {"ref": ARDEN})
+    assert (said["tex"], said["pdf"], said["all"]) == (True, True, 8) and said["used"] >= 1, said
+    assert succeeds(s, "library-digest-scopes", {"ref": BELLAMY})["all"] == 3, "a work held only as a PDF: its pages"
+    assert succeeds(s, "library-digest-scopes", {"ref": CORTEZ})["all"] is None
+    assert succeeds(s, "library-digest-scopes", {"all": True})["used"] >= said["used"]
+    _digested(s.quilt.root)
+    assert succeeds(s, "library-digest-scopes", {"ref": ARDEN})["all"] == 0
+    refuses(s, "library-digest-scopes", {}, 400, "missing-field", "ref")
+    refuses(s, "library-digest-scopes", {"all": "yes"}, 400, "bad-field", "all is true")
+
+
+@case("library-node")
+def _library_node(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s = serve(showcase(tmp_path))
+    item = succeeds(s, "library-node", {"ref": ARDEN, "item": "lem:saturated"})
+    assert (item["name"], item["digested"], item["paper"]) == ("Lemma 2.2", None, None)
+    lemma = _digested(s.quilt.root)
+    node = succeeds(s, "library-node", {"node": lemma})
+    assert (node["name"], node["work"]["short"], node["pages"], node["paper"]) == (
+        "Lemma 2.2",
+        "Arden 2024",
+        "2",
+        "unchecked",
+    )
+    assert node["digested"]["how"] == "extracted" and node["digested"]["by"] == "loom" and node["body"]
+    assert {"uses", "mentions", "proofs", "used_by", "points", "macros"} <= set(node)
+    card = succeeds(s, "library-node", {"node": lemma, "brief": True})
+    assert "uses" not in card and card["body"] == node["body"]
+    refuses(s, "library-node", {"node": "sh-0ZZZ"}, 404, "no-such-node", "no statement")
+    refuses(s, "library-node", {"ref": ARDEN, "item": "nothing"}, 404, "no-such-result", "holds no result")
+    refuses(s, "library-node", {}, 400, "missing-field", "node is required")
+
+
+@case("library-digest")
+def _library_digest(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom.evidence.asks import replay
+    from loom.library.jobs import jobs_of
+
+    s = serve(showcase(tmp_path))
+    q = s.quilt.root
+    done = succeeds(s, "library-digest", {"refs": [ARDEN], "scope": "all"})
+    assert done["made"] >= 8 and done["tasks"] == [] and "job" not in done and isinstance(done["gen"], int), done
+    assert succeeds(s, "library-digest", {"refs": [ARDEN], "scope": "all"})["made"] == 0, "nothing left to digest"
+    refuses(s, "library-digest", {"refs": [BELLAMY], "scope": "all"}, 409, "no-reviewer", "reviewer name")
+    from loom.scan.quilt import save_author
+
+    save_author("A. Author")
+    asked = succeeds(s, "library-digest", {"refs": [BELLAMY], "scope": "all"})
+    task = replay(q).asks[asked["tasks"][0]]
+    assert (len(asked["tasks"]), task.what, task.by.kind, asked["made"]) == (1, "digest", "person", 0), (
+        "the person's ask"
+    )
+    refuses(s, "library-digest", {"refs": [CORTEZ], "scope": "all"}, 409, "no-document", "neither")
+    # a source with no PDF to confirm its numbers by: the compile is the person's own act, run as a job
+    import io
+
+    from loom.library.intake import receive
+
+    source = b"\\documentclass{article}\n\\newtheorem{theorem}{Theorem}\n\\title{Gadget towers}\n\\begin{document}\n\\begin{theorem}\\label{thm:t}Every tower is finite.\\end{theorem}\n\\end{document}\n"
+    drop = receive(q, "gadget-towers.tex", io.BytesIO(source), len(source))["incoming"]
+    towers = succeeds(s, "library-take", {"items": [{"incoming": drop}], "online": False})["rows"][0]["ref"]
+    started = succeeds(s, "library-digest", {"refs": [towers], "scope": "all"})
+    assert started["job"] and started["made"] == 0 and jobs_of(q).idle(120), started
+    refuses(
+        s,
+        "library-digest",
+        {"refs": [ARDEN], "scope": "all", "author": "Claude Code Agent"},
+        403,
+        "author-only",
+        "only the author",
+    )
+    refuses(s, "library-digest", {"refs": [ARDEN], "scope": "some"}, 400, "bad-field", "scope is one of")
+    refuses(s, "library-digest", {"refs": [ARDEN], "scope": "chosen"}, 400, "bad-field", "chosen names")
+    refuses(s, "library-digest", {"scope": "all"}, 400, "missing-field", "refs is")
+    refuses(s, "library-digest", {"refs": ["sh-0ZZZ-ref"], "scope": "all"}, 404, "no-such-ref", "no work")
+
+
+@case("library-find")
+def _library_find(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s = serve(showcase(tmp_path))
+    said = succeeds(s, "library-find", {"ref": BELLAMY, "q": "median order"})
+    assert said["pages"] == 3 and said["hits"] and said["hits"][0]["page"] == 1 and said["hits"][0]["rects"], said
+    assert succeeds(s, "library-find", {"ref": BELLAMY, "q": "nowhere in it at all"})["hits"] == []
+    refuses(s, "library-find", {"ref": CORTEZ, "q": "Theorem"}, 409, "no-document", "holds no PDF")
+    refuses(s, "library-find", {"ref": BELLAMY}, 400, "missing-field", "q")
 
 
 @case("locate")
@@ -258,6 +408,7 @@ def _library_works(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
         "version",
         "lookup",
         "cited_as",
+        "cited_from",
     } <= set(said["works"][0])
     assert isinstance(said["gen"], int) and s.builds == builds
     # `since` while the generation stands: unchanged, and nothing else

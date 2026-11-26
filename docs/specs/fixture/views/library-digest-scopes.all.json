@@ -1,0 +1,12 @@
+{
+ "answer": {
+  "gen": 1789808400000,
+  "ok": true,
+  "result": "read",
+  "used": 5
+ },
+ "endpoint": "library-digest-scopes",
+ "request": {
+  "all": true
+ }
+}

@@ -378,9 +378,7 @@ def _correction(root: Path, evidence: Evidence, library: LibraryWeb, node: str, 
         runs += [["+", new[n0:n1]]] if n1 > n0 else []
         at = o1
     runs += [["=", old[at:]]] if at < len(old) else []
-    compared = [
-        r.at for r in evidence.about("node", node, of="compared") if r.on is not None and r.on.hash == found.on.hash
-    ]
+    compared = [r.at for r in evidence.compared("node", node, found.on.hash)]
     refused = take_refusal(root, proposal)
     fields = {"correction": proposal, "node": node, "name": node_name(held), "ref": held.source, "short": library.short(held.source), "by": found.by.name, "refusal": str(refused) if refused else None}  # fmt: skip
     return Row(f"check:{proposal}", "check", (), since=found.at, fields=fields, body={"compared_at": compared[-1] if compared else None, "runs": runs})  # fmt: skip

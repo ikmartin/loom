@@ -58,7 +58,7 @@ def get(url: str, attempts: int = 3) -> bytes:
     raise last
 
 
-def arxiv_source(ident: str, dest: Path) -> Path:
+def arxiv_source(ident: str, dest: Path, *, attempts: int = 3) -> Path:
     """Download the e-print of the arXiv paper `ident` into the folder `dest`.
 
     Parameters
@@ -67,6 +67,8 @@ def arxiv_source(ident: str, dest: Path) -> Path:
         The arXiv number, with or without its version (`2401.01234v2`, `math/0601001`).
     dest : Path
         A folder of the caller's, made if missing.
+    attempts : int, default 3
+        How many times to ask (`get`); 1 for one request and no retry.
 
     Returns
     -------
@@ -78,11 +80,11 @@ def arxiv_source(ident: str, dest: Path) -> Path:
     FetchRefused
         When arXiv could not be asked or has no such paper.
     """
-    data = get(f"{ARXIV}/e-print/{ident}")
+    data = get(f"{ARXIV}/e-print/{ident}", attempts)
     return _written(dest, ident, ".pdf" if data[:4] == b"%PDF" else ".gz", data)
 
 
-def arxiv_pdf(ident: str, dest: Path) -> Path:
+def arxiv_pdf(ident: str, dest: Path, *, attempts: int = 3) -> Path:
     """Download the PDF of the arXiv paper `ident` into the folder `dest`.
 
     Parameters
@@ -91,6 +93,8 @@ def arxiv_pdf(ident: str, dest: Path) -> Path:
         The arXiv number, with or without its version.
     dest : Path
         A folder of the caller's, made if missing.
+    attempts : int, default 3
+        How many times to ask (`get`); 1 for one request and no retry.
 
     Returns
     -------
@@ -102,7 +106,7 @@ def arxiv_pdf(ident: str, dest: Path) -> Path:
     FetchRefused
         When arXiv could not be asked, has no such paper, or answered with something other than a PDF.
     """
-    data = get(f"{ARXIV}/pdf/{ident}")
+    data = get(f"{ARXIV}/pdf/{ident}", attempts)
     if data[:4] != b"%PDF":
         raise FetchRefused(f"{ARXIV}/pdf/{ident} did not return a PDF")
     return _written(dest, ident, ".pdf", data)

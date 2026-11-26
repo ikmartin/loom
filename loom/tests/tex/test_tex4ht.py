@@ -309,12 +309,19 @@ def test_a_document_is_read_from_its_html_and_an_edit_since_is_made_again_by_tex
     assert len(pictures) == 2 and all(
         s.startswith("svg/") and (q / ".loom/cache/site" / s).is_file() for s in pictures
     ), pictures
-    # a block's span takes in the citation it ends with, so the citation finds its own command and its postnote; nothing resolves the result a postnote names, so it claims no target
+    # a block's span takes in the citation it ends with, so the citation finds its own command and its postnote; the build makes a stub of the result it names, and the next build's fragment reaches it
+    from loom.library.store import read
+
+    exits(1, "build", cwd=q)
     node = (q / ".loom/cache/site/fragments/nodes/sy-000A.html").read_text(encoding="utf-8")
     cite = re.search(r'<span class="cite" data-citekey="Kre99"[^>]*>', node)
     assert cite is not None, node
     assert 'data-tex="\\cite[Theorem 2.1]{Kre99}"' in cite.group(0) and 'data-postnote="Theorem 2.1"' in cite.group(0)
-    assert re.search(r'data-at="\d+"', cite.group(0)) and "data-target" not in cite.group(0), cite.group(0)
+    target = re.search(r'data-target="([^"]+)"', cite.group(0))
+    assert re.search(r'data-at="\d+"', cite.group(0)) and target is not None, cite.group(0)
+    stub = read(q, target.group(1))
+    assert stub is not None and (stub.taxon, stub.number, stub.empty) == ("theorem", "2.1", True)
+    assert "Kre99" in (q / ".loom/library/nodes" / f"{stub.source}.node").read_text(encoding="utf-8")
     # the paper formats set the title and heads by the document's class
     assert re.match(r'<h1 [^>]*data-documentclass="amsart"', frag)
     # each formula as the source writes it, which is what a quote copies, and not as TeX4ht writes it back

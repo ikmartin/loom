@@ -670,6 +670,24 @@ def test_a_stored_pdfs_pages_are_kept_while_the_store_holds_the_pdf(tmp_path: Pa
     assert text.is_file() and boxes.is_file() and not gone.exists()
 
 
+def test_a_survey_is_kept_while_the_store_holds_its_source_and_its_pdf(tmp_path: Path) -> None:
+    from loom.paths import LIBRARY_DOCUMENTS, LIBRARY_SURVEYS, SURVEY_RUN
+
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    held_pdf = next((q / LIBRARY_DOCUMENTS).glob("*.pdf")).stem
+    tex = "ab" * 32
+    _plant(q / LIBRARY_DOCUMENTS / f"{tex}.tar")
+    alone = _plant(q / LIBRARY_SURVEYS / f"{tex}.json")
+    with_pdf = _plant(q / LIBRARY_SURVEYS / f"{tex}-{held_pdf}.json")
+    other_pdf = _plant(q / LIBRARY_SURVEYS / f"{tex}-{'0' * 64}.json")
+    gone = _plant(q / LIBRARY_SURVEYS / f"{'cd' * 32}.json")
+    running = _plant(q / SURVEY_RUN / "out" / "main.aux")
+    sweep(q, scan(load_quilt(q)), index=on_disk(q))
+    assert alone.is_file() and with_pdf.is_file() and running.is_file()
+    assert not other_pdf.exists() and not gone.exists()
+
+
 def test_the_node_index_is_kept_while_the_library_has_nodes(tmp_path: Path) -> None:
     """It is made again from the files at will, but making it again costs every file's read, so the sweep leaves it, and its journal, while there are nodes."""
     from loom.paths import LIBRARY_NODES, NODE_INDEX

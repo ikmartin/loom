@@ -190,6 +190,13 @@ class FragmentRenderer:
         self._owners[key] = made
         return made
 
+    def cite_target(self, citekey: str, postnote: str | None) -> str | None:
+        """What a citation of `citekey` with `postnote` reaches (`scan.edges.CiteRec.target`): the one result's node it locates, else its work's reference; None where the library holds neither."""
+        return next(
+            (c.target for c in self.result.edges.cites if c.citekey == citekey and c.postnote == postnote and c.target),
+            None,
+        )
+
     def envs(self, owner: Owner) -> list[str]:
         """The environments a run stamps as nodes: the owner's theorem-like ones, else the quilt's, and proofs."""
         taxa = owner.closure.taxa if owner.closure else self.result.taxa

@@ -25,6 +25,7 @@ from loom.paths import (
     COPIES,
     EDIT_LOG,
     EDITS,
+    INCOMING,
     INCORPORATION_PREVIEWS,
     LAST_SEEN,
     LIBRARY_DOCUMENTS,
@@ -109,8 +110,8 @@ def snapshot(root: Path, shown: Shown | None = None) -> dict[Path, float]:
             (f"{SINCE}/", f"{ADOPTION_PREVIEWS}/", f"{INCORPORATION_PREVIEWS}/")
         ):
             continue
-        # each agent server's record of itself, written at every call it answers, which `loom serve` reads on its own (`loom.presence`)
-        if rel.as_posix().startswith(f"{LIVE}/"):
+        # each agent server's record of itself, written at every call it answers, which `loom serve` reads on its own (`loom.presence`); and a drop as it arrives, which only the intake reads
+        if rel.as_posix().startswith((f"{LIVE}/", f"{INCOMING}/")):
             continue
         # loom's records under `.loom/` count whatever their suffix: a write through `loom serve`'s own API to the annotation log or the reference notes must redraw the page it came from (DR-174)
         posix = rel.as_posix()

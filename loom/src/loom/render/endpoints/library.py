@@ -1,4 +1,4 @@
-"""The library: the intake, the works list, the person's acts on a work, the anchor of a selection on a work's page, and bringing forward a quilt an earlier loom made."""
+"""The library: the intake, the works list, a work's outline and results, the person's acts on a work, the anchor of a selection on a work's page, and bringing forward a quilt an earlier loom made."""
 
 from __future__ import annotations
 
@@ -127,10 +127,11 @@ def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _library_places(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`library-places` (library-views.md §3.3): where each annotation on a work's stored PDF stands on its pages, for the reader to draw; `pages` limits it to those; `since` is answered `unchanged` while the library's generation stands."""
+    """`library-places` (library-views.md §3.3): where each annotation on a work's stored PDF stands on its pages, for the reader to draw; `pages` limits it to those and adds the work's nodes there, as the digest marks ask; `node` asks for one node's place alone; `since` is answered `unchanged` while the library's generation stands, to an ask for the whole work's annotations only, since another ask under the same generation answers otherwise."""
     from loom.library.places import PlacesRefused, places
 
-    ref = _str(body, "ref", required=True) or ""
+    node = _str(body, "node")
+    ref = _str(body, "ref", required=node is None)
     pages = body.get("pages")
     if pages is not None and not (
         isinstance(pages, list) and all(isinstance(p, int) and not isinstance(p, bool) and p > 0 for p in pages)
@@ -140,10 +141,10 @@ def _library_places(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     if since is not None and (not isinstance(since, int) or isinstance(since, bool)):
         raise ApiError("bad-field", "since is the gen of an earlier answer, a number")
     try:
-        found = places(_scan(root), ref, pages)
+        found = places(_scan(root), ref, pages, node=node)
     except PlacesRefused as exc:
         raise ApiError(exc.code, exc.message, status=exc.status) from exc
-    if since == found.gen:
+    if since == found.gen and pages is None and node is None:
         return {"ok": True, "result": "unchanged", "gen": found.gen, "unchanged": True}
     return {
         "ok": True,
@@ -151,6 +152,103 @@ def _library_places(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         "gen": found.gen,
         "pdf": found.pdf,
         "places": found.places,
+    }
+
+
+def _read(fn: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    """A library read's answer, its refusal said as the write API says one."""
+    from loom.library.reads import ReadRefused
+
+    try:
+        answer: dict[str, Any] = fn(*args, **kwargs)
+    except ReadRefused as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
+    return {"ok": True, "result": "read", **answer}
+
+
+def _library_work(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-work` (library-views.md §3.2): a work's details, what loom holds of it, and its outline; the first open of a work with a TeX source makes its survey, compiling nothing."""
+    from loom.library.reads import work
+
+    return _read(work, _scan(root), _str(body, "ref", required=True) or "")
+
+
+def _library_digest_scopes(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-digest-scopes` (library-views.md §3.2): what each scope of a digest would take, for a work's `digest…` menu (`ref`) or the list's (`all` true)."""
+    from loom.library.reads import scopes
+
+    every = body.get("all", False)
+    if not isinstance(every, bool):
+        raise ApiError("bad-field", "all is true for every work's count")
+    ref = _str(body, "ref", required=not every)
+    return _read(scopes, _scan(root), None if every else ref)
+
+
+def _library_node(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-node` (library-views.md §3.4): a statement or a proof beside its page (`node`, `brief` for a card), or a result of a work's survey no node holds (`ref` and `item`)."""
+    from loom.library.reads import item, node
+
+    brief = body.get("brief", False)
+    if not isinstance(brief, bool):
+        raise ApiError("bad-field", "brief is true for a card")
+    named = _str(body, "node")
+    if named:
+        return _read(node, _scan(root), named, brief=brief)
+    ref, asked = _str(body, "ref"), _str(body, "item")
+    if not ref or not asked:
+        raise ApiError("missing-field", "node is required, or ref and item for a result no node holds")
+    return _read(item, _scan(root), ref, asked)
+
+
+def _library_find(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-find` (library-views.md §6.2): loom's best guess where a result's words stand in a work's PDF, a page to open at and never a mark."""
+    from loom.library.reads import find
+
+    q = _str(body, "q", required=True) or ""
+    if len(q) > 200:
+        raise ApiError("bad-field", "q is the words of a result's name, at most 200 characters")
+    return _read(find, _scan(root), _str(body, "ref", required=True) or "", q)
+
+
+def _library_digest(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-digest` (library-views.md §3.2): the person digests works by a scope, from a TeX source now or after the compile its numbers need, which is then their job, and from a work held only as a PDF by asking an agent; the author's."""
+    from loom.evidence.subjects import Who
+    from loom.library.digest import SCOPES, DigestRefused, digest_works
+    from loom.scan.quilt import load_quilt
+
+    who = _author(root, body)
+    refs = body.get("refs")
+    if refs != "all" and not (isinstance(refs, list) and refs and all(isinstance(r, str) and r for r in refs)):
+        raise ApiError("missing-field" if refs is None else "bad-field", "refs is a list of works, or all")
+    scope = _str(body, "scope", required=True) or ""
+    if scope not in SCOPES:
+        raise ApiError("bad-field", f"scope is one of {', '.join(SCOPES)}")
+    chosen = body.get("chosen")
+    if scope == "chosen" and not (isinstance(chosen, list) and chosen and all(isinstance(c, str) for c in chosen)):
+        raise ApiError("bad-field", "chosen names the results chosen, a list of items and nodes")
+    config = load_quilt(root).config
+    try:
+        done = digest_works(
+            _scan(root),
+            None if refs == "all" else list(refs),
+            scope,
+            chosen if scope == "chosen" else None,
+            by=Who("person", who) if who else None,
+            online=bool(config.online_asked and config.online),
+        )
+    except DigestRefused as exc:
+        raise ApiError(exc.code, str(exc), status=404 if exc.code == "no-such-ref" else 409) from exc
+    said = (
+        f"digested {done.made}"
+        + (f", asked {len(done.tasks)}" if done.tasks else "")
+        + (", compiling first" if done.job else "")
+    )
+    return {
+        "ok": True,
+        "result": said,
+        "made": done.made,
+        "tasks": done.tasks,
+        **({"job": done.job} if done.job else {}),
     }
 
 
@@ -419,6 +517,11 @@ HANDLERS: dict[str, Handler] = {
     "library-entry": _library_act,
     "library-works": plain(_library_works),
     "library-places": plain(_library_places),
+    "library-work": plain(_library_work),
+    "library-digest-scopes": plain(_library_digest_scopes),
+    "library-node": plain(_library_node),
+    "library-find": plain(_library_find),
+    "library-digest": plain(_library_digest),
     "library-receive": plain(_library_receive),
     "library-take": _intake,
     "library-answer": _intake,
@@ -428,7 +531,15 @@ HANDLERS: dict[str, Handler] = {
     "locate": plain(_locate),
 }
 #: Of these, the ones that answer and change nothing the manifest shows.
-READS: tuple[str, ...] = ("locate", "library-works", "library-places")
+READS: tuple[str, ...] = (
+    "locate",
+    "library-works",
+    "library-places",
+    "library-work",
+    "library-digest-scopes",
+    "library-node",
+    "library-find",
+)
 #: The ones the publisher does not rebuild after: the reads, a file received and not yet taken, and the upgrade, after which a waiting publisher builds as it starts (`ServeSession.bring_forward`).
 NO_REBUILD: tuple[str, ...] = (*READS, "library-receive", "library-upgrade")
 #: The ones that change records alone, so the publication builds from the last scan.

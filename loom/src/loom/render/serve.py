@@ -25,7 +25,7 @@ from urllib.parse import unquote
 from loom import layout
 from loom.arras_bundle import find_bundle
 from loom.files import FILES_URL, Shown
-from loom.paths import COMPILES, SERVE_JSON, SITE, TEX, TEX_ADDRESS, document_build, document_page
+from loom.paths import COMPILES, LIBRARY_NODES, SERVE_JSON, SITE, TEX, TEX_ADDRESS, document_build, document_page
 from loom.presence import Watch
 from loom.render.build import BuildReport, build
 from loom.render.watch import Watcher, scan_unread, snapshot
@@ -1151,6 +1151,7 @@ class ServeSession:
         compile_masters: bool = True,
         interval: float = 1.0,
         live: bool = False,
+        unasked: bool = True,
     ) -> None:
         self.quilt = quilt
         self.bundle_dir = bundle_dir
@@ -1164,6 +1165,10 @@ class ServeSession:
         self.port = port
         self.compile_masters = compile_masters
         self.interval = interval
+        from loom.library.unasked import Unasked
+
+        #: The unasked job: the works the library's stubs name, tried one at a time after each build (`library.unasked`); None where the server runs without it.
+        self.unasked = Unasked(quilt.root, online=self._online) if unasked else None
         # reentrant: a write through the API publishes under the hold that wrote it (`LoomHandler.do_POST`)
         self.lock = threading.RLock()
         self.builds = 0
@@ -1200,6 +1205,11 @@ class ServeSession:
             if compile_masters
             else None
         )
+
+    def _online(self) -> bool:
+        """Whether the quilt lets loom use the network, read each time: `[library] online` set, and true."""
+        cfg = self.quilt.config
+        return bool(cfg.online_asked and cfg.online)
 
     def rebuild(
         self,
@@ -1243,11 +1253,20 @@ class ServeSession:
             self._sweep_due = True
             self.last_report = report = report.kept()
             self.builds += 1
+            # the references and stubs the build itself wrote are no change to build again for
+            nodes = root / LIBRARY_NODES
+            if nodes.is_dir():
+                seen = {**seen, **{p: p.stat().st_mtime for p in nodes.glob("*.node")}}
             self.published = seen
             if self.watcher is not None:
                 self.watcher.rebaseline(seen)
             self.publications.published()
             self.library_moved(report.result)
+            if self.unasked is not None:
+                from loom.library.unasked import cited
+                from loom.library.unasked import due as works_due
+
+                self.unasked.want(works_due(root, cited(report.result)))
         if changed is not None:
             from loom.cli.report import counted
 
@@ -1583,6 +1602,8 @@ class ServeSession:
 
         if self.compiles is not None:
             self.compiles.stop()
+        if self.unasked is not None:
+            self.unasked.stop()
         (self.quilt.root / COMPILES).unlink(missing_ok=True)
         if self.presence:
             self.presence.stop()

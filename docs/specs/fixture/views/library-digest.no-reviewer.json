@@ -1,0 +1,16 @@
+{
+ "answer": {
+  "error": {
+   "code": "no-reviewer",
+   "message": "an ask records who asks: choose your reviewer name in Settings"
+  },
+  "status": 409
+ },
+ "endpoint": "library-digest",
+ "request": {
+  "refs": [
+   "sh-0403-ref"
+  ],
+  "scope": "all"
+ }
+}

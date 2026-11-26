@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from loom.scan.postnote import match, normalize, parts
+import pytest
+
+from loom.scan.postnote import located, match, normalize, parts
 
 
 def test_postnote_normalization_table() -> None:
@@ -26,3 +28,25 @@ def test_a_postnote_matches_the_results_any_of_its_parts_names() -> None:
     candidates = [("a", {"theorem 4.1", "proposition 4.1"}), ("b", {"theorem 4.3"}), ("c", {"lemma 2.2"})]
     assert match("Theorems 4.1 and 4.3", candidates) == ["a", "b"]
     assert match("p.~12", candidates) == []
+
+
+@pytest.mark.parametrize(
+    ("postnote", "results"),
+    [
+        ("Lemma 2.1", [("lemma", "2.1")]),
+        ("Lemma~2.1 and Theorem 3", [("lemma", "2.1"), ("theorem", "3")]),
+        ("Lemmas 2.1 and 2.4", [("lemma", "2.1"), ("lemma", "2.4")]),
+        ("Thm. 4.2(ii)", [("theorem", "4.2")]),
+        ("Prop. A.3", [("proposition", "A.3")]),
+        ("Theorem II", [("theorem", "II")]),
+        ("Cor. 3.5, p. 12", [("corollary", "3.5")]),
+        ("Chapter 2, Lemma 2.3", [("lemma", "2.3")]),
+        ("p.~5", []),
+        ("Section 3", []),
+        ("Equation (3.2)", []),
+        ("Theorem", []),
+    ],
+)
+def test_a_postnote_locates_each_result_it_names_by_its_printed_number(postnote: str, results: list) -> None:
+    """A stub is made for each, so a number keeps its case and its numerals as the citation prints it; a part of a work, a page, a display names no result."""
+    assert located(postnote) == results

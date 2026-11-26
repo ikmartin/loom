@@ -1,0 +1,144 @@
+{
+ "answer": {
+  "gen": 1789808400001,
+  "ok": true,
+  "pdf": "sha256:8c21ed504f947f16b6e2a65bfa9d470795c14ab522320757cb5f27e5b4e59a8f",
+  "places": [
+   {
+    "lacks": [],
+    "lean": {
+     "lean": "none",
+     "role": null,
+     "waiting_on": []
+    },
+    "name": "Lemma 2.2",
+    "node": "sh-040B",
+    "number": "2.2",
+    "page": 2,
+    "paper": "unchecked",
+    "rects": [
+     [
+      151.8711,
+      135.681084,
+      302.346811,
+      145.608365
+     ]
+    ]
+   },
+   {
+    "lacks": [],
+    "lean": {
+     "lean": "none",
+     "role": null,
+     "waiting_on": []
+    },
+    "name": "Proof",
+    "node": "sh-040B-proof00",
+    "number": null,
+    "page": 2,
+    "paper": "unchecked",
+    "rects": [
+     [
+      116.98115,
+      171.255375,
+      346.730154,
+      182.164475
+     ]
+    ]
+   },
+   {
+    "lacks": [],
+    "lean": {
+     "lean": "none",
+     "role": null,
+     "waiting_on": []
+    },
+    "name": "Proof",
+    "node": "sh-040C-proof00",
+    "number": null,
+    "page": 2,
+    "paper": "unchecked",
+    "rects": [
+     [
+      116.98097,
+      329.207275,
+      285.70831,
+      340.116375
+     ]
+    ]
+   },
+   {
+    "lacks": [],
+    "lean": {
+     "lean": "none",
+     "role": null,
+     "waiting_on": []
+    },
+    "name": "Corollary 3.2",
+    "node": "sh-040D",
+    "number": "3.2",
+    "page": 2,
+    "paper": "unchecked",
+    "rects": [
+     [
+      163.7289,
+      392.862084,
+      338.274429,
+      402.789365
+     ]
+    ]
+   },
+   {
+    "lacks": [],
+    "lean": {
+     "lean": "none",
+     "role": null,
+     "waiting_on": []
+    },
+    "name": "Remark 4.1",
+    "node": "sh-040E",
+    "number": "4.1",
+    "page": 2,
+    "paper": "unchecked",
+    "rects": [
+     [
+      147.24434,
+      559.389375,
+      382.948395,
+      570.298475
+     ]
+    ]
+   },
+   {
+    "lacks": [],
+    "lean": {
+     "lean": "none",
+     "role": null,
+     "waiting_on": []
+    },
+    "name": "Remark 4.2",
+    "node": "sh-040F",
+    "number": "4.2",
+    "page": 2,
+    "paper": "unchecked",
+    "rects": [
+     [
+      145.03736,
+      618.069375,
+      336.543174,
+      628.978475
+     ]
+    ]
+   }
+  ],
+  "result": "6 placed"
+ },
+ "endpoint": "library-places",
+ "request": {
+  "pages": [
+   1,
+   2
+  ],
+  "ref": "sh-0402-ref"
+ }
+}

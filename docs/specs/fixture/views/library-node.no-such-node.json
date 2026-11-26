@@ -1,0 +1,13 @@
+{
+ "answer": {
+  "error": {
+   "code": "no-such-node",
+   "message": "the library has no statement or proof sh-0ZZZ"
+  },
+  "status": 404
+ },
+ "endpoint": "library-node",
+ "request": {
+  "node": "sh-0ZZZ"
+ }
+}

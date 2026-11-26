@@ -175,7 +175,7 @@ class Drafts:
         return {"body": self.nodes[key].body, "macros": macros, "points": self.points(key)}
 
     def points(self, key: str) -> dict[str, dict[str, Any]]:
-        """What each id and anchor a library result's body points at draws as: a result its name, its number and its reading of its paper; an anchor the number its source prints."""
+        """What each id and anchor a library result's body points at draws as: a result its name, its number and its reading of its paper; an anchor the number its source prints, or `awaiting` where only the person's compile numbers it."""
         from loom.evidence.review import node_name
         from loom.library.body import pointers
         from loom.library.ids import anchor_owner
@@ -191,6 +191,9 @@ class Drafts:
                 out[target] = {"name": node_name(held), "number": held.number, "paper": self.standing(target).reading}
             elif owner is not None and owner in self.nodes:
                 out[target] = {"number": dict(self.nodes[owner].anchors).get(target)}
+                if target in self.nodes[owner].awaiting:
+                    # numbered only by the person's compile, drawn so
+                    out[target]["awaiting"] = True
         return out
 
     def proof_count(self, key: str) -> int:

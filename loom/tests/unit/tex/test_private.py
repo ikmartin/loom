@@ -226,6 +226,25 @@ def test_a_file_the_log_names_is_fetched_and_the_compile_run_again(
     assert res.ok and res.fetched == ["stmaryrd"]
 
 
+def test_a_foreign_compile_never_fetches_what_its_log_names(
+    loomtex: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source nobody at loom wrote writes its own log, so the names asked of the mirror would carry what it read; it is fetched for from its text alone."""
+    monkeypatch.setattr(missing, "preflight", lambda cwd, tex_rel: missing.Needs())  # what the preamble does not show
+    d = tmp_path / "doc"
+    res = compile_tex(d, write_doc(d, "\\usepackage{stmaryrd}"), tmp_path / "out", foreign=True)
+    assert not res.ok and res.fetched == []
+    assert not [ln for ln in tlmgr_log(loomtex) if " install " in f" {ln} "]
+
+
+def test_a_foreign_compile_fetches_what_its_text_names_and_nothing_offline(loomtex: Path, tmp_path: Path) -> None:
+    d = tmp_path / "doc"
+    res = compile_tex(d, write_doc(d, "\\usepackage{stmaryrd}"), tmp_path / "out", foreign=True, online=False)
+    assert not res.ok and res.fetched == [] and tlmgr_log(loomtex) == []
+    res = compile_tex(d, write_doc(d, "\\usepackage{stmaryrd}"), tmp_path / "out", foreign=True)
+    assert res.ok and res.fetched == ["stmaryrd"]
+
+
 def test_offline_the_compile_says_which_package_it_needs(
     loomtex: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

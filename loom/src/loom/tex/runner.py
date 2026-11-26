@@ -5,6 +5,7 @@ The engine is the master's `% !TEX program` if present, else `[quilt] engine`. T
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import os
 import re
@@ -30,10 +31,21 @@ ENGINE_FLAGS = {
 
 #: What kpathsea holds every TeX program loom starts to, whatever the distribution's configuration, the person's own or their shell says: it writes only in or below the directory it runs in, and runs no command but the few TeX Live lists as safe, which is how pdflatex converts an EPS figure. Nothing limits what a document reads: `openin_any` has no effect from TeX Live 2026 on, and before that refused the documents loom keeps under `.loom/`, so it is not set.
 LIMITS = {"openout_any": "p", "shell_escape": "p"}
+#: What a source nobody at loom wrote is compiled under: as `LIMITS`, and no command at all is started for it, a figure TeX would convert among them.
+FOREIGN = {**LIMITS, "shell_escape": "f"}
+#: Seconds of CPU each program a foreign compile starts may spend (`ulimit -t`): a TeX left running when loom is killed dies by itself.
+FOREIGN_CPU = 600
+#: The foreign compiles running now, ended with their process groups when loom exits.
+_LIVE: set[subprocess.Popen[str]] = set()
 
 
-def tex_env() -> dict[str, str]:
+def tex_env(*, foreign: bool = False) -> dict[str, str]:
     """The environment of a TeX program loom starts: latexmk, make4ht, and whatever they run in turn.
+
+    Parameters
+    ----------
+    foreign : bool, default False
+        For a source nobody at loom wrote, a work's in the library: `FOREIGN` in place of `LIMITS`.
 
     Returns
     -------
@@ -42,7 +54,8 @@ def tex_env() -> dict[str, str]:
     """
     from loom.machine import unpacked
 
-    return {**os.environ, **private.tex_vars(), **tex_date(), **LIMITS, "PAR_GLOBAL_TMPDIR": str(unpacked())}
+    limits = FOREIGN if foreign else LIMITS
+    return {**os.environ, **private.tex_vars(), **tex_date(), **limits, "PAR_GLOBAL_TMPDIR": str(unpacked())}
 
 
 #: A line of the context TeX prints after every error it reports: the line it stopped at (`l.12 …`), or what it was reading instead (`<*> main.tex`, `<argument> …`).
@@ -148,10 +161,12 @@ BUILD_PRODUCTS = (
 )
 
 
-def stage_sources(paper_dir: Path, dest: Path, outside: list[str] | tuple[str, ...] = ()) -> Path:
+def stage_sources(
+    paper_dir: Path, dest: Path, outside: list[str] | tuple[str, ...] = (), *, regular_only: bool = False
+) -> Path:
     """Copy a paper directory into `dest` without its build products; returns the copy of `paper_dir`, the root to compile.
 
-    latexmk reads and rewrites a .bbl or .fdb_latexmk in its working directory even under -outdir, so compiling the author's directory in place both depends on their editor's leftovers and writes into it. Hidden directories are skipped; a .bbl is kept when the tree has no .bib, since an arXiv-style source ships only that. Files the paper reaches outside its directory (`outside`, as `closure_of` lists them) land at the same relative position, so `../macros` still resolves; a cited paper's source is given none. A link the directory holds is copied as what it reaches where that lies under the copy's root and no dot-named folder, and otherwise left out where the fence is up and copied where it is not (`_links`).
+    latexmk reads and rewrites a .bbl or .fdb_latexmk in its working directory even under -outdir, so compiling the author's directory in place both depends on their editor's leftovers and writes into it. Hidden directories are skipped; a .bbl is kept when the tree has no .bib, since an arXiv-style source ships only that. Files the paper reaches outside its directory (`outside`, as `closure_of` lists them) land at the same relative position, so `../macros` still resolves; a cited paper's source is given none. A link the directory holds is copied as what it reaches where that lies under the copy's root and no dot-named folder, and otherwise left out where the fence is up and copied where it is not (`_links`). With `regular_only`, for a source nobody at loom wrote, only folders and regular files with no other name are copied, judged by `lstat` alone: a link is never followed, and a device or a FIFO never opened.
     """
     paper_dir = paper_dir.resolve()
     reached = [Path(o).resolve() for o in outside if Path(o).is_file()]
@@ -162,7 +177,9 @@ def stage_sources(paper_dir: Path, dest: Path, outside: list[str] | tuple[str, .
     def ignore(folder: str, names: list[str]) -> set[str]:
         skip = set()
         for n in names:
-            if n.startswith(".") and (Path(folder) / n).is_dir():
+            if regular_only and not _plain(Path(folder) / n):
+                skip.add(n)
+            elif n.startswith(".") and (Path(folder) / n).is_dir():
                 skip.add(n)
             elif n.endswith(BUILD_PRODUCTS) and not (n.endswith(".bbl") and not has_bib):
                 skip.add(n)
@@ -176,6 +193,17 @@ def stage_sources(paper_dir: Path, dest: Path, outside: list[str] | tuple[str, .
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(f, target)
     return root
+
+
+def _plain(path: Path) -> bool:
+    """Whether `path` is a folder, or a regular file with no other name, by `lstat` alone."""
+    import stat
+
+    try:
+        st = path.lstat()
+    except OSError:
+        return False
+    return stat.S_ISDIR(st.st_mode) or (stat.S_ISREG(st.st_mode) and st.st_nlink == 1)
 
 
 def which_latexmk() -> str | None:
@@ -323,11 +351,13 @@ def compile_tex(
     timeout: int = 600,
     started: Callable[[subprocess.Popen[str]], None] | None = None,
     *,
+    foreign: bool = False,
+    online: bool = True,
     reads: Path | None = None,
 ) -> CompileResult:
     """Compile `tex_rel` (relative to `root`) with latexmk into `outdir`, fetching what it lacks into loom's TeX; return a result even when latexmk is missing.
 
-    Under loom's own TeX the preamble is checked first and what it names that TeX lacks is installed in one go (`missing.preflight`); a run that still fails on a missing file, font or program has it fetched and runs again, up to `missing.ROUNDS` times. The person's own TeX is never installed into. `fetched`, `needed` and `note` say what happened.
+    Under loom's own TeX the preamble is checked first and what it names that TeX lacks is installed in one go (`missing.preflight`); a run that still fails on a missing file, font or program has it fetched and runs again, up to `missing.ROUNDS` times. A foreign source's compile fetches only what its own text names, never what its log does, since the log is the source's to write and the names asked of the mirror would carry what it read out of the machine. The person's own TeX is never installed into. `fetched`, `needed` and `note` say what happened.
 
     Parameters
     ----------
@@ -343,6 +373,10 @@ def compile_tex(
         Seconds for each run.
     started : callable, optional
         Handed latexmk's process as it starts, for a caller that may end it with `stop_run`.
+    foreign : bool, default False
+        A source nobody at loom wrote: compiled under `FOREIGN` (`tex_env`), each program capped at `FOREIGN_CPU` seconds of CPU, ended when loom exits, and fetched for from its text alone.
+    online : bool, default True
+        Whether the network may be used to fetch what it lacks.
     reads : Path, optional
         The folder of staged sources the run may read where the fence is up (`loom.fence`), when it holds more than `root`; default `root`.
 
@@ -350,18 +384,20 @@ def compile_tex(
     -------
     CompileResult
     """
-    fetching = private.can_fetch()
+    fetching = private.can_fetch() and online
     rounds = missing.Round()
     if fetching:
         rounds.fetch(missing.preflight(root, tex_rel))
-    res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, reads or root)
+    res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, reads or root, foreign=foreign)
     for _ in range(missing.ROUNDS):
-        if res.ok or not fetching or res.returncode == 124 or res.stopped:
+        if res.ok or not fetching or foreign or res.returncode == 124 or res.stopped:
             break
         log = res.log.read_text(encoding="utf-8", errors="replace") if res.log is not None else ""
         if not rounds.fetch(missing.from_log(log, res.stdout)):
             break
-        res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, reads or root)
+        res = _compile_once(
+            root, tex_rel, outdir, engine, halt_on_error, timeout, started, reads or root, foreign=foreign
+        )
     res.fetched, res.needed, res.note = rounds.fetched, rounds.needed, rounds.note
     return res
 
@@ -375,6 +411,8 @@ def _compile_once(
     timeout: int,
     started: Callable[[subprocess.Popen[str]], None] | None,
     reads: Path,
+    *,
+    foreign: bool = False,
 ) -> CompileResult:
     """One latexmk run of `tex_rel` into `outdir`.
 
@@ -402,7 +440,10 @@ def _compile_once(
         if halt_on_error:
             cmd.append("-halt-on-error")
         cmd.append(tex_rel)
-        env = tex_env()
+        if foreign:
+            # `ulimit -t` holds in every program latexmk starts, so a TeX outlives a killed loom by its CPU cap at most
+            cmd = ["/bin/sh", "-c", f'ulimit -t {FOREIGN_CPU} && exec "$@"', "sh", *cmd]
+        env = tex_env(foreign=foreign)
         lua = engine == "lualatex"
         if fence.state() is None:
             env = {**_fenced_env(env, reads, run, lua=lua), "PWD": str(root)}
@@ -419,12 +460,16 @@ def _compile_once(
         )
         if started is not None:
             started(proc)
+        if foreign:
+            _LIVE.add(proc)
         try:
             out, err = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             stop_run(proc)
             proc.communicate()
             return CompileResult(False, engine, outdir, 124, errors=[f"latexmk timed out after {timeout}s"])
+        finally:
+            _LIVE.discard(proc)
         if proc.returncode < 0 or getattr(proc, "loom_stopped", False):
             # cut short, its log is part of a run: what the last whole compile left stays
             return CompileResult(
@@ -462,6 +507,13 @@ def _compile_once(
         warnings,
         root,
     )
+
+
+@atexit.register
+def _end_live() -> None:
+    """End every foreign compile still running when loom exits, with what it started."""
+    for proc in list(_LIVE):
+        stop_run(proc)
 
 
 #: The folder in a fenced run's folder for its temporary files and biber's clone, never kept with the output.

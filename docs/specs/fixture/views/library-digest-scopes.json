@@ -1,0 +1,16 @@
+{
+ "answer": {
+  "all": 8,
+  "gen": 1789808400000,
+  "marked": 0,
+  "ok": true,
+  "pdf": true,
+  "result": "read",
+  "tex": true,
+  "used": 3
+ },
+ "endpoint": "library-digest-scopes",
+ "request": {
+  "ref": "sh-0402-ref"
+ }
+}

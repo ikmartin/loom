@@ -72,6 +72,8 @@ export interface OutlineItem {
 	page: number | null;
 	paper: Paper | null;
 	lean: LeanStatus | null;
+	/** `compile` where loom writes the result only once the person compiles the source: it points at an equation outside every result, which only the compile numbers. */
+	waits?: 'compile' | null;
 }
 
 /** A person's mark to digest on a work's page: an annotation of kind `to-digest`. */
@@ -168,6 +170,8 @@ export interface Point {
 	page?: string;
 	work?: string;
 	paper?: Paper | null;
+	/** An anchor whose number loom keeps only after the person compiles the source. */
+	awaiting?: boolean;
 }
 
 /** A node beside its page, or a card (`library-node`, §3.4). */

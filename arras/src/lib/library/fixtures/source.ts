@@ -9,6 +9,24 @@ import type { ReviewKind, TaskRow, WebScope } from '../types';
 
 type Body = Record<string, unknown>;
 
+/** A Lean status as loom sends one in every row, with what it waits on (`evidence.md` §5.2). */
+const leaned = (l: unknown) => (l && typeof l === 'object' ? { waiting_on: [], ...(l as object) } : l);
+
+/** A work's tab as loom answers it: the outline's `why`, and each section's and item's `confirmed` and each item's `found`, `title` and `waits`, the fields the node store adds to round six's. */
+function asLoomWork(a: object & { outline?: unknown }): object {
+	const o = a.outline as { sections: object[]; items: (object & { title?: string; lean?: unknown })[] } | null;
+	if (!o) return a;
+	return {
+		...a,
+		outline: {
+			why: null,
+			...o,
+			sections: o.sections.map((x) => ({ ...x, confirmed: true })),
+			items: o.items.map((i) => ({ title: null, waits: null, ...i, confirmed: true, found: 'words', lean: leaned(i.lean) }))
+		}
+	};
+}
+
 /** The labels round six's main.tex cites its works by. */
 const CITED: Record<string, string> = { arden24: '[1]', okafor: '[2]', arden25: '[3]', vance: '[4]' };
 
@@ -24,11 +42,11 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 	const answered = new Set<string>();
 
 	const reads: Record<string, (b: Body) => Answer<Gen>> = {
-		// asked for a draft, each work says the label that draft cites it by, as round six's main.tex does
-		'library-works': (b) => ok({ works: b.doc ? f.works.map((w) => ({ ...w, cited_as: CITED[Object.keys(REF).find((k) => REF[k] === w.ref) ?? ''] ?? null })) : f.works }),
+		// asked for a draft, each work says the label that draft cites it by, as round six's main.tex does; no work here was made from a digested work's bibliography (`cited_from`)
+		'library-works': (b) => ok({ works: f.works.map((w) => ({ ...w, cited_from: null, ...(b.doc ? { cited_as: CITED[Object.keys(REF).find((k) => REF[k] === w.ref) ?? ''] ?? null } : {}) })) }),
 		'library-work': (b) => {
 			const a = workAnswer(f, b.ref as string);
-			return a ? ok(a) : no('no-such-ref');
+			return a ? ok(asLoomWork(a)) : no('no-such-ref');
 		},
 		'library-digest-scopes': (b) => (b.all ? ok({ used: 14 }) : ok(scopesOf(f, b.ref as string))),
 		'library-places': (b) => {
@@ -36,15 +54,20 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			const work = f.works.find((w) => w.ref === ref);
 			if (!work) return no('no-such-ref');
 			if (!work.holds.pdf) return no('no-document');
-			const places = placesOf(f, b as { ref?: string; node?: string; pages?: number[] });
+			// a node's place comes alone where one is asked for, and the nodes' only with the pages the digest marks ask for
+			const places = placesOf(f, b as { ref?: string; node?: string; pages?: number[] }).filter((p) => (b.node ? 'node' in p : b.pages || !('node' in p)));
 			return ok({ result: `${places.length} placed`, pdf: work.holds.pdf, places });
 		},
 		'library-node': (b) => {
 			const a = nodeAnswer(f, b as { node?: string; ref?: string; item?: string; brief?: boolean });
-			return a ? ok(a) : no('no-such-node');
+			if (!a) return no('no-such-node');
+			// as loom answers: how its number and page were found, an item by its own id, a body however short
+			const lean = 'lean' in a ? { lean: leaned(a.lean) } : {};
+			return ok(b.node ? { body: '', ...a, ...lean, found: 'words' } : { title: null, ...a, item: b.item, found: 'words' });
 		},
 		'library-find': (b) => {
-			const pdf = f.works.find((w) => w.ref === b.ref)?.holds.pdf ?? '';
+			const pdf = f.works.find((w) => w.ref === b.ref)?.holds.pdf;
+			if (!pdf) return no('no-document');
 			return ok({ pdf, hits: [{ page: 1, rects: [[72, 140, 300, 156]] }], pages: 24 });
 		},
 		'formal-marks': (b) => ok({ on: true, marks: formalMarks(b.doc as string) }),
@@ -82,6 +105,9 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 
 	const writes: Record<string, (b: Body) => Answer<Gen>> = {
 		'library-digest': (b) => {
+			// a work named that holds neither document has nothing to digest from
+			const named = Array.isArray(b.refs) ? f.works.filter((w) => (b.refs as string[]).includes(w.ref)) : [];
+			if (named.some((w) => !w.holds.pdf && !w.holds.tex)) return no('no-document');
 			const done = digest(f, b.refs as string[] | 'all', b.scope as string, (b.chosen as string[]) ?? []);
 			changed();
 			return ok(done);
