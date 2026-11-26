@@ -1,4 +1,4 @@
-// What Review remembers while the person moves between views: the kind and the draft the column chose, the groups folded under Everything, the rows open, and the reads on screen. Kept in this module, since the column and the list both draw from it and a view is taken down when another is shown. Whether the source serves Review's reads is asked once: where it does not, Review is today's, its sections and their pages.
+// What Review remembers while the person moves between views: the kind and the draft the column chose, the groups folded under Everything, the rows open, the blocks chosen to accept, and the reads on screen. Kept in this module, since the column and the list both draw from it and a view is taken down when another is shown. Whether the source serves Review's reads is asked once: where it does not, Review is today's, its sections and their pages.
 
 import { SvelteSet } from 'svelte/reactivity';
 import * as api from '$lib/library/api';
@@ -9,7 +9,7 @@ import type { ShownKind } from './rows';
 /** The kinds as the column lists them: alphabetically by their names. Lean statements to attest holds the attested results that changed too (`joined`). */
 export const COLUMN_ORDER: Exclude<ShownKind, 'agents'>[] = ['questions', 'cited', 'attest', 'fetch', 'edits', 'accepted-changed', 'check'];
 
-/** The groups' order under Everything, by who waits, as `review-list` answers them; the two kinds today's Your Changes draws take their places in it. */
+/** The groups' order under Everything, by who waits, as `review-list` answers them; the two kinds drawn from the manifest (`yours.ts`) take their places in it. */
 export const RANK: ShownKind[] = ['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'edits', 'agents'];
 
 /** The kinds of loom's that one entry of the column reads, in the order its list shows them. */
@@ -31,12 +31,14 @@ export async function readList(kind: ReviewKind | 'all' | 'agents', doc?: string
 class ReviewState {
 	/** What the list shows: everything, one kind, the tasks waiting for an agent, or a collaborator's pull. */
 	kind = $state<ReviewKind | 'all' | 'agents' | 'incoming'>('all');
-	/** A document laid over the list, read only, at a result; none while the list shows. */
-	over = $state<{ doc: string; key: string; name: string } | null>(null);
+	/** A document laid over the list, read only, at a result, with what changed since it was accepted where `since` asks for it; none while the list shows. */
+	over = $state<{ doc: string; key: string; name: string; since?: boolean } | null>(null);
 	/** The draft the list is narrowed to, or none. */
 	doc = $state<string | null>(null);
-	/** Kinds folded under Everything; the agents' group starts folded. */
-	folded = new SvelteSet<string>(['agents']);
+	/** Kinds folded under Everything, and the folds within Results to accept; the agents' group, the never accepted and the accepted start folded. */
+	folded = new SvelteSet<string>(['agents', 'accept:never', 'accept:accepted']);
+	/** The blocks chosen to be accepted together, by key. */
+	picked = new SvelteSet<string>();
 	/** Rows open, by their ids, which stay the same while what they are about waits. */
 	open = new SvelteSet<string>();
 	/** Inside an open row of a work, the result open under it, by the row; a row not in here opens its first. */
@@ -48,7 +50,7 @@ class ReviewState {
 
 	counts = new Read<ReviewCounts>();
 	list = new Read<ReviewList>();
-	/** Loom's own rows of the two kinds today's Your Changes draws, whole, by which a draft's count is made what is drawn. */
+	/** Loom's own rows of the two kinds drawn from the manifest, whole, by which a draft's count is made what is drawn. */
 	theirs = { 'accepted-changed': new Read<ReviewList>(), edits: new Read<ReviewList>() };
 
 	#asked = false;

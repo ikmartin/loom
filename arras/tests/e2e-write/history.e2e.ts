@@ -2,16 +2,19 @@
 import { expect, test } from '../served';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { acceptRow, openRow, shown } from '../review-rows';
 
 test('keeping an edit keeps a version of the document, which Restore puts back after another edit', async ({ page, served }) => {
 	const node = join(served.root, 'drafting/nodes/sy-0002.tex');
 	writeFileSync(node, readFileSync(node, 'utf8').replace('Every orbit', 'Each orbit'));
 	await page.goto('/review');
 	const card = page.getByTestId('change-card').filter({ has: page.locator('.ins', { hasText: 'Each' }) });
+	await shown(page, card);
 	await card.getByTestId('card-keep').click();
 	await expect(card).toHaveCount(0);
 	// a kept block still waits to be accepted
-	await expect(page.locator('[data-testid="review-row"][data-key="sy-0002"]').getByTestId('review-accept')).toBeVisible();
+	await openRow(acceptRow(page, 'sy-0002'));
+	await expect(acceptRow(page, 'sy-0002').getByTestId('review-accept')).toBeVisible();
 	await page.goto('/review/record?document=drafting%2Fmain.tex');
 	await expect(page.getByTestId('history-tick').last()).toContainText('Kept an edit');
 	// another edit, then the kept version put back

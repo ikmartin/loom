@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, a collaborator's pull where the quilt has one, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds today's Your Changes draws are counted as their sections list what waits (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
+	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, a collaborator's pull where the quilt has one, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds drawn from the manifest, Results to accept and Proposed edits, are counted as their rows are drawn (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { route } from '$lib/paths';
@@ -21,9 +21,9 @@
 	});
 
 	const m = $derived(store.manifest);
-	/** What a kind Your Changes draws lists as waiting, in one draft when given. */
+	/** The rows a kind drawn from the manifest lists as waiting, in one draft when given. */
 	const ours = (kind: YoursKind, doc?: string | null) => (m ? yoursCount(kind, m, acted.map, doc) : 0);
-	/** A kind's count: as drawn for Your Changes' two, else loom's, summed over the kinds the entry reads. */
+	/** A kind's count: as drawn for the two from the manifest, else loom's, summed over the kinds the entry reads. */
 	const kindCount = (kind: ReviewKind) => (isYours(kind) && m ? ours(kind) : loomCount(kind));
 	const loomCount = (kind: ReviewKind) => (READS[kind] ?? [kind]).reduce<number | undefined>((n, k) => (counts?.kinds[k] === undefined ? n : (n ?? 0) + counts.kinds[k]!), undefined);
 	/** A draft's count with its two kinds as drawn: loom's until its rows of them are read. */

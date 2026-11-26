@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Beside a document opened from Your Changes (`?review=KEY`), inside the document's side panel: the block, why it waits, the change when it changed since it was accepted, and Accept, its answer said here. A block loom cannot accept says why instead.
+	// Beside a document opened from Your Changes (`?review=KEY`), inside the document's side panel: the block, why it waits, the change when it changed since it was accepted (`SinceAccepted`), and Accept, its answer said here. A block loom cannot accept says why instead.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
@@ -8,12 +8,11 @@
 	import { reviewUrl } from '$lib/nav';
 	import { shortDate } from '$lib/badges';
 	import { here } from '$lib/here.svelte';
-	import Fragment from '$lib/fragments/Fragment.svelte';
-	import DiffView from '$lib/components/DiffView.svelte';
 	import Cannot from './Cannot.svelte';
 	import { causeLabel } from './evidence';
 	import { takenLabel } from './queue';
 	import Said from './Said.svelte';
+	import SinceAccepted from './SinceAccepted.svelte';
 
 	let { reviewKey, causeIndex, master, plain, causeHref }: { reviewKey: string; causeIndex: number; master: string; plain: string; causeHref: (i: number) => string } = $props();
 
@@ -22,8 +21,6 @@
 	const row = $derived((m.unresolved ?? []).find((r) => r.key === reviewKey));
 	const causes = $derived(key?.acceptance?.causes ?? []);
 	const cause = $derived(causes[causeIndex] ?? causes[0]);
-	const comparison = $derived(cause?.comparison);
-	const acceptedSide = $derived(cause?.kind === 'own-text-changed');
 	const name = $derived(displayNode(m, reviewKey, master).name);
 	let served = $state(false);
 	let busy = $state(false);
@@ -67,15 +64,7 @@
 <div class="panel">
 	<header><strong>{name}</strong><a href={plain}>close</a></header>
 	<p class="status" data-testid="review-panel-status">{status}</p>
-	{#if causes.length > 1}
-		<select aria-label="Reason for review" value={causes.indexOf(cause)} onchange={(e) => goto(causeHref(Number(e.currentTarget.value)), { noScroll: true, keepFocus: true })}>{#each causes as c, i (i)}<option value={i}>{causeLabel(m, c)} · {i + 1} of {causes.length}</option>{/each}</select>
-	{:else if cause}<p class="why">{causeLabel(m, cause)}</p>{/if}
-	{#if comparison}
-		<div data-testid="review-comparison">
-			<h4>{acceptedSide ? 'Last accepted' : 'Current'} · {cause?.id ?? reviewKey}</h4>
-			<Fragment path={acceptedSide ? comparison.accepted : comparison.current} macroSet={acceptedSide ? comparison.accepted_macros : ''} isolatedMacros={acceptedSide} />
-		</div>
-	{:else if cause?.diff}<DiffView path={cause.diff} />{/if}
+	<SinceAccepted {reviewKey} index={causes.indexOf(cause)} {master} onchoose={(i) => goto(causeHref(i), { noScroll: true, keepFocus: true })} />
 	{#if row?.refusal}<Cannot {row} testid="review-panel-refusal" />
 	{:else if row && served && m.reviewer?.name}<button class="btn primary" disabled={busy} onclick={() => void accept()} data-testid="review-panel-accept">{busy ? 'Accepting…' : 'Accept'}</button>{/if}
 	{#if said}<Said text={said.text} refused={said.refused} testid="review-panel-said" />{/if}
@@ -83,22 +72,8 @@
 </div>
 
 <style>
-	.status,
-	.why {
+	.status {
 		font-size: 13px;
 		margin: 0 0 var(--gap-tight);
-	}
-	.why {
-		color: var(--ink-soft);
-	}
-	h4 {
-		margin: var(--gap-tight) 0;
-		font-size: 12.5px;
-		font-weight: 500;
-		color: var(--ink-soft);
-	}
-	select {
-		max-width: 100%;
-		margin-bottom: var(--gap-tight);
 	}
 </style>

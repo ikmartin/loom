@@ -1,26 +1,20 @@
-// Review's two kinds that today's Your Changes draws on a served quilt, in place of round six's rows for them: "Results to accept" shows its Waiting to be accepted section, every document's blocks by document, "Proposed edits" its Changes to keep and the agents' copies. The column counts for them what these sections list as waiting, and a draft narrows them as it narrows every kind.
+// Review's two kinds drawn from the manifest rather than from loom's `review-list`, since their acts are the manifest's: "Results to accept", a row for each block waiting (changed since accepted, or taken in from a copy or a pull), the never accepted and the accepted folded beneath; "Proposed edits", a row for each change waiting in the person's text and for each agent's copy. The column counts for them the rows drawn, and a draft narrows them as it narrows every kind.
 
-import type { Manifest } from '$lib/manifest/types';
+import type { Key, Manifest, PendingChange, UnresolvedReview } from '$lib/manifest/types';
 import type { ReviewKind, ReviewList } from '$lib/library/types';
 import { isAgentDocument } from '$lib/manifest/documents';
 import { byDocument, pending, type ChangeGroup } from '$lib/review/changes';
 import { adoptionsOf } from '$lib/review/proposed';
 import { documentsWithBlocks } from '$lib/review/queue';
-import { acceptanceOf, waitingIn, type Acceptance } from '$lib/review/yourChanges';
+import { acceptanceOf, waitingIn, type Acceptance, type BlockRow } from '$lib/review/yourChanges';
 
-/** Which section of Your Changes a kind draws. */
-export type Part = 'accept' | 'changes';
+/** The two kinds drawn from the manifest. */
+export const YOURS = ['accepted-changed', 'edits'] as const satisfies ReviewKind[];
 
-/** The kinds Your Changes draws, by the section each shows. */
-export const PARTS = { 'accepted-changed': 'accept', edits: 'changes' } as const satisfies Partial<Record<ReviewKind, Part>>;
+export type YoursKind = (typeof YOURS)[number];
 
-export type YoursKind = keyof typeof PARTS;
-
-/** The two kinds, as a list. */
-export const YOURS = Object.keys(PARTS) as YoursKind[];
-
-/** Whether Your Changes draws this kind. */
-export const isYours = (kind: string): kind is YoursKind => kind in PARTS;
+/** Whether this kind is drawn from the manifest. */
+export const isYours = (kind: string): kind is YoursKind => (YOURS as readonly string[]).includes(kind);
 
 /** The person's documents with blocks to accept, as the accept section offers them: open, read in full, and no agent's. */
 export function blockDocuments(m: Manifest): Manifest['masters'] {
@@ -30,7 +24,7 @@ export function blockDocuments(m: Manifest): Manifest['masters'] {
 	);
 }
 
-/** One document's part of the accept section. */
+/** One document's blocks, each once, under the first document that reads it. */
 export interface AcceptSection {
 	path: string;
 	/** The document's file name. */
@@ -39,7 +33,7 @@ export interface AcceptSection {
 	a: Acceptance;
 }
 
-/** What the accept section draws: each document with blocks, its own blocks grouped by why they wait, each block once, under the first document that reads it; one draft's only when given. Never accepted and accepted blocks are folded there and count nothing. */
+/** Each document with blocks, its own blocks grouped by why they wait, each block once, under the first document that reads it; one draft's only when given. */
 export function acceptSections(m: Manifest, doc?: string | null): AcceptSection[] {
 	const seen = new Set<string>();
 	const once = <T extends { key: string }>(rows: T[]): T[] => rows.filter((b) => (seen.has(b.key) ? false : (seen.add(b.key), true)));
@@ -53,15 +47,54 @@ export function acceptSections(m: Manifest, doc?: string | null): AcceptSection[
 	return out;
 }
 
-/** The blocks the accept section lists as waiting, changed since accepted or taken in, each once; in one draft when given. */
+/** A block as a row of Results to accept: the document it is listed under, which names it, why it waits, and for one taken in, where from. */
+export interface AcceptItem {
+	key: string;
+	doc: string;
+	row: UnresolvedReview;
+	taken?: string;
+}
+
+/** What Results to accept draws: the rows waiting, by document, each document's changed blocks before those taken in; beneath, folded and counting nothing, the never accepted and the accepted. */
+export interface AcceptList {
+	waiting: AcceptItem[];
+	never: AcceptItem[];
+	accepted: { key: string; doc: string; k: Key }[];
+}
+
+/** Results to accept's rows, every draft's or one draft's. */
+export function acceptList(m: Manifest, doc?: string | null): AcceptList {
+	const out: AcceptList = { waiting: [], never: [], accepted: [] };
+	for (const s of acceptSections(m, doc)) {
+		const item = (b: BlockRow, taken?: string): AcceptItem => ({ key: b.key, doc: s.path, row: b.row!, ...(taken ? { taken } : {}) });
+		out.waiting.push(...s.a.changed.map((b) => item(b)), ...s.a.taken.flatMap((t) => t.rows.map((b) => item(b, t.label))));
+		out.never.push(...s.a.never.map((b) => item(b)));
+		out.accepted.push(...s.a.accepted.map((k) => ({ key: k.key, doc: s.path, k })));
+	}
+	return out;
+}
+
+/** The blocks Results to accept lists as waiting, changed since accepted or taken in, each once; in one draft when given. */
 export function acceptWaiting(m: Manifest, doc?: string | null): number {
 	return acceptSections(m, doc).reduce((n, s) => n + waitingIn(s.a), 0);
 }
 
-/** The changes the changes section draws, by the document listing them: every one, or, in a draft, one group of those in its text. Changes just kept or discarded (`gone`) are left out at once. */
+/** The changes Proposed edits draws, by the document listing them: every one, or, in a draft, one group of those in its text. Changes just kept or discarded (`gone`) are left out at once. */
 export function changeGroups(m: Manifest, gone: Record<string, unknown>, doc?: string | null): ChangeGroup[] {
 	const groups = doc ? [{ path: doc, label: doc.split('/').pop() ?? doc, document: true, changes: pending(m).filter((c) => c.documents?.includes(doc)) }] : byDocument(m);
 	return groups.map((g) => ({ ...g, changes: g.changes.filter((c) => !(c.id in gone)) })).filter((g) => g.changes.length);
+}
+
+/** A change as a row of Proposed edits: the document whose text holds it, null for one in no document's, and what its group is called. */
+export interface ChangeItem {
+	c: PendingChange;
+	doc: string | null;
+	label: string;
+}
+
+/** Proposed edits' rows of changes, by document, in the order `changeGroups` gives. */
+export function changeList(m: Manifest, gone: Record<string, unknown>, doc?: string | null): ChangeItem[] {
+	return changeGroups(m, gone, doc).flatMap((g) => g.changes.map((c) => ({ c, doc: g.document ? g.path : null, label: g.label })));
 }
 
 /** The agents' copies waiting to be taken in; those into one draft when given. */
@@ -69,14 +102,14 @@ export function copiesOf(m: Manifest, doc?: string | null) {
 	return adoptionsOf(m).filter((c) => !doc || c.source === doc);
 }
 
-/** The cards the changes section lists as waiting: each change and each agent's copy. */
+/** The rows Proposed edits draws: each change and each agent's copy. */
 export function changesWaiting(m: Manifest, gone: Record<string, unknown>, doc?: string | null): number {
-	return changeGroups(m, gone, doc).reduce((n, g) => n + g.changes.length, 0) + copiesOf(m, doc).length;
+	return changeList(m, gone, doc).length + copiesOf(m, doc).length;
 }
 
-/** What a kind Your Changes draws counts, in one draft when given. */
+/** What a kind drawn from the manifest counts, in one draft when given: its rows waiting. */
 export function yoursCount(kind: YoursKind, m: Manifest, gone: Record<string, unknown>, doc?: string | null): number {
-	return PARTS[kind] === 'accept' ? acceptWaiting(m, doc) : changesWaiting(m, gone, doc);
+	return kind === 'accepted-changed' ? acceptWaiting(m, doc) : changesWaiting(m, gone, doc);
 }
 
 /** How many of loom's rows of one kind concern a draft, from its whole list; null before the list is read. */

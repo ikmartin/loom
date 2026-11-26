@@ -1,14 +1,21 @@
 <script lang="ts">
-	// `see it in main.tex` (4 see it): the document laid over Review, read only, at the result, until its close button; nothing in it edits, and it never leaves Review.
+	// `see it in main.tex` (4 see it): the document laid over Review, read only, at the result, until its close button; nothing in it edits, and it never leaves Review: its references stay the in-page anchors the build gave them (`standalone`). Opened from a result changed since it was accepted, a strip under its head draws that change (`SinceAccepted`), a choice among its reasons where it has several.
 	import Icon from '$lib/components/Icon.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { anchorId } from '$lib/nav';
+	import SinceAccepted from '$lib/review/SinceAccepted.svelte';
 	import { review as words } from '$lib/words/review';
 	import { rv } from './state.svelte';
 
-	let { over }: { over: { doc: string; key: string; name: string } } = $props();
+	let { over }: { over: { doc: string; key: string; name: string; since?: boolean } } = $props();
 	const master = $derived(store.manifest?.masters.find((x) => x.path === over.doc));
+	const since = $derived(!!over.since && !!store.manifest?.keys[over.key]?.acceptance?.causes?.length);
+	let cause = $state(0);
+	$effect(() => {
+		void over.key;
+		cause = 0;
+	});
 
 	// It lands at the block once the document is drawn, and again each time what is drawn changes its height (a draft drawn as its source settles after it mounts, mathematics after it is set), until the reader scrolls by their own hand.
 	let box = $state<HTMLElement | null>(null);
@@ -50,8 +57,9 @@
 		<span class="quiet">{words.quiet([over.name ? words.seeIt.at(over.name) : '', words.seeIt.readOnly])}</span>
 		<button type="button" class="ib" title={words.seeIt.close} aria-label={words.seeIt.close} onclick={() => (rv.over = null)}><Icon name="close" size={18} /></button>
 	</header>
+	{#if since}<div class="strip" data-testid="review-over-since"><SinceAccepted reviewKey={over.key} index={cause} master={over.doc} onchoose={(i) => (cause = i)} inReview /></div>{/if}
 	<div class="doc" bind:this={box} data-testid="review-over-doc">
-		{#if master}<div><Fragment path={master.fragment} master={master.path} macroSet={master.macros ?? ''} isolatedMacros={!!master.macros} anchor={anchorId(over.key)} onmounted={() => land()} /></div>{/if}
+		{#if master}<div><Fragment path={master.fragment} master={master.path} macroSet={master.macros ?? ''} isolatedMacros={!!master.macros} standalone anchor={anchorId(over.key)} onmounted={() => land()} /></div>{/if}
 	</div>
 </section>
 
@@ -93,6 +101,14 @@
 	}
 	header .ib:hover {
 		background: var(--ann-neutral-wash);
+	}
+	.strip {
+		flex: none;
+		max-height: 40%;
+		overflow: auto;
+		padding: 10px 40px 12px;
+		border-bottom: 1px solid var(--rule);
+		background: var(--review-paper);
 	}
 	.doc {
 		flex: 1;

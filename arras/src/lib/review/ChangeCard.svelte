@@ -1,5 +1,5 @@
 <script lang="ts">
-	// One pending change as a card: what it is and who made it, its words out and in (struck and underlined in teal; new words that hold an environment or a paragraph break as TeX made them, `new_html`), what a suggestion's writer says of it and the annotation it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard, which act as its popup's do (`history.svelte.ts`). In the list beside a text a click opens it at its words; in Review it names where it is, which lays its draft over Review there.
+	// One pending change as a card: what it is and who made it, its words out and in (struck and underlined in teal; new words that hold an environment or a paragraph break as TeX made them, `new_html`), what a suggestion's writer says of it and the annotation it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard, which act as its popup's do (`history.svelte.ts`). In the list beside a text a click opens it at its words; on the page of Your Changes it names where it is, with a link there; in a row of Review's Proposed edits it is drawn bare, the row naming where it is.
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
@@ -11,7 +11,7 @@
 	import { keyName, linkName } from '$lib/workspace/names';
 	import { can } from '$lib/write';
 	import { actSays, kindName, ready, refusal, whoMade } from './changes';
-	import { discardChanges, keepChanges } from './history.svelte';
+	import { discardChanges, keepChanges, type ChangeAnswer } from './history.svelte';
 	import { say } from './toasts.svelte';
 
 	let {
@@ -19,7 +19,9 @@
 		on = false,
 		onopen,
 		place = false,
-		see
+		see,
+		bare = false,
+		onanswer
 	}: {
 		c: PendingChange;
 		/** Whether its popup is open. */
@@ -30,6 +32,10 @@
 		place?: boolean;
 		/** In Review, how a block it names is shown: laid over Review at it (see it, given the block and the words that named it), or, with null, named in words; absent outside Review, where it is a link into its document. */
 		see?: ((key: string, said: string) => void) | null;
+		/** Drawn without its frame, inside a row of Review's that opened to it. */
+		bare?: boolean;
+		/** Told what Keep or Discard answered, in place of the toast: Review says it in the column's message, in its own words. */
+		onanswer?: (how: 'keep' | 'discard', res: ChangeAnswer) => void;
 	} = $props();
 
 	const m = $derived(store.manifest);
@@ -51,6 +57,7 @@
 	async function act(how: 'keep' | 'discard', e: Event): Promise<void> {
 		e.stopPropagation();
 		const res = how === 'keep' ? await keepChanges({ changes: [c.id] }) : await discardChanges({ changes: [c.id] });
+		if (onanswer) return onanswer(how, res);
 		const refused = res.refused?.find((r) => r.id === c.id)?.why;
 		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? res.error?.message ?? 'the publisher refused it'] });
 	}
@@ -64,6 +71,7 @@
 <div
 	class="card ccard"
 	class:on
+	class:bare
 	class:opens={!!onopen}
 	role={onopen ? 'button' : undefined}
 	tabindex={onopen ? 0 : undefined}
@@ -110,6 +118,11 @@
 		background: var(--sheet);
 		border: 1px solid var(--rule);
 		border-radius: 8px;
+	}
+	.ccard.bare {
+		padding: 0;
+		background: none;
+		border: 0;
 	}
 	.ccard.opens {
 		cursor: pointer;

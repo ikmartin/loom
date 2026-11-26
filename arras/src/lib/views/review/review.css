@@ -33,6 +33,11 @@
 .rvw .rg .act {
 	margin-left: auto;
 }
+/* a fold within a kind's list, as Results to accept folds the never accepted and the accepted beneath its rows */
+.rvw .rg.sub {
+	margin-top: 10px;
+	border-bottom: 0;
+}
 .rvw .rg-rule {
 	height: 1px;
 	margin: 22px 0 0;
@@ -59,6 +64,26 @@
 .rvw button.rr-h:hover,
 .rvw .rr.open > .rr-h {
 	background: var(--ann-neutral-wash);
+}
+/* a row whose first slot holds a box to choose it, beside the button that opens it */
+.rvw .rr-line {
+	display: flex;
+	align-items: center;
+}
+.rvw .rr-line > .slot {
+	margin-left: 4px;
+}
+.rvw .rr-line > .rr-h {
+	flex: 1;
+	min-width: 0;
+	padding-left: 0;
+}
+.rvw .rr-line:hover,
+.rvw .rr.open > .rr-line {
+	background: var(--ann-neutral-wash);
+}
+.rvw .rr-line > button.rr-h:hover {
+	background: none;
 }
 .rvw .slot {
 	flex: none;
@@ -284,6 +309,17 @@
 }
 .rvw .rg.head {
 	font-size: 12px;
+}
+/* a kind's own acts over its rows, at the right, what they act on said at the left */
+.rvw .rg.head.acts {
+	justify-content: flex-end;
+	gap: 6px;
+}
+.rvw .rg.head.acts .btn {
+	margin-left: 0;
+}
+.rvw .rg.head.acts .says {
+	margin-right: auto;
 }
 .rvw .sr-h.static {
 	cursor: default;

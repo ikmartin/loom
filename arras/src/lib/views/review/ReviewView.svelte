@@ -1,12 +1,11 @@
 <script lang="ts">
-	// Review's list (`docs/specs/library-views.md` §4.2): under Everything a group for each kind, ordered by who is waiting, each folding, then a rule and the tasks waiting for an agent, folded; a kind alone when the column chooses one; narrowed to a draft when the column chooses one. Read again whenever the library's generation moves. Lean statements to attest holds the attested results that changed, first (`joined`). Results to accept and Proposed edits are today's Your Changes, a section each (`yours.ts`), and under Everything each is a group while its section lists something waiting.
+	// Review's list (`docs/specs/library-views.md` §4.2): under Everything a group for each kind, ordered by who is waiting, each folding, then a rule and the tasks waiting for an agent, folded; a kind alone when the column chooses one; narrowed to a draft when the column chooses one. Read again whenever the library's generation moves. Lean statements to attest holds the attested results that changed, first (`joined`). Results to accept and Proposed edits are drawn from the manifest, whose acts they hold (`Accepting`, `Keeping`, `yours.ts`), and under Everything each is a group while it lists something waiting.
 	import { said } from '$lib/library/said';
 	import './review.css';
 	import { page } from '$app/state';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { acted } from '$lib/review/acted.svelte';
-	import YourChanges from '$lib/review/YourChanges.svelte';
 	import { review as words } from '$lib/words/review';
 	import { RANK, readList, rv } from './state.svelte';
 	import Group from './Group.svelte';
@@ -17,10 +16,9 @@
 	import { joined, stubsOf, type ShownGroup, type ShownKind } from './rows';
 	import SeeIt from './SeeIt.svelte';
 	import Pull from './Pull.svelte';
-	import YoursGroup from './YoursGroup.svelte';
-	import { isYours as yours, PARTS, yoursCount } from './yours';
-
-	const part = $derived(yours(rv.kind) ? PARTS[rv.kind] : undefined);
+	import Accepting from './Accepting.svelte';
+	import Keeping from './Keeping.svelte';
+	import { isYours as yours, yoursCount } from './yours';
 
 	$effect(() => {
 		const kind = rv.kind;
@@ -33,7 +31,7 @@
 	// the works and results the rows name by id, read once each
 	$effect(() => reviewNames.want(groups.flatMap((g) => g.rows)));
 
-	// a link to one block's row (`#review-…`) opens the accept section under Everything, even where nothing in it waits
+	// a link to one block's row (`#review-…`) opens Results to accept under Everything, even where nothing in it waits
 	const linked = $derived(page.url.hash.startsWith('#review-'));
 	$effect(() => {
 		if (linked) rv.folded.delete('accepted-changed');
@@ -57,8 +55,9 @@
 	<div class="list">
 		{#if rv.kind === 'incoming'}
 			<Pull />
-		{:else if part}
-			<YourChanges {part} />
+		{:else if yours(rv.kind)}
+			{#if store.manifest && !yoursCount(rv.kind, store.manifest, acted.map, rv.doc)}<p class="empty" data-testid="review-empty">{words.list.empty}</p>{/if}
+			{#if rv.kind === 'accepted-changed'}<Accepting />{:else}<Keeping />{/if}
 		{:else if rv.list.error}
 			<p class="empty">{rv.list.error.code === 'not-served' ? words.list.notServed : words.list.failed(said(rv.list.error))}</p>
 		{:else if !rv.list.value}
@@ -66,7 +65,7 @@
 		{:else if rv.kind === 'all'}
 			{#each entries as e (e.kind)}
 				{#if e.kind === 'agents'}<div class="rg-rule"></div>{/if}
-				{#if e.group}<Group group={e.group} />{:else if yours(e.kind)}<YoursGroup kind={e.kind} n={e.n ?? 0} />{/if}
+				{#if e.group}<Group group={e.group} />{:else if yours(e.kind)}<Group kind={e.kind} n={e.n ?? 0}>{#if e.kind === 'accepted-changed'}<Accepting />{:else}<Keeping />{/if}</Group>{/if}
 			{:else}
 				<p class="empty" data-testid="review-empty">{words.list.empty}</p>
 			{/each}
