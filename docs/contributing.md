@@ -29,6 +29,7 @@ The workspace's documents and loom are GPL-3.0-or-later; the viewer AGPL-3.0-or-
 - `--only loom|viewer|docs`: one lane, when a change touches one codebase or only documents.
 - `--steps "pytest tex"`: named steps whatever their tier; CI runs the TeX tier this way, and on `main` the `tree` tests.
 - `--python X.Y`: every `uv` step under that Python, one uv already finds on the machine (it downloads none, and says so when there is none), in `loom/.venv-X.Y`, so `loom/.venv` keeps its own. `fast --only loom --python 3.11` is the oldest leg of `loom.yml`'s matrix.
+- `--wide-font`: the e2e, write and reading suites in the faces a runner without this Mac's fonts draws (`viewer/tests/wide-font.css`), as CI's Linux runner draws them; `VIEWER_WIDE_FONT=1` does the same for a suite started by hand.
 - `--workers N`, or `VERIFY_WORKERS=N`: how many test workers the run may use in all. The machine is shared, so by default a run takes half the cores less the load already on it, and never fewer than two; loom's pytest and the Playwright suites divide what it takes. A Playwright suite started by hand reads the same variable.
 
 The docs lane runs `docs/work-queue/check.py` and the checks in `scripts/checks/`, each runnable alone and printing the command that fixes what it finds.

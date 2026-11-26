@@ -223,3 +223,12 @@ test("in a wider font than this Mac's, every label in the four views' columns an
 		expect(wrapped, at).toEqual([]);
 	}
 });
+
+test('a run in the wide faces draws the viewer in them, its chrome and its text alike', async ({ page }) => {
+	test.skip(!process.env.VIEWER_WIDE_FONT, 'only in a run in the wide faces (scripts/verify --wide-font)');
+	await page.goto('/master/drafting/main');
+	await expect(pane(page, 0).locator('.fragment').first()).toBeVisible();
+	const faces = await page.evaluate(() => [document.querySelector('[data-testid="quilt-name"]')!, document.querySelector('.fragment p')!].map((el) => getComputedStyle(el).fontFamily));
+	expect(faces[0]).toMatch(/^Verdana/);
+	expect(faces[1]).toMatch(/^"?DejaVu Serif/);
+});

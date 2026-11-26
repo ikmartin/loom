@@ -82,3 +82,7 @@ def test_python_refuses_a_version_uv_cannot_find_here_rather_than_download_one(
     with pytest.raises(SystemExit, match="X.Y"):
         verify.under_python(list(verify.STEPS), "3")
 
+
+def test_wide_font_reaches_the_three_suites_and_not_the_build(verify: ModuleType) -> None:
+    steps = {s.name: s for s in verify.in_wide_font([s for s in verify.STEPS if "full" in s.tiers])}
+    assert [n for n, s in steps.items() if s.env.get("VIEWER_WIDE_FONT")] == ["e2e", "write", "reading"]

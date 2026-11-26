@@ -1,0 +1,5 @@
+/* The viewer's faces as a runner without this Mac's fonts draws them: Verdana and Georgia here, DejaVu on Linux, where GitHub's runner falls back to it. Only the viewer's own faces change, so a paper's text layer and the typeset math keep theirs. `scripts/bundle.mjs` puts this in a suite's copy of the app when VIEWER_WIDE_FONT is set (`scripts/verify --wide-font`). */
+* {
+	--sans: Verdana, 'DejaVu Sans', sans-serif !important;
+	--serif: 'DejaVu Serif', Georgia, serif !important;
+}

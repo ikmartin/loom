@@ -3,9 +3,11 @@
 // Usage: node scripts/bundle.mjs OUT [FIXTURE]
 //
 // VIEWER_PREBUILT names a built app (the output of `npm run build`, no fixture staged) to copy; scripts/verify builds once and sets it for every suite. Without it this runs `npm run build` under a lock, so two configs started together do not build into `build/` and `.svelte-kit/` at once.
+//
+// VIEWER_WIDE_FONT set puts `tests/wide-font.css` in every page of the copy, so a whole suite runs in the faces a runner without this Mac's fonts draws (`scripts/verify --wide-font`).
 
 import { execFileSync, execSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -73,5 +75,12 @@ if (prebuilt) {
 		execSync('npm run build', { cwd: VIEWER, stdio: ['ignore', 'ignore', 'inherit'] });
 		cpSync(join(VIEWER, 'build'), out, { recursive: true });
 	});
+}
+if (process.env.VIEWER_WIDE_FONT) {
+	const style = `<style data-wide-font>${readFileSync(join(VIEWER, 'tests', 'wide-font.css'), 'utf8')}</style>`;
+	for (const name of readdirSync(out, { recursive: true, encoding: 'utf8' }).filter((n) => n.endsWith('.html'))) {
+		const page = readFileSync(join(out, name), 'utf8');
+		if (page.includes('</head>') && !page.includes('data-wide-font')) writeFileSync(join(out, name), page.replace('</head>', `${style}</head>`));
+	}
 }
 if (fixture) execFileSync(process.execPath, [join(VIEWER, 'scripts', 'stage-fixture.mjs'), resolve(VIEWER, fixture), out], { cwd: VIEWER, stdio: ['ignore', 'ignore', 'inherit'] });
