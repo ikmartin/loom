@@ -197,3 +197,48 @@ def test_a_refused_fetch_is_asked_once_recorded_and_not_tried_again(
     assert done is not None and done.outcome == "failed" and "503" in (done.why or "")
     assert asked == ["2401.01234 1"], "the PDF asked once; the source never, the work's fetch having failed"
     assert [a["outcome"] for a in tried(root, arden)] == ["failed"] and arden not in due(root)
+
+
+#: The showcase's Arden 2024, its source and the PDF committed beside it.
+ARDEN = Path(__file__).parents[2] / "quilts" / "sources" / "showcase-works" / "arden-cycle-spaces"
+
+
+@pytest.mark.poppler
+def test_a_cited_paper_with_a_stored_pdf_yields_its_cited_result_numbered_and_paged_from_the_pdf_compiling_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The unasked job on a work holding its source and its PDF: the result a draft cites is written as a node whose number and page the stored PDF printed, marked as found by its words, and nothing is compiled."""
+    from loom.library import survey
+    from loom.library.store import node_ids
+
+    root = tmp_path / "q"
+    root.mkdir()
+    (root / "config.toml").write_text('[quilt]\nprefix = "tq"\nmain = "main.tex"\n')
+    (root / "main.tex").write_text(
+        "\\documentclass{article}\n\\begin{document}\nBy \\cite[Lemma 2.2]{Ard24}.\n\\bibliography{refs}\n\\end{document}\n"
+    )
+    (root / "refs.bib").write_text(
+        "@article{Ard24,\n  author = {Arden, Elspeth},\n  title = {Cycle spaces of finite quivers},\n  year = {2024},\n}\n"
+    )
+    result = scan(load_quilt(root))
+    gather(result)
+    make(result)
+    arden = dict(result.refs)["Ard24"]
+    folder = tmp_path / "source"
+    folder.mkdir()
+    (folder / "main.tex").write_text(ARDEN.with_suffix(".tex").read_text())
+    attach(root, arden, "tex", documents.put_source(root, folder), **ME)
+    attach(root, arden, "pdf", documents.put_pdf(root, ARDEN.with_suffix(".pdf")), **ME)
+
+    def compiled(*_a: object, **_k: object) -> None:
+        raise AssertionError("the unasked job compiles nothing")
+
+    monkeypatch.setattr(survey, "compile_marks", compiled)
+    done = attempt(root, arden, online=False)
+    assert done is not None and done.outcome == "digested", done
+    nodes = [n for n in (read(root, i) for i in node_ids(root)) if n is not None and n.source == arden]
+    lemma = [n for n in nodes if n.taxon == "lemma" and n.number == "2.2"]
+    assert len(lemma) == 1 and lemma[0].body, "the stub the draft's citation made, filled from the source"
+    assert (lemma[0].pages, lemma[0].found) == ("2", "words"), (
+        "its page as the stored PDF prints it, found by its words"
+    )
