@@ -100,3 +100,35 @@ test('Settings › Agents offers the setup card and Set up beside an app not set
 	await expect(page.getByTestId('settings-window')).not.toContainText('loom ai init');
 	await expect(page.getByTestId('settings-window')).toContainText('What it sees');
 });
+
+test("Ask your agent stands on a document's toolbar, a reasonable size, about the document or the result at the top of the pane, with a mode from the quilt's own", async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	const ask = page.getByTestId('item-controls').first().getByTestId('toolbar-ask');
+	await expect(ask).toBeVisible();
+	const box = (await ask.boundingBox())!;
+	expect(box.height).toBeGreaterThanOrEqual(20);
+	expect(box.height).toBeLessThanOrEqual(32);
+	await ask.click();
+	const request = page.getByTestId('ask-request');
+	await expect(request).toContainText('(quilt:drafting/main.tex');
+	// the document is always a choice; the result at the pane's top comes first when there is one
+	const about = page.locator('[data-testid^="ask-about-"]');
+	if (await about.count()) await page.getByTestId(`ask-about-${(await about.count()) - 1}`).check();
+	await expect(request).toHaveText('In loom, look at main.tex (quilt:drafting/main.tex).');
+	const mode = page.getByTestId('ask-mode');
+	const first = await mode.locator('option').nth(1).getAttribute('value');
+	await mode.selectOption(first!);
+	await expect(request).toHaveText(`In loom, work in the ${first} mode on main.tex (quilt:drafting/main.tex).`);
+	await expect(page.getByTestId('ask-fits')).not.toBeEmpty();
+	// with no publisher, nothing opens Claude
+	await expect(page.getByTestId('ask-copy-open')).toHaveCount(0);
+	await page.keyboard.press('Escape');
+	await expect(page.getByTestId('ask-agent')).toHaveCount(0);
+});
+
+test("Ask your agent on a result's own page is about the result", async ({ page }) => {
+	await page.goto('/node/sy-0003');
+	await page.getByTestId('toolbar-ask').click();
+	await expect(page.locator('[data-testid^="ask-about-"]')).toHaveCount(0);
+	await expect(page.getByTestId('ask-request')).toHaveText(/^In loom, look at .+ \(quilt:sy-0003\)\.$/);
+});

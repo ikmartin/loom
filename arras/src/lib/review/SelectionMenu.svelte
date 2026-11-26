@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The actions at a selection, on documents and PDF pages alike: a button at the end of the words, which a click (never a hover) opens into **Quote**, **Annotate** and **New note**. Pressing it or an action never ends the selection (`AtSelection` swallows the press), so the words stay lit while the menu is open. Quote copies the words with a link to where they are and writes nothing; Annotate marks them in the look in hand, and is absent where they are marked already (Annotate's tool on) or annotating is not served; New note runs the person's command on the link (`notes/newNote.ts`). A view's own control goes before the button (`before`: Add comment, after Annotate marked the words) and its own actions after it (`more`, the Library's digest).
+	// The actions at a selection, on documents and PDF pages alike: a button at the end of the words, which a click (never a hover) opens into **Quote**, **Ask your agent**, **Annotate** and **New note**. Pressing it or an action never ends the selection (`AtSelection` swallows the press), so the words stay lit while the menu is open. Quote copies the words with a link to where they are and writes nothing; Ask your agent opens the box that copies a request about them (`agents/AskAgent`); Annotate marks them in the look in hand, and is absent where they are marked already (Annotate's tool on) or annotating is not served; New note runs the person's command on the link (`notes/newNote.ts`). A view's own control goes before the button (`before`: Add comment, after Annotate marked the words) and its own actions after it (`more`, the Library's digest).
 	import type { Snippet } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { copyText } from '$lib/clipboard';
@@ -9,6 +9,9 @@
 	import AtSelection from './AtSelection.svelte';
 	import { quoted } from './annotating.svelte';
 	import { say } from './toasts.svelte';
+	import { askAbout } from '$lib/agents/asking.svelte';
+	import { withoutQuote } from '$lib/agents/places';
+	import { agents as agentsWords } from '$lib/words/agents';
 
 	type Box = { left: number; top: number; width: number; height: number };
 
@@ -65,7 +68,7 @@
 	const flip = $derived.by(() => {
 		void open;
 		const r = host?.getBoundingClientRect();
-		return { up: !!r && r.bottom + 132 > window.innerHeight, left: !!r && r.left + 188 > window.innerWidth };
+		return { up: !!r && r.bottom + 176 > window.innerHeight, left: !!r && r.left + 188 > window.innerWidth };
 	});
 
 	// each action reads its props before `ondone`, which takes away what the host draws them from
@@ -76,6 +79,14 @@
 		open = false;
 		ondone();
 		say({ title: words.quoted.title, words: said.text, lines: [`— ${said.name}`, ok ? words.quoted.copied : words.quoted.refused] });
+	}
+
+	function ask(): void {
+		const place = { name, href: withoutQuote(link), words: text };
+		window.getSelection()?.removeAllRanges();
+		open = false;
+		ondone();
+		askAbout([place]);
 	}
 
 	function mark(): void {
@@ -100,6 +111,7 @@
 		{#if open}
 			<span class="menu" class:up={flip.up} class:left={flip.left} role="menu" aria-label={words.menu.menu} data-testid="selection-menu">
 				<button type="button" role="menuitem" title={words.menu.quoteHover} data-testid="quote-offer" onclick={() => void quote()}><Icon name="quote" size={15} />{words.menu.quote}</button>
+				<button type="button" role="menuitem" title={agentsWords.ask.hoverWords} data-testid="selection-ask" onclick={ask}><Icon name="ask" size={15} />{agentsWords.ask.open}</button>
 				{#if annotate}<button type="button" role="menuitem" title={words.menu.annotateHover} data-testid="selection-annotate" onclick={mark}><Icon name="highlighter" size={15} />{words.menu.annotate}</button>{/if}
 				{#if notes}<button type="button" role="menuitem" title={words.menu.newNoteHover} data-testid="selection-new-note" onclick={note}><Icon name="note" size={15} />{words.menu.newNote}</button>{/if}
 			</span>

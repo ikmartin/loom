@@ -1,7 +1,9 @@
 <script lang="ts">
-	// The foot of the column, in both of its views and folded: the connection chip, whether an agent is connected, which opens what it is and did, is told, sees and may change (`AgentPanel`). It stands only where a publisher says who is connected, and says it does not know while the stream to it is down. Folded, it is its dot alone.
+	// The foot of the column, in both of its views and folded: the connection chip, whether an agent is connected, which opens what it is and did, is told, sees and may change (`AgentPanel`). It stands only where a publisher says who is connected, and says it does not know while the stream to it is down. Folded, it is its dot alone. The one box Ask your agent opens is mounted here, since the column is always on the page.
 	import Popover from '$lib/components/Popover.svelte';
 	import AgentPanel from '$lib/agents/AgentPanel.svelte';
+	import AskAgent from '$lib/agents/AskAgent.svelte';
+	import { asking } from '$lib/agents/asking.svelte';
 	import { presence } from '$lib/agents/presence.svelte';
 	import { chipWords } from '$lib/agents/connected';
 	import { agents } from '$lib/words/agents';
@@ -19,6 +21,8 @@
 		return () => clearInterval(t);
 	});
 </script>
+
+<AskAgent bind:open={asking.open} places={asking.places} />
 
 {#if presence.served}
 	<div class="agents" class:folded>
