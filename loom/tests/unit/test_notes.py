@@ -61,6 +61,17 @@ def test_a_command_that_cannot_be_split_is_refused() -> None:
     assert got.value.code == "bad-command"
     with pytest.raises(NoteRefused, match="one line"):
         notes.check_command("ed\nrm -rf x")
+    # DEL too, which TOML refuses in a string, so one saved would leave every quilt's command unreadable
+    with pytest.raises(NoteRefused, match="one line"):
+        notes.check_command("ed\x7f {link}")
+
+
+def test_new_note_neither_holds_the_publication_lock_nor_rebuilds() -> None:
+    """A command may take seconds to answer, and the file it or the stub makes reaches the manifest through the watcher: no other write waits on it."""
+    from loom.render.api import NO_REBUILD, OWN_LOCK
+
+    assert {"new-note", "notes-settings"} <= set(OWN_LOCK)
+    assert {"new-note", "notes-settings"} <= set(NO_REBUILD)
 
 
 def test_the_command_runs_with_no_shell_and_is_handed_the_request_file(tmp_path: Path) -> None:

@@ -8,6 +8,7 @@
 	import MarkedDoc from '$lib/pdf/MarkedDoc.svelte';
 	import { paperPlace } from '$lib/pdf/place.svelte';
 	import { quoteLink } from '$lib/notes/link';
+	import { notes as notesWords } from '$lib/words/notes';
 	import { can, write, type WriteResult } from '$lib/write';
 	import { itemKey, type Item } from '../item';
 	import { openOutside } from '../links';
@@ -205,7 +206,7 @@
 	}
 
 	/** Words selected on a PDF page are named by the file and the page, and linked to as `loom link FILE --page N --quote` prints. */
-	const offer = $derived(file ? { name: (n: number) => `${name} p. ${n}`, link: (n: number, text: string) => quoteLink(file.path, `page=${n}`, text) } : undefined);
+	const offer = $derived(file ? { name: (n: number) => notesWords.page(name, n), link: (n: number, text: string) => quoteLink(file.path, `page=${n}`, text) } : undefined);
 
 </script>
 

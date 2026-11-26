@@ -110,6 +110,12 @@ def test_a_link_whose_quoted_words_are_gone_is_a_problem_on_its_line(tmp_path: P
     assert [(d.locations[0].file, d.locations[0].line) for d in found] == [("notes/a.org", 3), ("notes/b.md", 3)]
     assert {d.code for d in found} == {"loom:link-words-missing"} and LOOM["loom:link-words-missing"].cls == LATEX
     assert "“words nobody wrote”" in found[0].message and "“no such words”" in found[1].message
+    # a document's words are its own: words that stand only in another document do not keep a link to this one
+    put(q, "notes/c.md", "# C\n\n[elsewhere](quilt:drafting/outline.tex#quote=a%20finite%20set)\n")
+    result = open_scan(str(q))
+    assert "a finite set" not in result.expansions["drafting/outline.tex"].text
+    gone = link_words_missing(result, backlinks(result, q, {"notes/c.md": "markdown"}))
+    assert [(d.locations[0].file, d.locations[0].line) for d in gone] == [("notes/c.md", 3)]
 
 
 @pytest.mark.poppler

@@ -283,6 +283,12 @@ test.describe('on a project PDF', () => {
 		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
 		await expect(page.getByTestId('selection-annotate')).toBeVisible();
+		// the menu's Annotate marks the words as the tool does, and they keep Quote and New note
+		await page.getByTestId('selection-annotate').click();
+		await published(served, 3);
+		await page.getByTestId('selection-actions').click();
+		await expect(page.getByTestId('quote-offer')).toBeVisible();
+		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
 	});
 
 	test('Comment writes a pin once it says something, the drawing tools each leave a mark in the look in hand, and a shape moves, resizes and comes back with Undo', async ({ page, served }) => {

@@ -60,7 +60,9 @@ HANDLERS: dict[str, Handler] = {
 }
 #: Of these, the ones that answer and change nothing the manifest shows: the command is the person's and never in the manifest.
 READS: tuple[str, ...] = ("notes-settings",)
-#: The ones the publisher does not rebuild after.
-NO_REBUILD: tuple[str, ...] = READS
+#: The ones the publisher does not rebuild after: New note's file, the stub or the one the person's editor makes, reaches the manifest through the watcher, as any file the person saves does.
+NO_REBUILD: tuple[str, ...] = (*READS, "new-note")
+#: The ones run outside the publication's lock: the command may take seconds to answer, and the stub is written through the door, which takes its own.
+OWN_LOCK: tuple[str, ...] = ("new-note", "notes-settings")
 #: The ones that change records alone.
 RECORD_WRITES: tuple[str, ...] = ()

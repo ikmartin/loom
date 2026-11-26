@@ -23,6 +23,7 @@
 	import MarkedDoc from './MarkedDoc.svelte';
 	import type { PdfView } from './view.svelte';
 	import { quoteLink } from '$lib/notes/link';
+	import { notes as notesWords } from '$lib/words/notes';
 	import { here } from '$lib/here.svelte';
 	import { library } from '$lib/words/library';
 	import type { Snippet } from 'svelte';
@@ -105,7 +106,7 @@
 
 	let active = $state('');
 	/** Words selected on page `n` are named by the work's short name and the page, and linked to as `loom link WORK --page N --quote` prints. */
-	const offer = $derived({ name: (n: number) => `${short ?? ref} p. ${n}`, link: (n: number, text: string) => quoteLink(ref, `page=${n}`, text) });
+	const offer = $derived({ name: (n: number) => notesWords.page(short ?? ref, n), link: (n: number, text: string) => quoteLink(ref, `page=${n}`, text) });
 
 	/** The place the URL points at, mapped by loom into rectangles, while the URL carries it. */
 	let lit = $state<{ page: number; rects: number[][] } | null>(null);

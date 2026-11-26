@@ -162,7 +162,7 @@ _ON_PAGE: dict[tuple[str, int, int, int, str], bool | None] = {}
 def words_found(result: Any, root: Path, link: dict[str, Any]) -> bool | None:
     """Whether a backlink's quoted words still stand in what it names, found as the viewer finds them to light them; None where it quotes nothing or loom cannot tell.
 
-    A result's words are looked for in its own text, a document's beyond any result in its source files, a project PDF's or a work's on the page the link names (`records.marks.lines_of`, `refs.search.find_in_page`); a PDF with no page named, or a work whose pages cannot be read, is not judged.
+    A result's words are looked for in its own text, a document's beyond any result in its own source with its inputs expanded, a project PDF's or a work's on the page the link names (`records.marks.lines_of`, `refs.search.find_in_page`); a PDF with no page named, or a work whose pages cannot be read, is not judged.
     """
     from loom.records.selectors import find_quote
 
@@ -177,7 +177,10 @@ def words_found(result: Any, root: Path, link: dict[str, Any]) -> bool | None:
 
             return bool(find_quote(own_text(result, result.nodes[named]), words))
         if kind == "document":
-            return any(find_quote(f.text, words) for f in result.files.values())
+            # the document's own source, its inputs expanded in place; another document's words are not its
+            expanded = result.expansions.get(key)
+            text = expanded.text if expanded is not None else (result.files[key].text if key in result.files else None)
+            return None if text is None else bool(find_quote(text, words))
         return None
     page = int(m.group(1)) if (m := re.fullmatch(r"page=(\d+)", place)) else 0
     if not page:
@@ -207,6 +210,8 @@ def _on_page(pdf: Path, page: int, words: str) -> bool | None:
         return None
     stamp = (str(pdf), st.st_mtime_ns, st.st_size, page, words)
     if stamp not in _ON_PAGE:
+        if len(_ON_PAGE) > 4096:
+            _ON_PAGE.clear()
         try:
             _ON_PAGE[stamp] = locate_span(token_boxes(pdf, page, None), words, page) is not None
         except MapRefused:

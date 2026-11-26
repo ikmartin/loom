@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A PDF that is annotated as a document is: the renderer with every annotation on its pages drawn in its look, the one popup opening from a mark, the item's annotating (`Annotating`) told the annotations in reading order (page, then top, then left; the detached last), and the pages editor over it.
 	//
-	// **Annotate** on, selected words are marked at once in the look in hand and its style, and a drag over no words marks the region; a type that asks something opens the popup to say it first. **Comment** on, a press leaves a pin, written once it says something. The PDF's own tools draw ink, words on the page, a box, an oval or an arrow in the look in hand; words on the page are written once they say something. With no tool on, a selection goes to the caller and, where the caller says how to name and link its words (`offer`), stands with its actions (`SelectionMenu`): Quote, Annotate, which marks the words as the tool would, and New note; words Annotate's tool marked stand with Quote and New note until the next press. Alt-drag draws a region to comment on.
+	// **Annotate** on, selected words are marked at once in the look in hand and its style, and a drag over no words marks the region; a type that asks something opens the popup to say it first. **Comment** on, a press leaves a pin, written once it says something. The PDF's own tools draw ink, words on the page, a box, an oval or an arrow in the look in hand; words on the page are written once they say something. With no tool on, a selection goes to the caller and, where the caller says how to name and link its words (`offer`), stands with its actions (`SelectionMenu`): Quote, Annotate, which marks the words as the tool would, and New note; words Annotate marked, from the tool or the actions, stand with Quote and New note until the next press. Alt-drag draws a region to comment on.
 	import { tick, untrack, type ComponentProps, type Snippet } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import AnnotationPopup from '$lib/review/AnnotationPopup.svelte';
@@ -350,7 +350,8 @@
 		link={offer.link(o.page, o.text)}
 		annotate={desk.writes && !o.marked
 			? () => {
-					letGo();
+					// marked as the tool marks them, the words keep Quote and New note
+					offered = { ...o, range: undefined, marked: true };
 					mark(o);
 				}
 			: undefined}

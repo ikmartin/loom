@@ -22,6 +22,8 @@ export const notes = {
 		/** Hover text on New note at a selection. */
 		newNoteHover: 'Start a note of your own on these words, with a link back to them'
 	},
+	/** A place on a PDF's page, as a quote and a new note name it. */
+	page: (name: string, n: number) => `${name} p. ${n}`,
 	/** The toast after Quote. */
 	quoted: {
 		title: 'Quoted for your agent',
@@ -82,7 +84,7 @@ export const notes = {
 		/** The command's row. */
 		command: 'New-note command',
 		/** What the command does. */
-		commandWhat: 'Run when you choose New note, with no shell. Write `{link}`, `{quote}`, `{title}`, `{dir}` or `{quilt}` where each goes, or `{request}` for the path of a JSON file holding all five, which an editor that evaluates what it is given, such as `emacsclient -e`, must use. Empty, loom writes a Markdown note in the folder and opens it.',
+		commandWhat: 'Run when you choose New note, with no shell. Write `{link}`, `{quote}`, `{title}`, `{dir}` or `{quilt}` where each goes, or `{request}` for the path of a JSON file holding all five, which an editor that evaluates what it is given, such as `emacsclient -e`, must use. Selected words may begin with a dash, so put `--` before a placeholder where the program reads options. Empty, loom writes a Markdown note in the folder and opens it.',
 		/** The command field's placeholder. */
 		commandPlaceholder: 'emacsclient -n -e \'(my-new-note "{request}")\'',
 		/** Saving the command. */

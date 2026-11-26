@@ -23,8 +23,8 @@ REQUEST_KEYS = ("link", "quote", "title", "dir", "quilt")
 #: The longest quoted words and name taken: a selection, not a document.
 MAX_QUOTE = 20_000
 MAX_TITLE = 500
-#: How long loom waits for the command to say how it went before leaving it running.
-WAIT = 10.0
+#: How long loom waits for the command to say how it went before leaving it running; the server's other requests do not wait on it (`render.api.OWN_LOCK`).
+WAIT = 5.0
 _PLACEHOLDER = re.compile(r"\{(" + "|".join(PLACEHOLDERS) + r")\}")
 
 
@@ -67,7 +67,7 @@ def command_for(root: Path) -> str:
 
 def check_command(command: str) -> list[str]:
     """`command` split as a shell splits it, or NoteRefused (`bad-command`) when it cannot be."""
-    if any(ord(c) < 32 for c in command):
+    if any(ord(c) < 32 or ord(c) == 127 for c in command):
         raise NoteRefused("bad-command", "the command is one line, with no control characters")
     try:
         argv = shlex.split(command)
