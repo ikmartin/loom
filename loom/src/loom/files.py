@@ -499,7 +499,7 @@ def drawn_links(result: ScanResult) -> Drawn:
 
 
 def attach_files(result: ScanResult, manifest: dict[str, Any], files: dict[str, str | bytes]) -> Drawn:
-    """Publish the shown files into `manifest["files"]` and `corpus.home`, and each Markdown file's and notebook's body into `files` under `BODIES`; return what those pages link to, for `scan.lint.markdown_links`.
+    """Publish the shown files into `manifest["files"]` and `corpus.home`, the links they make into `manifest["backlinks"]`, and each Markdown file's and notebook's body into `files` under `BODIES`; return what those pages link to, for `scan.lint.markdown_links`.
 
     Called once per build; the research state is listed like any Markdown file, and the viewer opens its page from the row. Every file carries `denied`, from `agents.denied_by`: what keeps agents out, or None where they may write it, so the viewer never matches the deny list itself and never guesses where a publisher said nothing.
     """
@@ -541,6 +541,9 @@ def attach_files(result: ScanResult, manifest: dict[str, Any], files: dict[str, 
         entries.append(entry)
     manifest["files"] = entries
     manifest["corpus"]["home"] = home(result.quilt, set(paths))
+    from loom.backlinks import backlinks
+
+    manifest["backlinks"] = backlinks(result, root, kinds)
     return drawn
 
 
