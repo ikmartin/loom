@@ -122,3 +122,25 @@ test('New quilt asks only the name and makes an empty quilt on the list', async 
 	await page.getByTestId('quilt-window-close').click();
 	await expect(page.getByTestId('quilt-row')).toHaveAttribute('data-state', 'running');
 });
+
+test('a dropped PDF becomes a quilt for reading it, open on its library', async ({ page, context }) => {
+	test.setTimeout(180_000);
+	await page.goto('/');
+	const pdf = readFileSync(join(VIEWER, '../loom/tests/quilts/sources/demo-works/calloway-fixed-loci.pdf')).toString('base64');
+	await dropFiles(page, [{ name: 'calloway-fixed-loci.pdf', base64: pdf, type: 'application/pdf' }]);
+	const win = page.getByTestId('quilt-window');
+	await expect(win).toContainText('New quilt for reading this paper');
+	await expect(page.getByTestId('quilt-window-name')).toHaveValue('calloway-fixed-loci');
+	await page.getByTestId('quilt-window-create').click();
+	await expect(win).toHaveAttribute('data-at', 'done', { timeout: 150_000 });
+	await expect(page.getByTestId('quilt-window-done')).toHaveText('calloway-fixed-loci is ready.');
+	const opened = context.waitForEvent('page');
+	await page.getByTestId('quilt-window-open').click();
+	const quilt = await opened;
+	await quilt.waitForLoadState();
+	expect(new URL(quilt.url()).pathname).toBe('/library');
+	// the PDF is a work in its library, offline known by its file and the identifier it states
+	await expect(quilt.locator('body')).toContainText('calloway-fixed-loci.pdf', { timeout: 60_000 });
+	await expect(quilt.locator('body')).toContainText('10.4171/demo/14-1');
+	await quilt.close();
+});

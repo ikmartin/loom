@@ -179,7 +179,7 @@ def _check(home: Home, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
-    """`quilt-create`: a new quilt named `name` in `place` (default `~/Quilts`), from the paper in `drop` when one is given, made as a job; or, when the drop holds several files a paper could be typeset from and `main` does not say which, the question."""
+    """`quilt-create`: a new quilt named `name` in `place` (default `~/Quilts`), from the paper in `drop` when one is given, or for reading the PDFs it holds, made as a job; or, when the drop holds several files a paper could be typeset from and `main` does not say which, the question."""
     from loom.app import create
 
     name, place, drop, main = (body.get(k) for k in ("name", "place", "drop", "main"))
@@ -189,7 +189,8 @@ def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     registry.entries()  # a list that cannot be read refuses the create, which could not put its quilt on it
     home.makings.claim(where)
     try:
-        paper = create.paper(drop, main) if drop else None
+        read = create.reading(drop) if drop else []
+        paper = create.paper(drop, main) if drop and not read else None
     except BaseException:
         home.makings.release(where)
         raise
@@ -199,7 +200,7 @@ def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
 
     def work(step: Callable[[str], None]) -> dict[str, Any]:
         try:
-            done = create.make(where, paper, step, home.supervisor.open, home.makings)
+            done = create.make(where, paper, step, home.supervisor.open, home.makings, read)
         finally:
             home.makings.release(where)
         if drop:
