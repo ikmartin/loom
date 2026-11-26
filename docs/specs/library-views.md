@@ -393,7 +393,7 @@ From: scan, index, evidence, lean. Cost: 20 ms, under 10 KB.
 
 ## 6. Docs
 
-What Docs draws of the library is the picker, a work beside a draft with a citation's card, the notes tab, the Lean marks in a draft's margin, the markers in a Lean file and the formalize panel. The file tree, the documents and their changes read the manifest as today; the tree is today's product's, "did not compile" under a document's PDF row among it (ruled after round six), and no other mark of a problem is added to it.
+What Docs draws of the library is the picker, a work beside a draft with a citation's card, the notes tab, the Lean marks in a draft's margin, the markers in a Lean file and the formalize panel. The file tree, the documents and their changes read the manifest as today; the tree is today's product's, except that it carries no PDF row and no compile state (a document's PDF opens from its toolbar's `view PDF`), and no mark of a problem is added to it.
 
 ### 6.1 The picker (8a)
 

@@ -337,6 +337,17 @@ test('under reduced motion the folded Files head opens its gap without sliding',
 	await expect(page.getByTestId('files-peek')).toHaveCSS('transition-duration', '0s');
 });
 
+test("the tree carries no PDF row and no compile state, and a document's row is current while its compiled PDF is read", async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	const tree = page.getByTestId('docs-tree');
+	await expect(tree.getByTestId('docs-file').first()).toBeVisible();
+	await expect(tree.getByTestId('docs-pdf')).toHaveCount(0);
+	await expect(tree.getByTestId('docs-compile')).toHaveCount(0);
+	await expect(tree.getByRole('link', { name: 'PDF', exact: true })).toHaveCount(0);
+	await page.goto('/pdf/drafting/main');
+	await expect(tree.locator('a[title="drafting/main.tex"]')).toHaveAttribute('aria-current', 'page');
+});
+
 test('each row says whether agents edit it too, and the mark says why under the pointer', async ({ page }) => {
 	await page.goto('/master/drafting/main');
 	// the fixture's deny list is empty, so only what loom always protects is the person's alone
