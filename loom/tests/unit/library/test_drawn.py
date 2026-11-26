@@ -106,6 +106,27 @@ def test_nothing_is_drawn_before_the_persons_word_for_the_work_and_then_once(
     assert f"\\@namedef{{loom@tag@{anchor}}}{{\\tag{{1.1}}}}" in compiles[1], "once numbered, its source's number"
 
 
+def test_library_node_says_whether_the_person_compiled_its_works_source_here(
+    tmp_path: Path, pdf_text: list[str], compiles: list[str]
+) -> None:
+    from loom.library import reads
+    from loom.library.digest import digest
+
+    result, smith = quilt(tmp_path)
+    s = surveyed(result, smith)
+    digest(result, smith, [i.item for i in s.items], s)
+    root = result.quilt.root
+    node = stub(root, smith, "1.2")
+    assert reads.node(result, node)["compiled"] is False, "a source not compiled here: the viewer asks"
+    work = read(root, smith)
+    assert work is not None and work.tex
+    drawn.give(root, smith, work.tex)
+    assert reads.node(result, node, brief=True)["compiled"] is True
+    write_node(root, replace(work, tex=None))
+    assert reads.node(result, node)["compiled"] is None, "a work holding no source: nothing to ask"
+    assert compiles == [], "a read compiles nothing"
+
+
 def test_the_word_is_kept_on_the_machine_so_a_copy_of_the_quilt_draws_nothing(
     tmp_path: Path, pdf_text: list[str], compiles: list[str]
 ) -> None:

@@ -125,6 +125,15 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			changed();
 			return ok(done);
 		},
+		'library-compile': (b) => {
+			const work = f.works.find((w) => w.ref === b.ref);
+			if (!work) return no('no-such-ref');
+			if (!work.holds.tex) return no('no-source');
+			// the person's word is kept, and the compile runs as a job unless it was done already; nothing a read answers changes until it is done
+			if (f.compiled.includes(work.ref)) return ok({ result: 'compiled already' });
+			f.compiled.push(work.ref);
+			return ok({ result: 'compiling', job: `j-${f.gen}` });
+		},
 		'library-check': (b) => {
 			if (!check(f, b.node as string)) return no('no-such-node');
 			changed();
@@ -342,7 +351,8 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			return fragmentOf(f.review, path) ?? webFragment(path);
 		},
 		pdfUrl: fixturePdfUrl,
-		drawnUrl: () => null,
+		// TeX's drawing, which the views ask for only once the work's source is compiled: a picture of its own, since the fixture runs no TeX
+		drawnUrl: () => `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="60"><rect width="320" height="60" fill="#f4f2ed"/></svg>')}`,
 		thumbUrl: () => null
 	};
 }

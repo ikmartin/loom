@@ -329,7 +329,7 @@ def node(result: ScanResult, node_id: str, *, brief: bool = False) -> dict[str, 
     Returns
     -------
     dict
-        `gen`, `node`, `hash`, `name`, `title`, `taxon`, `work` `{ref, short, pdf}`, `pages`, `digested` `{how, by, at}` or null, `paper`, `lean`, `body`, `macros` `{node, hash, body}` or null, `points`, and unless `brief` `uses`, `mentions`, `proofs` and `used_by` (`library-views.md` §3.4).
+        `gen`, `node`, `hash`, `name`, `title`, `taxon`, `work` `{ref, short, pdf}`, `pages`, `digested` `{how, by, at}` or null, `paper`, `lean`, `body`, `macros` `{node, hash, body}` or null, `compiled`, whether the person compiled its work's source here (null for a work holding none), `points`, and unless `brief` `uses`, `mentions`, `proofs` and `used_by` (`library-views.md` §3.4).
 
     Raises
     ------
@@ -369,6 +369,7 @@ def node(result: ScanResult, node_id: str, *, brief: bool = False) -> dict[str, 
         "macros": {"node": macros.id, "hash": node_hash(node_bytes(macros)), "body": macros.body}
         if macros is not None
         else None,
+        "compiled": _compiled_here(root, found.source),
     }
     with NodeIndex.open(root) as index:
         out["points"] = _points(root, found, index, standing)
@@ -391,6 +392,19 @@ def node(result: ScanResult, node_id: str, *, brief: bool = False) -> dict[str, 
     docs = sorted({c.file for c in result.edges.cites if c.target == found.id or found.id in c.nodes})
     out["used_by"] = {"docs": docs, "nodes": len(by)}
     return out
+
+
+def _compiled_here(root: Path, ref: str | None) -> bool | None:
+    """Whether the person compiled the work `ref`'s source here, so TeX draws its nodes (`drawn.given`); None for a work holding no source.
+
+    `library-node`'s `compiled`: the viewer asks for a drawing only where it is true, and asks the person once for the work where it is false.
+    """
+    from loom.library.drawn import given
+
+    work = read(root, ref) if ref and ids.kind_of(ref) == ids.REFERENCE else None
+    if work is None or not work.tex:
+        return None
+    return given(root, work.id, work.tex)
 
 
 def _work_of(root: Path, ref: str | None) -> dict[str, Any]:

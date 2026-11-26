@@ -8,6 +8,7 @@
 	import { THEOREMS } from '$lib/node/taxa';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
+	import { compile, drawing } from '$lib/library/drawing.svelte';
 	import { Read } from '$lib/library/read.svelte';
 	import type { NodeAnswer, Row } from '$lib/library/types';
 	import { message } from '$lib/shell/message.svelte';
@@ -27,6 +28,7 @@
 		void node.load(key, (s) => api.node('node' in b ? { node: b.node } : { ref: r, item: b.item }, s));
 	});
 	const n = $derived(node.value);
+	const tex = $derived(n ? drawing(n) : null);
 	const how = $derived(!n ? '' : !n.digested ? (n.paper === 'stub' ? words.side.how.stub : words.side.how.none) : words.side.how[n.digested.how]);
 
 	/** The person's yes, and the next result of the work not compared, in the outline's order after this one, opened beside its page. */
@@ -73,7 +75,7 @@
 				<button type="button" class:on={!lib.plain} onclick={() => (lib.plain = false)}>{words.side.rendered}</button>
 				<button type="button" class:on={lib.plain} onclick={() => (lib.plain = true)}>{words.side.plain}</button>
 			</span>
-			<div class="stmt"><NodeBody body={n.body} macros={n.macros?.body ?? null} points={n.points ?? {}} plain={lib.plain} italic={THEOREMS.has(n.taxon)} drawn={n.hash ? api.drawnUrl(n.hash, n.macros?.hash ?? null) : null} /></div>
+			<div class="stmt"><NodeBody body={n.body} macros={n.macros?.body ?? null} points={n.points ?? {}} plain={lib.plain} italic={THEOREMS.has(n.taxon)} drawn={tex?.drawn ?? null} ask={tex?.ask ? { short: n.work.short, compile: () => void compile(n.work) } : null} /></div>
 		{/if}
 		{#if !n.digested}
 			<p class="ask grey">{n.paper === 'stub' ? words.side.stub : words.side.notDigested}</p>

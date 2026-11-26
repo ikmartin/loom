@@ -191,7 +191,11 @@ const BODY: Record<string, { body: string; how?: 'extracted' | 'transcribed'; us
 	'tq-0154': { body: String.raw`For a widget $W \subset \mathbb{R}^n$, $N(W, r) \le (1 + 2 \diam W / r)^n$.` },
 	'tq-0161': { body: String.raw`A widget is \emph{thin} if its boundary class $\Wid$ contains no sphere.` },
 	'tq-0162': { body: String.raw`The union of two thin widgets is a thin widget.` },
-	'tq-0163': { body: String.raw`The intersection of thin widgets need not be thin.` },
+	'tq-0163': {
+		body: String.raw`The intersection of thin widgets need not be thin: in the square
+\[\begin{tikzcd} W_1 \cap W_2 \arrow[r] \arrow[d] & W_1 \arrow[d] \\ W_2 \arrow[r] & W_1 \cup W_2 \end{tikzcd}\]
+the corners $W_1$ and $W_2$ may be thin and $W_1 \cap W_2$ not.`
+	},
 	'tq-0165': { body: String.raw`Every thin widget lies in a ball of radius $\diam W$.` }
 };
 const SMITH_MACROS = String.raw`\usepackage{amssymb}
@@ -221,6 +225,8 @@ export interface Fixture {
 	questions: Record<string, { id: string; name: string; candidates: string[] }>;
 	/** The entries the person wrote, by reference, which stand in place of the one the fixture makes. */
 	entries: Record<string, string>;
+	/** The works whose source the person compiled here (`library-compile`), so TeX draws their results. */
+	compiled: string[];
 }
 
 export function round6(): Fixture {
@@ -232,7 +238,7 @@ export function round6(): Fixture {
 	const review = review6(REF);
 	// a transcribed result's row is beside its work's stored paper, as a digested one's is
 	for (const r of review.rows) if (r.kind === 'check' && 'nodes' in r && r.pdf === null) r.pdf = works.find((w) => w.ref === r.ref)?.holds.pdf ?? null;
-	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], network: 'asked', taken: {}, questions: {}, entries: {} };
+	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], network: 'asked', taken: {}, questions: {}, entries: {}, compiled: [] };
 }
 
 const protoOf = (ref: string) => PROTO_OF[ref];
@@ -316,6 +322,7 @@ export function nodeAnswer(f: Fixture, args: { node?: string; ref?: string; item
 			lean: r.l ?? null,
 			...(b ? { body: b.body } : {}),
 			macros: ref === REF.smith ? { node: 'tq-00A1-macros', hash: hashOf('macros'), body: SMITH_MACROS } : null,
+			compiled: compiledHere(f, row),
 			points: { 'tq-00A4': { name: 'Definition 2.1', number: '2.1', paper: 'matches' }, 'tq-00K3-eq00': { number: '3.3' }, 'tq-00B7': { name: 'Lemma 2.1', work: 'Jones 2019', paper: 'stub' } },
 			...(args.brief ? {} : { uses, mentions: [], proofs: r.node === 'tq-00K3' ? [{ node: 'tq-00K3-proof00', source: null, pages: '12-13', pointer: false }] : [], used_by: { docs: ref === REF.smith ? ['drafting/bounds.tex'] : [], nodes: 1 } })
 		};
@@ -338,7 +345,7 @@ function transcribedAnswer(f: Fixture, node: string): NodeAnswer | null {
 	const row = t && f.works.find((w) => w.ref === REF[t.ref]);
 	if (!t || !row) return null;
 	const done = f.checked.includes(node);
-	if (t.stub) return { gen: f.gen, node, hash: hashOf(node), name: `${t.tax} ${t.num}`, taxon: t.tax.toLowerCase(), work: { ref: row.ref, short: row.short, pdf: row.holds.pdf }, pages: '', digested: null, paper: 'stub', lean: null, macros: null, points: {} };
+	if (t.stub) return { gen: f.gen, node, hash: hashOf(node), name: `${t.tax} ${t.num}`, taxon: t.tax.toLowerCase(), work: { ref: row.ref, short: row.short, pdf: row.holds.pdf }, pages: '', digested: null, paper: 'stub', lean: null, macros: null, compiled: compiledHere(f, row), points: {} };
 	return {
 		gen: f.gen,
 		node,
@@ -353,9 +360,13 @@ function transcribedAnswer(f: Fixture, node: string): NodeAnswer | null {
 		lean: null,
 		body: t.body,
 		macros: null,
+		compiled: compiledHere(f, row),
 		points: {}
 	};
 }
+
+/** Whether the person compiled a work's source here, as `library-node` answers it: null for a work holding none. */
+const compiledHere = (f: Fixture, row: Work) => (row.holds.tex ? f.compiled.includes(row.ref) : null);
 
 /** The work a node is of: a digested result's, or one an agent transcribed; '' for none. */
 export function workOfNode(f: Fixture, node: string): string {

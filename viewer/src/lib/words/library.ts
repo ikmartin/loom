@@ -278,5 +278,13 @@ export const library = {
 		checked: (name: string) => `${name} matches the paper`,
 		/** The column's message after a yes that opened the next result not compared. */
 		checkedNext: (name: string) => `${name} matches the paper; the next not compared is open.`
+	},
+	draw: {
+		/** Under a result whose text holds what the viewer cannot draw itself (a diagram, an environment it does not know), shown plain, while the person has not compiled its work's source here: asked once for the work. */
+		ask: (short: string) => `Loom cannot draw this itself. Compile the source of ${short} on this machine and TeX draws it, and every other result of ${short}; you are asked this once for the work.`,
+		/** The button that compiles the work's source, after which TeX draws its results. */
+		compile: 'compile and draw',
+		/** The column's message once the compile is asked for. */
+		compiling: (short: string) => `Compiling the source of ${short}; its results are drawn by TeX as they are shown.`
 	}
 } as const;

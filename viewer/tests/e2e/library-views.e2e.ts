@@ -108,6 +108,28 @@ test("a work's tab: its outline, a result beside its page, and the person's yes"
 	await expect(page.getByTestId('node-side')).toContainText('Lemma 3.2');
 });
 
+test("a result loom cannot draw asks once for its work's source to be compiled, and then shows TeX's drawing", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	const square = page.getByTestId('outline-item').filter({ hasText: '6.3' }).first();
+	await square.click();
+	const side = page.getByTestId('node-side');
+	// the publisher's drawing is never asked for before the person's word: the text is shown plain, with the one question
+	await expect(side.getByTestId('node-plain')).toContainText('tikzcd');
+	await expect(side.getByTestId('node-drawn')).toHaveCount(0);
+	await expect(side.getByTestId('draw-ask')).toContainText('Compile the source of Smith 2024');
+	await side.getByTestId('draw-compile').click();
+	await expect(page.getByTestId('column-message')).toContainText('Compiling the source of Smith 2024');
+	await expect(side.getByTestId('node-drawn')).toBeVisible();
+	await expect(side.getByTestId('draw-ask')).toHaveCount(0);
+	// asked once for the work: opened again, the result is TeX's drawing with no question
+	await page.getByTestId('outline-item').filter({ hasText: 'Radius' }).click();
+	await expect(side).toContainText('Radius');
+	await square.click();
+	await expect(side.getByTestId('node-drawn')).toBeVisible();
+	await expect(side.getByTestId('draw-ask')).toHaveCount(0);
+});
+
 test('results chosen in the outline are digested from the TeX source', async ({ page }) => {
 	await open(page);
 	await row(page, 'Widgets and their bounds').click();

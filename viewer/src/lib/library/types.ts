@@ -190,6 +190,8 @@ export interface NodeAnswer extends Gen {
 	lean?: LeanStatus | null;
 	body?: string;
 	macros?: { node: string; hash: Hash; body: string } | null;
+	/** Whether the person has compiled the work's source here, so TeX draws its nodes; null for a work holding no source. */
+	compiled?: boolean | null;
 	points?: Record<string, Point>;
 	uses?: Row[];
 	mentions?: Row[];

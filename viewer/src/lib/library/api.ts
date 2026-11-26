@@ -175,6 +175,8 @@ export const reviewRow = (row: string, s?: number, node?: string) => call<Review
 
 export const digest = (refs: string[] | 'all', scope: DigestScope, chosen?: string[]) => call<DigestDone>('library-digest', { refs, scope, ...(chosen ? { chosen } : {}) });
 export const check = (node: string, hash: string) => call<WriteDone>('library-check', { node, hash });
+/** Compiles a work's source, the person's own act, which lets TeX draw the work's nodes here (`library-compile`); `job` while the compile runs. */
+export const compileWork = (ref: string) => call<WriteDone & { job?: string }>('library-compile', { ref });
 export const remove = (ref: string) => call<WriteDone & { undo: string }>('library-delete', { ref });
 export const restore = (undo: string) => call<WriteDone & { ref: string }>('library-restore', { undo });
 /** Looks a work up by the identifier its reference states; `once`, with the network this once, on a quilt that has not said whether loom may use it. */
