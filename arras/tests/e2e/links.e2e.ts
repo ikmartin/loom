@@ -80,6 +80,21 @@ test.describe('the one rule', () => {
 		await expect(pane(page, 0).locator(`[id="${id}"]`)).toBeInViewport();
 	});
 
+	test('loom open lands on what its link names, with the words it quotes lit there', async ({ page }) => {
+		await page.goto('/open?link=' + encodeURIComponent('quilt:drafting/main.tex#sy-0003&quote=finite%20widget'));
+		await expect.poll(() => new URL(page.url()).pathname).toMatch(/\/master\/drafting\/main$/);
+		expect(new URL(page.url()).searchParams.get('quote')).toBe('finite widget');
+		await expect.poll(() => page.evaluate(() => (CSS as unknown as { highlights?: Map<string, { size: number }> }).highlights?.get('loom-quote')?.size ?? 0)).toBe(1);
+		await expect.poll(() => page.evaluate(() => String((CSS as unknown as { highlights: Map<string, Set<Range>> }).highlights.get('loom-quote')!.values().next().value))).toBe('finite widget');
+	});
+
+	test('loom open on a link naming nothing here says so', async ({ page }) => {
+		await page.goto('/open?link=' + encodeURIComponent('https://example.org/x'));
+		await expect(page.getByTestId('open-nothing')).toContainText('names nothing in this quilt');
+		await page.goto('/open');
+		await expect(page.getByTestId('open-nothing')).toContainText('No link was given');
+	});
+
 	test('a link to an annotation opens what it is on, with its popup open', async ({ page }) => {
 		await saying(page, '<p>My <a href="quilt:a-2026-09-16-ecnav2"></a>.</p>');
 		await page.goto('/master/drafting/main' + beside('/session/' + REFEREE));

@@ -56,9 +56,10 @@ def events(q: Path, ann: str) -> list[dict[str, Any]]:
     return [e for e in log(q) if e.get("id") == ann]
 
 
-def noted(s: ServeSession, q: Path, sid: str, body: str = "A note to act on.", type_id: str = "note") -> str:
-    """Write one annotation on dm-0003 over the wire, a note unless `type_id` says otherwise; its id."""
-    succeeds(s, "annotate", {"session": sid, "target": "dm-0003", "message": body, "type": type_id, "author": WHO})
+def noted(s: ServeSession, q: Path, sid: str, body: str = "A note to act on.", type_id: str | None = None) -> str:
+    """Write one annotation on dm-0003 over the wire, untyped unless `type_id` says otherwise; its id."""
+    typed = {"type": type_id} if type_id else {}
+    succeeds(s, "annotate", {"session": sid, "target": "dm-0003", "message": body, **typed, "author": WHO})
     return the(log(q), lambda e: e.get("body") == body and e["event"] == "created", body)["id"]  # type: ignore[no-any-return]
 
 

@@ -60,8 +60,8 @@ test('Settings › Annotations writes the types file whole: a renamed type keeps
 	const written = readFileSync(file, 'utf8');
 	expect(written).toContain('id = "suggestion"');
 	expect(written).not.toContain('id = "question"');
-	await expect.poll(() => manifest().annotation_types.map((t: { name: string }) => t.name)).toEqual(['Revision', 'Idea', 'Note']);
-	await expect(tabs).toHaveText([/Revision/, /Idea/, /Note/]);
+	await expect.poll(() => manifest().annotation_types.map((t: { name: string }) => t.name)).toEqual(['Revision', 'Idea']);
+	await expect(tabs).toHaveText([/Revision/, /Idea/]);
 	// its annotations keep the look they were drawn with, and are untyped now
 	expect(manifest().annotations[question.id].look).toEqual(question.look);
 	await page.keyboard.press('Escape');

@@ -533,7 +533,7 @@ test.describe('the popup', () => {
 
 	test('the comment is edited in place, a reply posts on Enter, and Resolve is offered only where the type stays open', async ({ page }) => {
 		const sent = await writes(page);
-		await serveKept(page, (m) => (m.annotations['a-2026-09-16-bns3an'].type = 'note'));
+		await serveKept(page, (m) => (m.annotations['a-2026-09-16-bns3an'].type = null));
 		await page.goto('/master/drafting/main');
 		const p = await openPopup(page, 'a-2026-09-16-ecnav2');
 		await p.getByTestId('popup-comment').click();
@@ -552,7 +552,7 @@ test.describe('the popup', () => {
 		await expect(p.locator('.pfoot > [data-testid="popup-resolve"] + [data-testid="popup-delete"]:last-child')).toHaveCount(1);
 		await p.getByTestId('popup-resolve').click();
 		await expect.poll(() => sent.resolve).toEqual({ annotation: 'a-2026-09-16-ecnav2' });
-		// a Note only informs: no Resolve and no status, and Delete alone in the foot
+		// an untyped annotation only informs: no Resolve and no status, and Delete alone in the foot
 		const note = await openPopup(page, 'a-2026-09-16-bns3an');
 		await expect(note.getByTestId('popup-resolve')).toHaveCount(0);
 		await expect(note.getByTestId('popup-status')).toHaveCount(0);
@@ -644,7 +644,7 @@ test.describe('changed from a type', () => {
 		await line.getByTestId('modified-update').click();
 		await expect.poll(() => sent.edit).toEqual({ annotation: 'a-2026-09-16-bns3an', look: null });
 		const types = sent['types-save'].types as Record<string, unknown>[];
-		expect(types.map((t) => t.id)).toEqual(['revision', 'suggestion', 'question', 'note']);
+		expect(types.map((t) => t.id)).toEqual(['revision', 'suggestion', 'question']);
 		expect(types[2]).toMatchObject({ id: 'question', name: 'Question', color: 'green', style: 'highlight', weight: 2, opacity: 60, open: true });
 		expect(types[0]).toMatchObject({ color: 'red', opacity: 60 });
 		// one whose look is its type's says nothing
@@ -680,7 +680,7 @@ test.describe('changed from a type', () => {
 		const sent = await writes(page);
 		await page.route('**/_api/types-save', (r) => {
 			sent['types-save'] = r.request().postDataJSON();
-			const types = (sent['types-save'].types as { id?: string; name: string; color: string; style: string; weight: number; opacity: number }[]).map((t) => ({ id: t.id ?? 'hint', name: t.name, look: { color: t.color, style: t.style, weight: t.weight, opacity: t.opacity }, open: false, notes: false, instructions: '' }));
+			const types = (sent['types-save'].types as { id?: string; name: string; color: string; style: string; weight: number; opacity: number }[]).map((t) => ({ id: t.id ?? 'hint', name: t.name, look: { color: t.color, style: t.style, weight: t.weight, opacity: t.opacity }, open: false, instructions: '' }));
 			return r.fulfill({ json: { ok: true, result: 'saved', types } });
 		});
 		await page.goto('/master/drafting/main');
@@ -693,7 +693,7 @@ test.describe('changed from a type', () => {
 		await name.fill('Hint');
 		await page.getByTestId('types-save').click();
 		await expect.poll(() => sent['types-save']).toBeTruthy();
-		expect((sent['types-save'].types as Record<string, unknown>[]).at(-1)).toEqual({ name: 'Hint', color: 'yellow', style: 'highlight', weight: 2, opacity: 60, open: false, notes: false, instructions: '' });
+		expect((sent['types-save'].types as Record<string, unknown>[]).at(-1)).toEqual({ name: 'Hint', color: 'yellow', style: 'highlight', weight: 2, opacity: 60, open: false, instructions: '' });
 		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('arras.annotate.hand')!))).toEqual({ type: 'hint', over: {}, plain: {} });
 	});
 });
@@ -1058,30 +1058,32 @@ test.describe('the Comments list', () => {
 	});
 });
 
-// Notes: the annotations here whose type is listed in Notes, each linking to its place.
+// Notes: the files of the quilt whose links name this item (the manifest's backlinks), each opening the note at its link.
 test.describe('the Notes list', () => {
-	test('holds the annotations here of types listed in Notes and none from another document, and a card goes to its place with its popup open', async ({ page }) => {
+	test('holds the files linking here, a link to a node the document reads counted, and none linking elsewhere; a link opens the note at its line', async ({ page }) => {
 		await serveKept(page, (m) => {
-			m.annotations['a-2026-09-16-ecnav2'].type = 'note';
-			m.annotations['a-2026-09-16-xgtcve'].type = 'note';
+			m.files = [...(m.files ?? []), { path: 'notes/reading.org', kind: 'text', bytes: 60, denied: null }];
+			m.backlinks = [
+				{ from: 'notes/reading.org', line: 2, href: 'quilt:drafting/main.tex#sy-0003&quote=finite%20widget', kind: 'document', key: 'drafting/main.tex', place: 'sy-0003', quote: 'finite widget' },
+				{ from: 'notes/proof.md', line: 4, href: 'quilt:sy-0003', kind: 'node', key: 'sy-0003', place: '', quote: '' },
+				{ from: 'notes/talk.md', line: 1, href: 'quilt:drafting/talk.tex', kind: 'document', key: 'drafting/talk.tex', place: '', quote: '' }
+			];
 		});
-		// main.tex reads one of them; the other is talk.tex's
 		await page.goto('/master/drafting/main');
-		await expect(page.getByTestId('open-notes')).toContainText('1');
+		await expect(page.getByTestId('open-notes')).toContainText('2');
 		await page.getByTestId('open-notes').click();
-		await expect(page.getByTestId('note-card')).toHaveCount(1);
-		await expect(page.locator('[data-testid="note-card"][data-annotation="a-2026-09-16-xgtcve"]')).toHaveCount(0);
-		const card = page.locator('[data-testid="note-card"][data-annotation="a-2026-09-16-ecnav2"]');
-		await expect(card).toHaveAttribute('href', 'quilt:a-2026-09-16-ecnav2');
-		await expect(card).toContainText('finite widget');
-		await card.click();
-		await expect(page.locator('[data-testid="ann-popup"][data-annotation-id="a-2026-09-16-ecnav2"]')).toBeVisible();
+		await expect(page.getByTestId('note-file')).toHaveCount(2);
+		await expect(page.locator('[data-testid="note-file"][data-path="notes/talk.md"]')).toHaveCount(0);
+		const quoted = page.locator('[data-testid="note-file"][data-path="notes/reading.org"]').getByTestId('note-link');
+		await expect(quoted).toHaveAttribute('href', 'quilt:notes/reading.org#L2');
+		await expect(quoted).toContainText('finite widget');
+		await expect(quoted).toContainText('line 2');
 	});
 
-	test('with no type listed in Notes it says how one gets there', async ({ page }) => {
+	test('with no file linking here it says what a note is', async ({ page }) => {
 		await page.goto('/master/drafting/main');
 		await page.getByTestId('open-notes').click();
-		await expect(page.getByTestId('side-list')).toContainText('No notes here yet');
+		await expect(page.getByTestId('side-list')).toContainText('No file links here yet');
 	});
 });
 
@@ -1121,7 +1123,7 @@ test.describe('Settings › Annotations', () => {
 		await page.goto('/master/drafting/main');
 		await settings(page, 'annotations');
 		const tabs = page.getByTestId('type-tab');
-		await expect(tabs).toHaveCount(4);
+		await expect(tabs).toHaveCount(3);
 		await tabs.nth(1).click();
 		await expect(page.getByTestId('type-name')).toHaveValue('Suggestion');
 		await expect(page.getByTestId('type-modes')).toHaveText('Used by the audit, referee and review modes.');
@@ -1132,16 +1134,15 @@ test.describe('Settings › Annotations', () => {
 		const warn = page.getByTestId('type-delete-warn');
 		await expect(warn).toContainText('The audit and referee modes use this type');
 		await page.getByTestId('type-delete-yes').click();
-		await expect(tabs).toHaveCount(3);
+		await expect(tabs).toHaveCount(2);
 		await page.getByTestId('types-save').click();
 		await expect.poll(() => sent['types-save']).toBeTruthy();
 		const saved = sent['types-save'].types as { id: string; name: string; open: boolean; color: string }[];
 		expect(saved.map((t) => [t.id, t.name])).toEqual([
 			['revision', 'Revision'],
-			['suggestion', 'Idea'],
-			['note', 'Note']
+			['suggestion', 'Idea']
 		]);
-		expect(saved[0]).toEqual({ id: 'revision', name: 'Revision', color: 'red', style: 'highlight', weight: 2, opacity: 60, open: true, notes: false, instructions: expect.stringContaining('wrong') });
+		expect(saved[0]).toEqual({ id: 'revision', name: 'Revision', color: 'red', style: 'highlight', weight: 2, opacity: 60, open: true, instructions: expect.stringContaining('wrong') });
 	});
 
 	test('a new type is written with no id, and Restore defaults writes the defaults', async ({ page }) => {
@@ -1151,12 +1152,11 @@ test.describe('Settings › Annotations', () => {
 		await page.getByTestId('types-add').click();
 		await expect(page.getByTestId('type-name')).toBeFocused();
 		await page.getByTestId('type-name').fill('Hint');
-		await page.getByTestId('type-notes').check();
 		await page.getByTestId('type-open-true').check();
 		await page.getByTestId('types-save').click();
 		await expect.poll(() => sent['types-save']).toBeTruthy();
 		const saved = sent['types-save'].types as Record<string, unknown>[];
-		expect(saved.at(-1)).toEqual({ name: 'Hint', color: 'green', style: 'highlight', weight: 2, opacity: 50, open: true, notes: true, instructions: '' });
+		expect(saved.at(-1)).toEqual({ name: 'Hint', color: 'green', style: 'highlight', weight: 2, opacity: 50, open: true, instructions: '' });
 		await page.getByTestId('types-defaults').click();
 		await expect.poll(() => sent['types-save']).toEqual({ defaults: true });
 	});

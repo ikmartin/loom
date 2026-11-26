@@ -516,8 +516,6 @@ def test_the_session_flag_works_from_a_subdirectory(tmp_path: Path) -> None:
         "annotate",
         "dm-0003",
         "Fine.",
-        "--type",
-        "note",
         "--as",
         "A. Author",
         cwd=q / "drafting" / "nodes",

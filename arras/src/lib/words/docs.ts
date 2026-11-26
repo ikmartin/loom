@@ -74,6 +74,24 @@ export const docs = {
 		/** The column's message after asking. */
 		asked: 'Asked an agent to read it. It comes back in Review, under Results to check.'
 	},
+	beside: {
+		/** The Notes list beside a document, a work or a PDF, and the toolbar button that opens it: the files of the quilt that link here. */
+		title: 'Notes',
+		/** Hover text on the toolbar's Notes button. */
+		hover: 'Notes: the files in this quilt that link here',
+		/** Accessible name of the toolbar's Notes button, with how many files link here. */
+		named: (of: string, n: number) => `Notes in ${of}, ${n}`,
+		/** Under the list's title. */
+		sub: 'The files in this quilt that link here, each opening at its link.',
+		/** The list's close button. */
+		close: 'Close notes',
+		/** The list with no file linking here. */
+		none: 'No file links here yet. A note is a file of your own, in Markdown, org or plain text, anywhere in the quilt, holding a quilt: link to this place.',
+		/** On a link that quotes no words: where it points. */
+		at: (place: string) => (/^page=\d+$/.test(place) ? `page ${place.slice(5)}` : place ? `at ${place}` : 'links here'),
+		/** At the right of each link: the line of the note it is on. */
+		line: (n: number) => `line ${n}`
+	},
 	notes: {
 		/** The button in Docs' column that opens the notes tab. */
 		open: 'Notes',

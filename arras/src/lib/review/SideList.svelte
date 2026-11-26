@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The list beside a text. **Comments**: every annotation and pending change here in reading order, a card each, which opens it at its mark: an annotation's with its colour, author, quoted words and comment (a PDF's mark not found again on the changed file says so, having none, as does a note on words whose words loom found on no page; where loom could not learn where notes on words stand, the list says so once over the cards), a change's with its words out and in and Keep and Discard (`ChangeCard`). Where the text has changes, All, Annotations and Changes choose what is listed, and with annotations alone the text shows what the person has kept. To do keeps the changes and the open annotations of types that stay open, from others than the reader; the filter leaves out people, an edit made in the file being its own, and shows or hides the resolved. **Notes**: the annotations here whose type is listed in Notes, in reading order, each a link to where it was left. In a document, both end with the notes written in it that are on no block now (`APART`), each by its own words, opening its popup beside its card. Both are built from the manifest; nobody edits them.
+	// The list beside a text. **Comments**: every annotation and pending change here in reading order, a card each, which opens it at its mark: an annotation's with its colour, author, quoted words and comment (a PDF's mark not found again on the changed file says so, having none, as does a note on words whose words loom found on no page; where loom could not learn where notes on words stand, the list says so once over the cards), a change's with its words out and in and Keep and Discard (`ChangeCard`). Where the text has changes, All, Annotations and Changes choose what is listed, and with annotations alone the text shows what the person has kept. To do keeps the changes and the open annotations of types that stay open, from others than the reader; the filter leaves out people, an edit made in the file being its own, and shows or hides the resolved. In a document, it ends with the notes written in it that are on no block now (`APART`), each by its own words, opening its popup beside its card. **Notes**: the files of the quilt whose links name this item (`backlinks.ts`), each with its links, the words each quotes, opening the note at its link. Both are built from the manifest; nobody edits them.
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
@@ -9,7 +9,9 @@
 	import { repliesTo } from '$lib/annotations';
 	import { ui } from '$lib/ui.svelte';
 	import { staysOpen, typeOf } from './annotationTypes';
-	import { APART, apartOf, whyApart, authors, changePasses, entries, isTodo, notesApart, notesOf, placeOf, plain, type Annotating, type Layer } from './annotating.svelte';
+	import { APART, apartOf, whyApart, authors, changePasses, entries, isTodo, plain, type Annotating, type Layer } from './annotating.svelte';
+	import { noteFiles, noteHref } from './backlinks';
+	import { docs as docsWords } from '$lib/words/docs';
 	import { authorOf, changeById } from './changes';
 	import { dotVars } from '$lib/fragments/gutter';
 	import ChangeCard from './ChangeCard.svelte';
@@ -34,10 +36,10 @@
 		['annotations', 'Annotations'],
 		['changes', 'Changes']
 	];
-	const here = $derived(notesOf(m, notes));
-	/** The notes written here that are on no block now: the Comments list's under its filter, and the Notes list's. */
+	/** The files whose links name this item. */
+	const files = $derived(noteFiles(m, notes.on));
+	/** The notes written here that are on no block now, under the Comments list's filter. */
 	const apart = $derived(apartOf(m, notes));
-	const apartNotes = $derived(notesApart(m, notes));
 
 	let filtering = $state(false);
 	let list = $state<HTMLElement | null>(null);
@@ -52,7 +54,6 @@
 	$effect(() => {
 		const id = notes.reveal;
 		void apart.length;
-		void apartNotes.length;
 		if (!id || !list) return;
 		const card = list.querySelector<HTMLElement>(`[data-apart="${CSS.escape(id)}"]`);
 		if (!card) return;
@@ -72,27 +73,27 @@
 	const typeLine = (a: Annotation) => [typeOf(m, a)?.name, shortDate(a.created)].filter(Boolean).join(' · ');
 </script>
 
-<aside class="side" aria-label={notes.side === 'notes' ? 'Notes' : changes.length ? 'Comments and changes' : 'Comments'} data-testid="side-list" data-pane-side={notes.side}>
+<aside class="side" aria-label={notes.side === 'notes' ? docsWords.beside.title : changes.length ? 'Comments and changes' : 'Comments'} data-testid="side-list" data-pane-side={notes.side}>
 	{#if notes.side === 'notes'}
+		{@const w = docsWords.beside}
 		<div class="shead">
-			<div class="row"><span class="stitle">Notes</span><button type="button" class="x" aria-label="Close notes" title="Close notes" data-testid="side-close" onclick={() => (notes.side = null)}><Icon name="close" size={14} /></button></div>
-			<p class="nsub">The annotations here whose type is listed in Notes, each linked to where it was left.</p>
+			<div class="row"><span class="stitle">{w.title}</span><button type="button" class="x" aria-label={w.close} title={w.close} data-testid="side-close" onclick={() => (notes.side = null)}><Icon name="close" size={14} /></button></div>
+			<p class="nsub">{w.sub}</p>
 		</div>
 		<div class="cards" bind:this={list}>
-			{#each here as a (a.id)}
-				<a class="card ncard" class:on={notes.open === a.id} href="quilt:{a.id}" data-testid="note-card" data-annotation={a.id}>
-					<div class="ch"><span class="dot2" style={dotVars(a)}></span><span class="who">{a.author.label ?? a.author.id}</span><span>{typeLine(a)}</span></div>
-					{#if a.quote}<div class="q"><TexProse text={a.quote} /></div>{/if}
-					{#if plain(a.body_html)}<div class="ct"><Prose html={a.body_html} /></div>{:else}<div class="ct none">No comment</div>{/if}
-					<div class="nfoot"><span>{m ? placeOf(m, a) : ''}</span><span class="go">Go to it →</span></div>
-				</a>
+			{#each files as f (f.path)}
+				<div class="card ncard" data-testid="note-file" data-path={f.path}>
+					<div class="ch"><Icon name="note" size={12} /><span class="who">{f.path}</span></div>
+					{#each f.links as b (`${b.line}:${b.href}`)}
+						<a class="nlink" href={m ? noteHref(m, b) : undefined} data-testid="note-link">
+							{#if b.quote}<span class="q"><TexProse text={b.quote} /></span>{:else}<span class="ct none">{w.at(b.place)}</span>{/if}
+							<span class="go">{w.line(b.line)}</span>
+						</a>
+					{/each}
+				</div>
 			{:else}
-				{#if !apartNotes.length}<div class="sempty">No notes here yet. Annotate with a type listed in Notes.</div>{/if}
+				<div class="sempty">{w.none}</div>
 			{/each}
-			{#if apartNotes.length}
-				{@render apartHead()}
-				{#each apartNotes as a (a.id)}{@render apartCard(a)}{/each}
-			{/if}
 		</div>
 	{:else}
 		<div class="shead">
@@ -376,18 +377,27 @@
 		font-family: var(--sans);
 		font-size: 12px;
 	}
-	.cf,
-	.nfoot {
+	.cf {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		font-size: 11.5px;
 		color: var(--ink-faint);
 	}
-	.nfoot {
+	.nlink {
+		display: flex;
+		align-items: baseline;
 		justify-content: space-between;
+		gap: 8px;
+		color: inherit;
+		text-decoration: none;
+	}
+	.nlink:hover .go {
+		text-decoration: underline;
 	}
 	.go {
+		flex: none;
+		font-size: 11.5px;
 		color: var(--link);
 	}
 	.stat {

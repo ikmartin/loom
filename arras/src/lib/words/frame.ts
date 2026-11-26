@@ -127,6 +127,7 @@ export const frame = {
 		'no-such-proposal': 'That correction is no longer waiting for you.',
 		'no-such-question': 'That question has been answered already.',
 		'no-such-ref': 'That work is no longer in the library.',
+		'no-such-file': 'That PDF is not a file of this quilt the viewer shows.',
 		'no-such-result': 'That result is no longer in your drafts.',
 		'no-such-row': 'That no longer waits for you.',
 		'no-such-task': 'That task no longer waits for an agent.',

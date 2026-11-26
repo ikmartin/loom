@@ -110,10 +110,8 @@ def test_a_note_on_a_page_is_written_by_reference_or_key_and_refused_legibly(tmp
         "--type", "question", *who, cwd=q,
     )  # fmt: skip
     assert f"{ref} p.2 (text)  question" in said.output, said.output
-    drawn = ok(
-        "annotate", "Bellamy19", "the polytope", "--page", "2", "--box", "82,278,529,316", "--type", "note", *who, cwd=q
-    )
-    assert "p.2 (box)  note" in drawn.output, drawn.output
+    drawn = ok("annotate", "Bellamy19", "the polytope", "--page", "2", "--box", "82,278,529,316", *who, cwd=q)
+    assert "p.2 (box)  untyped" in drawn.output, drawn.output
     ok("annotate", ref, "by its reference", "--page", "2", "--quote", "Boundedness holds", *who, cwd=q)
 
     text, box, by_ref = _log(q)[-3:]  # appended in order, after the showcase's own
@@ -165,15 +163,15 @@ def test_a_note_on_a_page_is_written_by_reference_or_key_and_refused_legibly(tmp
     # a batch line carries the same two keys
     batched = ok(
         "annotate", "--batch", "--as", "A. Author", "--quilt", str(q),
-        stdin='{"target":"Bellamy19","message":"batched","page":2,"box":"82,278,529,316","type":"note"}\n',
+        stdin='{"target":"Bellamy19","message":"batched","page":2,"box":"82,278,529,316"}\n',
     )  # fmt: skip
-    assert "(box)  note" in batched.output, batched.output
+    assert "(box)  untyped" in batched.output, batched.output
 
 
 def test_a_note_on_a_whole_work_names_its_reference(tmp_path: Path) -> None:
     """With no page, a note is on the whole work: its target is the reference's id, however the work was named."""
     q = showcase(tmp_path)
-    ok("annotate", "Arden24", "Read before Section 3.", "--type", "note", "--as", "A. Author", cwd=q)
+    ok("annotate", "Arden24", "Read before Section 3.", "--as", "A. Author", cwd=q)
     event = _log(q)[-1]
     assert event["target"] == _ref(q, "Arden24") and event["anchor"] is None
 
@@ -195,7 +193,6 @@ def test_the_endpoint_and_the_record_map_a_place_the_same_way(tmp_path: Path) ->
             "message": "so it is integral",
             "page": 2,
             "quote": text,
-            "type": "note",
             "author": "A. Author",
         },
     )
@@ -213,7 +210,6 @@ def test_the_endpoint_and_the_record_map_a_place_the_same_way(tmp_path: Path) ->
             "message": "that display",
             "page": 2,
             "rects": [[82, 278, 529, 316]],
-            "type": "note",
             "author": "A. Author",
         },
     )
@@ -246,7 +242,7 @@ def test_a_change_carries_an_address_its_reader_can_use(tmp_path: Path) -> None:
         "annotate", "Bellamy19", "why unimodular?", "--page", "2", "--quote", "totally unimodular",
         "--type", "question", "--as", "A. Author", cwd=q,
     )  # fmt: skip
-    ok("annotate", "sh-0003", "and one on a key, which has no work", "--type", "note", "--as", "A. Author", cwd=q)
+    ok("annotate", "sh-0003", "and one on a key, which has no work", "--as", "A. Author", cwd=q)
 
     changed = pending(q, sessions(q)[sid], "A. Author")
     page_note = the(changed, lambda c: bool(c["page"]), "change on a page")

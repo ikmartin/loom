@@ -420,8 +420,6 @@ def build_synthetic(dest: Path) -> None:
         "annotate",
         "sy-000A",
         "Gadgets of odd order cannot exist.",
-        "--type",
-        "note",
         agent=True,
     )
     # the author deletes the first pass's one annotation, the agent's latest, which leaves it a line `loom since` says once
@@ -774,7 +772,7 @@ def build_showcase(dest: Path) -> None:
         ),
     ):
         g.run(
-            "annotate", "Bellamy19", note, "--page", page, "--quote", quote, "--type", "note",
+            "annotate", "Bellamy19", note, "--page", page, "--quote", quote,
             "--as", "Survey Agent", agent=True,
         )  # fmt: skip
     # The agent's account of the run, said in the chat (plan 0.14).
@@ -792,7 +790,7 @@ def build_showcase(dest: Path) -> None:
     )
     _say_report(g, survey, "Survey Agent", "Mode: question, on Bellamy19.", _showcase_survey_report())
     # a reading of the paper as a whole, a note on the work
-    g.run("annotate", "Bellamy19", _showcase_bellamy_overview(), "--type", "note", "--as", "Survey Agent", agent=True)
+    g.run("annotate", "Bellamy19", _showcase_bellamy_overview(), "--as", "Survey Agent", agent=True)
 
     # ---- The author accepts what they are satisfied with. ------------------------------------------------
     # --force skips the compile check: the rows it writes do not depend on it, and the generator must write
@@ -945,8 +943,6 @@ def build_showcase(dest: Path) -> None:
         "annotate",
         "sh-0005",
         "Both examples check out, and the second is the smallest quiver with trivial cycle lattice.",
-        "--type",
-        "note",
         "--as",
         "Referee (Agent)",
         agent=True,
@@ -1087,7 +1083,7 @@ def build_showcase(dest: Path) -> None:
         "--quote",
         "A quiver whose underlying graph is a forest",
     )
-    g.run("annotate", "sh-0003", "Read against Arden's Definition 1.2; the two agree.", "--type", "note")
+    g.run("annotate", "sh-0003", "Read against Arden's Definition 1.2; the two agree.")
 
     # A second person, so the viewer has two people commenting and not one.
     g.at("2026-09-17T09:00:00Z")
@@ -1140,8 +1136,6 @@ def build_showcase(dest: Path) -> None:
         "annotate",
         "Bellamy19",
         "Proposition 3.1 is the form we use; the balanced case is the one that matters here.",
-        "--type",
-        "note",
     )
     g.run(
         "annotate",
@@ -1170,8 +1164,6 @@ def build_showcase(dest: Path) -> None:
         "2",
         "--box",
         "82,278,529,316",
-        "--type",
-        "note",
     )
     # The message carries what changed since the last one -- the notes above -- in the same text `session next`
     # prints, so a parked agent needs no second call to learn what it is being asked about.
@@ -1202,8 +1194,6 @@ def build_showcase(dest: Path) -> None:
         "2",
         "--quote",
         "the constraint matrix is an incidence matrix",
-        "--type",
-        "note",
         "--as",
         "Referee (Agent)",
         agent=True,
@@ -1317,8 +1307,6 @@ def _mark_bellamy(g: Gen) -> None:
         "ink",
         "--stroke",
         "110,309,180,311,250,308,358,310",
-        "--type",
-        "note",
     )
     g.run(
         *on,
@@ -1344,8 +1332,6 @@ def _mark_bellamy(g: Gen) -> None:
         "nothing below is constructive",
         "--color",
         "green",
-        "--type",
-        "note",
     )
     # what a reader marked in Preview, as the viewer's Take in reads it: its colour the nearest of the nine, a strike-out struck
     g.take_in(
@@ -1388,8 +1374,6 @@ def _mark_bellamy(g: Gen) -> None:
         "box",
         "--box",
         "81,84,158,98",
-        "--type",
-        "note",
     )
     # circled on another file filed under this work by mistake, since replaced: its words are nowhere in this one, so it is detached
     stored((SHOWCASE_FILES / "handout.pdf").read_bytes())
@@ -1402,8 +1386,6 @@ def _mark_bellamy(g: Gen) -> None:
         "oval",
         "--box",
         "84,88,186,101",
-        "--type",
-        "note",
     )
     stored(held)
 
@@ -1429,8 +1411,6 @@ def _mark_handout(g: Gen) -> None:
         "box",
         "--box",
         "215,226,397,243",
-        "--type",
-        "note",
     )
     g.run(*on, "Ask about balance on average.", "--mark", "pin", "--box", "530,250,546,266")
     handout.write_bytes((SHOWCASE_FILES / "handout-v2.pdf").read_bytes())

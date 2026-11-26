@@ -18,13 +18,14 @@ const keep = (item: Item) => (size: number) => workspace.update(itemKey(item), {
 
 export class DocumentState {
 	/** Its annotating: the tool in hand, its annotations in reading order, the one open, the side list; the fragment registers the doing. */
-	notes = new Annotating();
+	notes: Annotating;
 	arrival: Arrival = { at: null };
 	/** Its own text size in px: the one its item kept, else the start for an HTML draft when it opened (`prefs.textSize`); no other draft's size moves it, nor Settings'. */
 	size = $state(prefs.textSize);
 	#kept: (size: number) => void;
 
 	constructor(item: Item) {
+		this.notes = new Annotating(itemKey(item));
 		if (item.size) this.size = clampText(item.size);
 		this.#kept = keep(item);
 	}
@@ -42,11 +43,12 @@ export class WorkState {
 	/** The reader's view of the paper: the tool, the fit, the page, its own zoom. */
 	pdf: PdfView;
 	/** Its annotating, as a document's: Annotate and Comment, its annotations in reading order, the one open, the side list. */
-	notes = new Annotating();
+	notes: Annotating;
 	/** The paper's marks and file acts, which its renderer makes and the toolbar's `PDF ▾` acts through; null until the paper is drawn. */
 	desk = $state.raw<MarkDesk | null>(null);
 
 	constructor(item: Item) {
+		this.notes = new Annotating(itemKey(item));
 		this.pdf = new PdfView(item.size, keep(item));
 	}
 }
@@ -54,21 +56,26 @@ export class WorkState {
 export class FileState {
 	/** The reader's view of a PDF among the project's files, or of a document's compiled PDF: the tool, the fit, the page, its own zoom. */
 	pdf: PdfView;
-	notes = new Annotating();
+	notes: Annotating;
 	desk = $state.raw<MarkDesk | null>(null);
 
 	constructor(item: Item) {
+		this.notes = new Annotating(itemKey(item));
 		this.pdf = new PdfView(item.size, keep(item));
 	}
 }
 
 export class NodeState {
-	notes = new Annotating();
+	notes: Annotating;
 	arrival: Arrival = { at: null };
 	/** Whether the node is read as its source rather than rendered. */
 	verbatim = $state(false);
 	/** The node's source, once fetched; null while unknown or when the corpus publishes none, and then there is no `source` control. */
 	source = $state<string | null>(null);
+
+	constructor(item: Item) {
+		this.notes = new Annotating(itemKey(item));
+	}
 }
 
 /** The state of an open item, made on first asking. */
@@ -82,7 +89,7 @@ export function fileState(item: Item): FileState {
 	return workspace.stateOf(itemKey(item), () => new FileState(item));
 }
 export function nodeState(item: Item): NodeState {
-	return workspace.stateOf(itemKey(item), () => new NodeState());
+	return workspace.stateOf(itemKey(item), () => new NodeState(item));
 }
 
 /** What a renderer knows of the pane it stands in: which one, and the element that scrolls. */

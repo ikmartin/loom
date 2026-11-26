@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Annotating } from '$lib/review/annotating.svelte';
 	import { apartIn, passes } from '$lib/review/annotating.svelte';
-	import { typeOf } from '$lib/review/annotationTypes';
 	import { acted, prune } from '$lib/review/acted.svelte';
 	import { authorOf, changeById, changesIn, pending } from '$lib/review/changes';
 	import type { Macro } from '$lib/manifest/types';
@@ -601,7 +600,7 @@
 		const at = el.querySelector<HTMLElement>(`:is(${MARKS})[data-annotation~="${CSS.escape(id)}"]`);
 		// a note on no block has no mark: the list beside the text shows it apart, and it opens beside its card there
 		if (!at && annotations?.apart.includes(id)) {
-			if (annotations.side !== 'notes' || !typeOf(store.manifest, store.manifest?.annotations[id] ?? {})?.notes) annotations.side = 'comments';
+			annotations.side = 'comments';
 			annotations.reveal = id;
 			return;
 		}

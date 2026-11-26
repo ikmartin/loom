@@ -21,7 +21,7 @@ const m = {
 	regions: { 'sy-0003#eq:fix': { container: 'sy-0003', label: 'eq:fix', numbers: { 'drafting/main.tex': { number: '4' } } } },
 	annotations: {
 		'a-2026-09-16-ecnav2': { id: 'a-2026-09-16-ecnav2', type: 'revision', target: { key: 'sy-0003' } },
-		'a-2026-09-16-tc3rcf': { id: 'a-2026-09-16-tc3rcf', type: 'note', target: { key: 'drafting/main.tex' } },
+		'a-2026-09-16-tc3rcf': { id: 'a-2026-09-16-tc3rcf', type: 'gone', target: { key: 'drafting/main.tex' } },
 		'a-2026-09-17-qe0ph7': { id: 'a-2026-09-17-qe0ph7', type: 'question', target: { key: 'sy-0099-ref', work: 'sy-0099-ref', page: 2 } },
 		'a-2026-09-23-srw667': { id: 'a-2026-09-23-srw667', type: 'revision', target: { key: 'sy-0003#eq:fix' } },
 		'a-2026-09-23-qq96rn': { id: 'a-2026-09-23-qq96rn', type: 'question', target: { key: 'sy-0003#eq:fix' }, in_reply_to: 'a-2026-09-23-srw667' }

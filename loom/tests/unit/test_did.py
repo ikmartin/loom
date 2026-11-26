@@ -39,8 +39,7 @@ def test_annotating_writes_nothing_into_the_active_session(q: Path) -> None:
     ok("annotate", "--edit", first, "Which orbits?", *who, cwd=q)
     ok("annotate", "--delete", reply, *who, cwd=q)
     batch = "\n".join(
-        json.dumps(x)
-        for x in ({"target": "dm-0002", "message": "One.", "type": "note"}, {"reply": first, "message": "Two."})
+        json.dumps(x) for x in ({"target": "dm-0002", "message": "One."}, {"reply": first, "message": "Two."})
     )
     ok("annotate", "--batch", *who, cwd=q, stdin=batch)
     assert lines(q, sid) == ["loom source dm-0003"]
