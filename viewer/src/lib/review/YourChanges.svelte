@@ -36,7 +36,7 @@
 	const OPEN = 12;
 
 	const m = $derived(store.manifest!);
-	// every pending change, by document, those just kept or discarded gone at once
+	// every pending change, by document, those just kept or discarded gone from loom's answer
 	const groups = $derived(changeGroups(m, acted.map));
 	const changeCount = $derived(groups.reduce((n, g) => n + g.changes.length, 0));
 	const todo = $derived(todoOf(m));

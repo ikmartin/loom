@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A pending change's popup, opened at its words, or at the element it is marked on where it is not merged into the text (`apart`): what it is (an edit in the file, or a suggestion, with who wrote it and when), its words out and in and its patch where the text does not show them, the annotations on its words, each of which opens its own popup, what a suggestion's writer says of it, a box that writes an annotation on its words, and Keep and Discard, with Copy new text and Done in Overleaf in place of Keep on a document that mirrors Overleaf (`MirroredActs`). Both take effect on screen at once (`history.svelte.ts`); a change that is not ready says why and offers neither.
+	// A pending change's popup, opened at its words, or at the element it is marked on where it is not merged into the text (`apart`): what it is (an edit in the file, or a suggestion, with who wrote it and when), its words out and in and its patch where the text does not show them, the annotations on its words, each of which opens its own popup, what a suggestion's writer says of it, a box that writes an annotation on its words, and Keep and Discard, with Copy new text and Done in Overleaf in place of Keep on a document that mirrors Overleaf (`MirroredActs`). Both take effect on screen once loom has recorded them (`history.svelte.ts`); a change that is not ready says why and offers neither.
 	import { onMount } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
@@ -60,7 +60,7 @@
 	let busy = $state(false);
 	let said = $state('');
 
-	/** Keep or discard it: the popup closes at once, the text shows the change done, and a refusal is said. */
+	/** Keep or discard it: the popup closes at once, the text shows the change done once loom has recorded it, and a refusal is said. */
 	async function act(how: 'keep' | 'discard'): Promise<void> {
 		onclose();
 		const res = how === 'keep' ? await keepChanges({ changes: [id] }) : await discardChanges({ changes: [id] });

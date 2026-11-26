@@ -5,6 +5,8 @@ const calls: [string, Record<string, unknown>][] = [];
 let answer: Record<string, unknown> = { ok: true, result: 'done' };
 let quilt: string | undefined = 'q-one';
 let probed: Promise<void> = Promise.resolve();
+/** What a write waits on before it answers: loom recording it. */
+let recording: Promise<void> = Promise.resolve();
 const watchers: ((caps: { quilt?: string } | null) => void)[] = [];
 vi.mock('$lib/write', () => ({
 	can: async () => true,
@@ -15,6 +17,7 @@ vi.mock('$lib/write', () => ({
 	onCapabilities: (watch: (caps: { quilt?: string } | null) => void) => watchers.push(watch),
 	write: async (endpoint: string, body: Record<string, unknown>) => {
 		calls.push([endpoint, body]);
+		await recording;
 		return answer;
 	}
 }));
@@ -32,6 +35,7 @@ const suggestion = change({ id: 'e-1', kind: 'suggested', author: { kind: 'agent
 
 beforeEach(() => {
 	calls.length = 0;
+	recording = Promise.resolve();
 	answer = { ok: true, result: 'done' };
 	acted.map = {};
 	history.done = [];
@@ -127,14 +131,29 @@ describe('changes in the stepper and the list', () => {
 });
 
 describe('Keep and Discard', () => {
-	it('keeps changes by id, shown kept at once, and puts nothing on the undo history', async () => {
+	it('keeps changes by id, shown kept from the answer and not before, and puts nothing on the undo history', async () => {
 		live.changes = [change({}), suggestion];
+		let recorded = () => {};
+		recording = new Promise((r) => (recorded = r));
 		const going = keepChanges({ changes: ['c-0001'] });
-		expect(acted.map).toEqual({ 'c-0001': 'kept' });
-		answer = { ok: true, result: 'kept 1', done: ['c-0001'], refused: [] };
-		await going;
+		await new Promise((r) => setTimeout(r));
 		expect(calls).toEqual([['change-keep', { changes: ['c-0001'] }]]);
+		expect(acted.map).toEqual({});
+		answer = { ok: true, result: 'kept 1', done: ['c-0001'], refused: [] };
+		recorded();
+		await going;
+		expect(acted.map).toEqual({ 'c-0001': 'kept' });
 		expect(history.done).toHaveLength(0);
+	});
+
+	it('never shows a change loom refused as done', async () => {
+		live.changes = [change({}), change({ id: 'c-0002' })];
+		answer = { ok: true, result: 'kept 1', done: ['c-0001'], refused: [{ id: 'c-0002', why: 'changed' }] };
+		await keepChanges({ changes: ['c-0001', 'c-0002'] });
+		expect(acted.map).toEqual({ 'c-0001': 'kept' });
+		answer = { ok: false, error: { code: 'changed', message: 'a file changed' } };
+		await discardChanges({ changes: ['c-0002'] });
+		expect(acted.map).toEqual({ 'c-0001': 'kept' });
 	});
 
 	it('discards every ready change of a document; the suggestion among them is undone by change-discard with undo and done again, the edit in the file is not', async () => {
