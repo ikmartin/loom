@@ -13,6 +13,8 @@
 	import Empty from '$lib/review/Empty.svelte';
 	import ReviewHeading from '$lib/review/ReviewHeading.svelte';
 	import Said from '$lib/review/Said.svelte';
+	import SettleLeft from '$lib/review/SettleLeft.svelte';
+	import { PREVIEW, SETTLE, settleAct } from '$lib/review/settle';
 	import { rv } from '$lib/views/review/state.svelte';
 	import { review as reviewWords } from '$lib/words/review';
 
@@ -38,8 +40,10 @@
 	// the acts this publisher serves; a static build serves none, and the page then offers no fix
 	let served = $state<Record<string, boolean>>({});
 	$effect(() => {
-		void can('agents-update').then((agents) => (served = { 'agents-update': agents }));
+		void Promise.all([can('agents-update'), can(PREVIEW), can(SETTLE)]).then(([agents, preview, settle]) => (served = { 'agents-update': agents, [SETTLE]: preview && settle }));
 	});
+	// what settling a left write did, said over the person's problems, since its notice goes with it
+	let settled = $state('');
 
 	// each act's answer, said beside it until the next act there
 	let answers = $state<Record<string, { text: string; refused: boolean }>>({});
@@ -61,7 +65,8 @@
 </script>
 
 {#snippet problem(d: Diagnostic, id: string)}
-	{@const acts = splitFixes(d).acts.filter((f) => served[f.act!.endpoint])}
+	{@const acts = splitFixes(d).acts.filter((f) => served[f.act!.endpoint] && f.act!.endpoint !== SETTLE)}
+	{@const left = served[SETTLE] ? settleAct(d) : ''}
 	{@const open = openUrl(m, d)}
 	<li data-testid="problem">
 		<span class="message">{d.message}</span>
@@ -70,6 +75,7 @@
 			{#each d.locations as l, j (j)}{#if m.files?.some((f) => f.path === l.file)}<a class="loc" href={lineUrl(m, l.file, l.line)} data-testid="problem-location">{l.file}:{l.line}</a>{:else}<code class="loc">{l.file}:{l.line}</code>{/if}{/each}
 			{#if d.keys.length > 1}{#each d.keys as k (k)}{#if keyTarget(m, k)}<a class="key" href={placeUrl(m, k)}>{k}</a>{:else}<code class="key">{k}</code>{/if}{/each}{/if}
 		</span>
+		{#if left}<SettleLeft act={left} onsettled={(text) => (settled = text)} />{/if}
 		{#if acts.length}
 			<ul class="fixes">
 				{#each acts as f, j (j)}
@@ -112,6 +118,7 @@
 
 	<section class="part yours" data-testid="problems-yours">
 		<h2>In your files <span class="n" data-testid="problems-yours-count">{parts.yours.length}</span></h2>
+		{#if settled}<Said text={settled} testid="settle-said" />{/if}
 		{#if parts.yours.length}
 			{@render groups(parts.yours, 'yours')}
 		{:else}
