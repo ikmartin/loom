@@ -32,7 +32,9 @@
 {#if said}<span class="said" class:refused={said.refused} role={said.refused ? 'alert' : 'status'} data-testid="change-overleaf-said">{said.text}</span>{/if}
 
 <style>
+	/* a line of its own after every act on the row, Discard among them */
 	.said {
+		order: 1;
 		flex-basis: 100%;
 		font-size: 12px;
 		line-height: 1.4;
