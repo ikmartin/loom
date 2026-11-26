@@ -10,10 +10,10 @@ export async function openRow(row: Locator): Promise<void> {
 	if ((await h.getAttribute('aria-expanded')) !== 'true') await h.click();
 }
 
-/** Opens every row of Proposed edits' changes that is closed, so their cards are drawn. */
+/** Opens every row of Proposed edits' files and suggested edits that is closed, so their cards are drawn. */
 export async function openChanges(page: Page): Promise<void> {
 	// the first closed one each time, since opening one moves every place after it
-	const closed = page.locator('[data-testid="review-row"][data-change] .rr-h[aria-expanded="false"]');
+	const closed = page.locator('[data-testid="review-row"]:is([data-change], [data-file]) .rr-h[aria-expanded="false"]');
 	for (let i = 0; i < 50 && (await closed.count()); i++) await closed.first().click({ timeout: 2000 }).catch(() => {});
 }
 

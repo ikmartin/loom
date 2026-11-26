@@ -1,9 +1,9 @@
-// The rows of the two kinds drawn from the manifest, and what they count: Results to accept's blocks waiting, each once, the never accepted and the accepted folded beneath and uncounted; Proposed edits' changes and copies; each narrowed to a draft as it is drawn.
+// The rows of the two kinds drawn from the manifest, and what they count: Results to accept's blocks waiting, each once, the never accepted and the accepted folded beneath and uncounted; Proposed edits' files with edits made in place, suggested edits and copies; each narrowed to a draft as it is drawn.
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../../tests/fixture/manifest.json';
 import type { Manifest, PendingChange } from '$lib/manifest/types';
 import type { ReviewList } from '$lib/library/types';
-import { acceptList, acceptSections, acceptWaiting, changeGroups, changeList, changesWaiting, theirs } from './yours';
+import { acceptList, acceptSections, acceptWaiting, changeGroups, changeList, changesWaiting, editRows, theirs } from './yours';
 
 const m = fixture as unknown as Manifest;
 const MAIN = 'drafting/main.tex';
@@ -60,9 +60,33 @@ describe('the changes section', () => {
 	const x: Manifest = { ...m, changes: [change({ id: 'c-1' }), change({ id: 'c-2', documents: [MAIN, TALK] }), change({ id: 'c-3', documents: [], path: 'notes/intro.md' })], contributions: m.contributions };
 	const copies = (m.contributions ?? []).filter((c) => c.kind === 'adopt').length;
 
-	it('counts each change and each agent copy, and leaves out one just kept or discarded', () => {
-		expect(changesWaiting(x, {})).toBe(3 + copies);
+	it('counts a row for each file with edits made in place and each agent copy, and leaves out a change just kept or discarded', () => {
+		// c-1 and c-2 are in one file
+		expect(changesWaiting(x, {})).toBe(2 + copies);
 		expect(changesWaiting(x, { 'c-1': 'keep' })).toBe(2 + copies);
+		expect(changesWaiting(x, { 'c-1': 'keep', 'c-2': 'keep' })).toBe(1 + copies);
+	});
+
+	it('draws one row a file for the edits made in place, holding each of them, and a suggested edit as a row of its own', () => {
+		const NODE = 'drafting/nodes/sy-0001.tex';
+		const y: Manifest = {
+			...x,
+			changes: [
+				change({ id: 'c-1' }),
+				change({ id: 's-1', kind: 'suggested', author: 'agent' }),
+				change({ id: 'c-2', key: 'sy-0002' }),
+				change({ id: 'c-3', documents: [], path: 'notes/intro.md', key: null }),
+				change({ id: 's-2', kind: 'suggested', author: 'agent' }),
+				change({ id: 'c-4', documents: [], path: 'notes/intro.md', key: null })
+			]
+		};
+		const rows = editRows(y, {});
+		expect(rows.map((r) => (r.type === 'file' ? [r.path, r.changes.map((c) => c.id)] : r.c.id))).toEqual([[NODE, ['c-1', 'c-2']], 's-1', 's-2', ['notes/intro.md', ['c-3', 'c-4']]]);
+		expect(rows.map((r) => r.doc)).toEqual([MAIN, MAIN, MAIN, null]);
+		expect(changesWaiting(y, {})).toBe(4 + copies);
+		// a file whose changes are all kept or discarded is no row; one still holding some keeps only those
+		expect(editRows(y, { 'c-1': 'keep' }).find((r) => r.type === 'file' && r.path === NODE)).toMatchObject({ changes: [{ id: 'c-2' }] });
+		expect(changesWaiting(y, { 'c-1': 'keep', 'c-2': 'discard', 's-1': 'keep' }, MAIN)).toBe(1 + copies);
 	});
 
 	it('lists a row for each change, naming the draft whose text holds it, or the file of one in no draft', () => {
@@ -79,7 +103,7 @@ describe('the changes section', () => {
 		expect(groups).toHaveLength(1);
 		expect(groups[0].changes.map((c) => c.id)).toEqual(['c-2']);
 		expect(changesWaiting(x, {}, TALK)).toBe(1);
-		expect(changesWaiting(x, {}, MAIN)).toBe(2 + copies);
+		expect(changesWaiting(x, {}, MAIN)).toBe(1 + copies);
 	});
 });
 

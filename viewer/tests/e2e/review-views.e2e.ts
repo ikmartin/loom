@@ -13,7 +13,7 @@ async function open(page: Page): Promise<void> {
 const count = (page: Page, testid: string) => page.getByTestId(testid).locator('.n');
 // every row Review draws, loom's and the two kinds drawn from the manifest alike
 const rows = (page: Page) => page.locator('[data-testid="review-row"][data-kind]');
-/** The rows of a kind drawn from the manifest: Results to accept's blocks, Proposed edits' changes and copies. */
+/** The rows of a kind drawn from the manifest: Results to accept's blocks, Proposed edits' files, suggested edits and copies. */
 const kindRows = (page: Page, kind: 'accepted-changed' | 'edits') => page.locator(`[data-testid="review-row"][data-kind="${kind}"]`);
 /** Opens a row that is closed, by the button that opens it. */
 async function openRow(row: ReturnType<Page['locator']>): Promise<void> {
@@ -80,14 +80,14 @@ test("an agent's question is answered by a choice or in the person's words, and 
 	await expect(count(page, 'review-kind-questions')).toHaveText('0');
 });
 
-test('under Proposed edits each change is a row that opens to its words out and in, an edit made in place said so, Keep and Discard on each', async ({ page }) => {
+test('under Proposed edits each file edited in place and each suggested edit is a row that opens to its words out and in, an edit made in place said so, Keep and Discard on each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const edit = page.locator('[data-testid="review-row"][data-change="c-0f621ccf"]');
+	const edit = page.locator('[data-testid="review-row"][data-file="drafting/main.tex"]');
 	await expect(edit.locator('.meta')).toHaveText('edited since your look');
 	await expect(page.locator('[data-testid="review-row"][data-change="e-2026-09-16-r2hw0m"] .meta')).toHaveText('proposed by agent');
 	await expect(page.getByTestId('change-card')).toHaveCount(0);
-	for (const row of await page.locator('[data-testid="review-row"][data-change]').all()) {
+	for (const row of await page.locator('[data-testid="review-row"]:is([data-change], [data-file])').all()) {
 		await openRow(row);
 		await expect(row.getByTestId('card-keep')).toBeVisible();
 		await expect(row.getByTestId('card-discard')).toBeVisible();
@@ -308,7 +308,7 @@ test('see it lays the document over Review, read only, lands at the place, and c
 test("a proposed edit's see it lays its draft over Review and lands at the result, and a change in no draft's text offers none", async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const nowhere = page.locator('[data-testid="review-row"][data-change="c-5a59b9ba"]');
+	const nowhere = page.locator('[data-testid="review-row"][data-file="notes/intro.md"]');
 	await openRow(nowhere);
 	await expect(nowhere.getByTestId('see-it')).toHaveCount(0);
 	const suggested = page.locator('[data-testid="review-row"][data-change="e-2026-09-16-r2hw0m"]');
@@ -449,7 +449,7 @@ test('nothing in Results to accept or Proposed edits leaves Review, and see it o
 	expect(await leaving()).toEqual([]);
 	await page.getByTestId('review-kind-edits').click();
 	await page.getByTestId('your-todo').click();
-	for (const row of await page.locator('[data-testid="review-row"][data-change]').all()) await openRow(row);
+	for (const row of await page.locator('[data-testid="review-row"]:is([data-change], [data-file])').all()) await openRow(row);
 	await expect(page.getByTestId('todo-row').first()).toBeVisible();
 	expect(await leaving()).toEqual([]);
 	// a To do item lays its draft over Review
@@ -571,11 +571,51 @@ test('Results to accept and Proposed edits draw a row for each thing they count,
 	await page.getByTestId('review-kind-edits').click();
 	await expect(kindRows(page, 'edits')).toHaveCount(0);
 	await page.getByTestId('review-draft').filter({ hasText: 'main.tex' }).click();
-	// the changes in main.tex's text, and the agent's copy into it: four rows, as the column counts
-	await expect(page.locator('[data-testid="review-row"][data-change]')).toHaveCount(3);
+	// the suggested edits in main.tex's text, the file edited in place, and the agent's copy into it: four rows, as the column counts
+	await expect(page.locator('[data-testid="review-row"][data-change]')).toHaveCount(2);
+	await expect(page.locator('[data-testid="review-row"][data-file]')).toHaveCount(1);
 	await expect(page.locator('[data-testid="review-row"][data-copy]')).toHaveCount(1);
-	// widened again, the change in no document's text is listed too
+	// widened again, the file in no document's text is listed too
 	await page.getByTestId('review-kind-all').click();
-	await expect(page.locator('[data-testid="review-row"][data-change]')).toHaveCount(4);
+	await expect(page.locator('[data-testid="review-row"][data-file]')).toHaveCount(2);
 	await expect(count(page, 'review-kind-edits')).toHaveText('5');
+});
+
+test("edits made in place are one row a file, opening to each with Keep and Discard and the file's own keep all and discard all, and the column counts the rows drawn", async ({ page }) => {
+	await serve(page, (m) => {
+		const at = (id: string) => m.changes.find((c: { id: string }) => c.id === id);
+		// two more edits in main.tex, one in the block already edited and one outside any, and one more in notes/intro.md
+		m.changes.push({ ...at('c-0f621ccf'), id: 'c-00000001', old: 'one', new: 'two' }, { ...at('c-0f621ccf'), id: 'c-00000002', key: null, block: null, old: 'left', new: 'right' }, { ...at('c-5a59b9ba'), id: 'c-00000003', old: 'up', new: 'down' });
+	});
+	const sent: Record<string, unknown>[] = [];
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['change-keep', 'change-discard'], token: 't', quilt: 'q-test' } }));
+	await page.route('**/_api/change-*', (r) => {
+		const body = r.request().postDataJSON();
+		sent.push(body);
+		return r.fulfill({ json: { ok: true, result: 'done', done: body.changes, refused: [] } });
+	});
+	await open(page);
+	// seven changes and a copy, drawn as five rows: two files, two suggested edits and the copy
+	await expect(count(page, 'review-kind-edits')).toHaveText('5');
+	await expect(count(page, 'review-kind-all')).toHaveText('28');
+	await page.getByTestId('review-kind-edits').click();
+	await expect(kindRows(page, 'edits')).toHaveCount(5);
+	const main = page.locator('[data-testid="review-row"][data-file="drafting/main.tex"]');
+	await expect(main.locator('.tx')).toHaveText('main.tex');
+	await expect(main.locator('.meta')).toHaveText('3 edits since your look');
+	await openRow(main);
+	await expect(main.getByTestId('change-card')).toHaveCount(3);
+	await expect(main.getByTestId('card-keep')).toHaveCount(3);
+	await expect(main.getByTestId('card-discard')).toHaveCount(3);
+	// over them the file's own acts, which keep exactly its changes
+	await expect(main.getByTestId('file-keep-all')).toHaveText('keep all 3');
+	await expect(main.getByTestId('file-discard-all')).toHaveText('discard all 3');
+	await main.getByTestId('file-keep-all').click();
+	await expect.poll(() => sent).toEqual([{ changes: ['c-0f621ccf', 'c-00000001', 'c-00000002'] }]);
+	await expect(page.getByTestId('column-message')).toHaveText('Kept 3 changes.');
+	await expect(main).toHaveCount(0);
+	await expect(count(page, 'review-kind-edits')).toHaveText('4');
+	// the other file still holds both its edits
+	const intro = page.locator('[data-testid="review-row"][data-file="notes/intro.md"]');
+	await expect(intro.locator('.meta')).toHaveText('2 edits since your look');
 });

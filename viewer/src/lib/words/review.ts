@@ -339,8 +339,10 @@ export const review = {
 		kept: 'Kept.',
 		/** The column's message after discarding or undoing one. */
 		discarded: 'Discarded.',
-		/** An edit made in the person's file's quiet line: when it was made. */
-		sinceLook: 'edited since your look',
+		/** The quiet line of a file with edits made in place since the person's look: how many. */
+		sinceLook: (n: number) => (n === 1 ? 'edited since your look' : `${n} edits since your look`),
+		/** Hover text on a file's own keep all and discard all, in its open row. */
+		fileHover: { keep: 'Keeps every change in this file', discard: 'Discards every change in this file, writing your old words back over its edits' },
 		/** Over Proposed edits: keeps every change listed that can be kept. */
 		keepAll: (n: number) => `keep all ${n}`,
 		/** Over Proposed edits: discards every change listed that can be. */
