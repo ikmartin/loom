@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The column's footer (plan 0.13.3 S5–S8): the session a write that names one goes into, pinned outside the column's scroll so a reader never goes looking for it, and the only thing that says so, since reading a session's transcript chooses nothing. It carries only the state — a dot, "writing in" and the session's name — and opens the picker; the sentence explaining a refusal stands beside the refused control, not here. Folded (`compact`), it is the dot alone.
+	// The column's footer (plan 0.13.3 S5–S8): the session a write that names one goes into, pinned outside the column's scroll so a reader never goes looking for it, and the only thing that says so, since reading a session's transcript chooses nothing. It carries only the state — a dot, "Writing in" and the session's name, or "No session chosen" — and opens the picker; the sentence explaining a refusal stands beside the refused control, not here. Folded (`compact`), it is the dot alone.
 	//
 	// Its tone is `writable()`'s answer, which concerns those writes only: annotations, review decisions and incorporating a pull name no session, so an amber footer never means nothing can be written.
 	import Popover from '$lib/components/Popover.svelte';
@@ -9,13 +9,14 @@
 	import { selected, sessionView, titleOf, writable } from './sessions.svelte';
 	import { deleteSession } from './actions';
 	import type { SessionRow } from '$lib/manifest/types';
+	import { frame } from '$lib/words/frame';
 
 	let { compact = false }: { compact?: boolean } = $props();
 
 	const m = $derived(store.manifest);
 	const here = $derived(selected(m));
 	const why = $derived(writable(m));
-	const name = $derived(here ? titleOf(here) : 'no session');
+	const name = $derived(here ? titleOf(here) : frame.session.none);
 
 	let open = $state(false);
 	// The confirmation stands outside the picker: a press inside a dialog is a press outside the picker, which would close it and take the dialog with it.
@@ -35,21 +36,21 @@
 </script>
 
 <div class="footer" class:refused={!!why} class:compact>
-	<Popover bind:open placement="above" width={320} block label="Sessions">
+	<Popover bind:open placement="above" width={320} block label={frame.session.picker}>
 		{#snippet trigger({ open, toggle })}
 			<button
 				type="button"
 				class="state"
 				aria-haspopup="dialog"
 				aria-expanded={open}
-				aria-label={why ? `not writing in a session: ${why}` : `writing in ${name}`}
+				aria-label={here ? frame.session.label(name, why) : frame.session.labelNone(why)}
 				title={compact ? name : undefined}
 				data-testid="session-footer"
 				onclick={toggle}
 			>
 				<span class="dot" aria-hidden="true"></span>
 				{#if !compact}
-					<span class="lead" class:alone={!here} data-testid="session-footer-lead">{here ? 'writing in' : 'not writing in a session'}</span>
+					<span class="lead" class:alone={!here} data-testid="session-footer-lead">{here ? frame.session.writingIn : frame.session.none}</span>
 					{#if here}<span class="name" data-testid="session-footer-name">{name}</span>{/if}
 					<span class="chev" aria-hidden="true"></span>
 				{/if}

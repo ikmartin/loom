@@ -41,7 +41,7 @@ export const docs = {
 	},
 	picker: {
 		/** The button in Docs' column that opens the library over Docs. */
-		open: 'Library',
+		open: 'Open a work…',
 		/** The picker's search field. */
 		search: 'find a work by title or author',
 		/** Beside the search: how many works. */

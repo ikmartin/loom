@@ -78,7 +78,7 @@ async function drawn(page: Page, n: number, { every = 300, after = 0 } = {}): Pr
 async function intoASession(page: Page, served: Served): Promise<string> {
 	const id = served.openSessions().at(-1)!;
 	await pickSession(page, id);
-	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^writing in /);
+	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^Writing in /);
 	return id;
 }
 
@@ -270,7 +270,7 @@ test('a session is named on the spot and closed from the page', async ({ page, s
 	await expect(row.locator('[data-testid^="session-close-"]')).toBeHidden();
 	await row.hover();
 	await row.locator('[data-testid^="session-close-"]').click();
-	await expect(page.getByTestId('session-footer-lead')).toHaveText('not writing in a session');
+	await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
 });
 
 test('two notes on one place are each drawn there, with no count, and a click opens one of them', async ({ page, served }) => {

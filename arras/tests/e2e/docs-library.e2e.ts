@@ -20,8 +20,9 @@ async function open(page: Page): Promise<void> {
 	await expect(page.getByTestId('docs-library')).toBeVisible();
 }
 
-test('the Library button opens the picker over Docs, which finds, sorts and opens a work beside the draft', async ({ page }) => {
+test('the Open a work… button opens the picker over Docs, which finds, sorts and opens a work beside the draft', async ({ page }) => {
 	await open(page);
+	await expect(page.getByTestId('docs-library')).toHaveText('Open a work…');
 	await page.getByTestId('docs-library').click();
 	const picker = page.getByTestId('docs-picker');
 	// a modal dialog: it takes the keyboard, the draft behind it is inert, and Escape gives the keyboard back to the Library button
