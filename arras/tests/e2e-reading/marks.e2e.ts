@@ -271,6 +271,10 @@ test.describe('on a project PDF', () => {
 		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
 		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
+		// Escape closes the actions first, the tool staying in hand
+		await page.keyboard.press('Escape');
+		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
+		await expect(page.getByTestId('tool-annotate')).toHaveAttribute('aria-pressed', 'true');
 		await published(served, 2);
 		expect(marksOf(served).map((a) => a.style).sort()).toEqual(['highlight', 'underline']);
 		await page.keyboard.press('Escape');

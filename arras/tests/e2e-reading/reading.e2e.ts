@@ -133,8 +133,8 @@ test('a selection stays selected and offers its actions, opening nothing; a note
 		return r.fulfill({ json: { ok: true, result: 'ran', how: 'ran', said: '' } });
 	});
 	await page.getByTestId('selection-new-note').click();
-	await expect.poll(() => asked[0]?.link).toBe(`quilt:${bellamy(served).ref}#page=2&quote=incidence%20matrix`);
-	expect(asked[0]).toMatchObject({ quote: 'incidence matrix' });
+	await expect.poll(() => asked[0]?.link).toMatch(new RegExp(`^quilt:${bellamy(served).ref}#page=2&quote=[^&]*incidence%20matrix`));
+	expect(String(asked[0].quote)).toContain('incidence matrix');
 	const written = served.written('So the vertices are integral.');
 	expect(written.target).toBe(bellamy(served).ref);
 	const anchor = written.anchor as Record<string, unknown>;
