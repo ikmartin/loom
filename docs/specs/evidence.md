@@ -50,6 +50,8 @@ The records of §3.1 to §3.3 are written by the acts of `loom/src/loom/evidence
 
 A stub needs no record: it reads as a stub by its empty body.
 
+**An agent's text.** An agent gives a stub its text, or proposes a node at a place no node holds, by `acts.give` alone (`loom library fill` and `propose`): `transcribed` names the PDF and the pages it read, `read` the TeX source, and the command refuses a text whose words outside its mathematics are not all there, or that has none. A stub filled keeps every key of its header but its text, pages and pointers, and no anchor an agent gives waits (`awaiting` is loom's digest's). A text an agent wrote reads as not checked until a person's `compared`, which no agent can record.
+
 **Carried through numbers.** A `numbered` record is the one way a word on a node outlives a change of its text: the text it is on differs from its `was` only in display numbers the person's compile confirmed, which no person reads against the page, so a person's `compared` on `was` holds on it, and what the latest other `digested` on `was` says of how its words were made holds too (`Evidence.compared`, `Evidence.made`, following each `numbered` back). Only loom makes it, by `acts.numbered` alone, which refuses a file that differs from the one it fills in any byte but its `anchors` and `awaiting` (`acts.only_numbers`); only the person's digest after their compile calls it. Nothing else is carried: a Lean record or an attestation on `was` does not hold on the new text.
 
 ```json

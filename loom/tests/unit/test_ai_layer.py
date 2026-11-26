@@ -589,7 +589,16 @@ def test_an_agent_in_a_shell_may_ask_loom_what_it_offers(tmp_path: Path) -> None
     from loom.ai.layout import codex_rules, help_commands, permissions_json
     from loom.scan.quilt import QuiltConfig
 
-    assert help_commands() == ["--help", "-h", "ai --help", "ai -h", "session --help", "session -h"]
+    assert help_commands() == [
+        "--help",
+        "-h",
+        "ai --help",
+        "ai -h",
+        "library --help",
+        "library -h",
+        "session --help",
+        "session -h",
+    ]
     rules = json.loads(permissions_json(QuiltConfig(), shell=True))["permissions"]
     codex = codex_rules()
     for typed in help_commands():
@@ -671,7 +680,8 @@ def test_every_command_the_agent_is_told_to_run_is_allowed() -> None:
     }
     told = {c for c in author_commands() if re.search(rf"`loom {re.escape(c)}\b", docs)}
     assert told <= named_to_refuse, sorted(told - named_to_refuse)
-    assert not [c for c in AGENT_COMMANDS if c.startswith("library")], "every library command left is the author's"
+    # an agent reads the library's web and gives its results their text; taking works in, `library add`, is the author's
+    assert "library add" in author_commands() and not [c for c in AGENT_COMMANDS if c == "library add"]
 
 
 def test_upgrade_leaves_a_loom_sty_alone(tmp_path: Path) -> None:
