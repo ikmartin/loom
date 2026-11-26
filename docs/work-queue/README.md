@@ -47,7 +47,8 @@ Several triggers below are numbers loom already prints. That is the property to 
 | [WQ-69](WQ-69-every-note.md) | a view of every note in the quilt, likely opened from the left column | arras | the author asks to see the notes of more than one document, work or PDF at once |
 | [WQ-70](WQ-70-note-renderer-hook.md) | a hook that renders notes in other formats, org among them | loom, arras | a person asks to read a non-Markdown note rendered rather than as text |
 | [WQ-71](WQ-71-wikilinks.md) | `[[wikilinks]]` between Markdown notes | loom, arras | a quilt holds Markdown notes that link each other with `[[Note name]]` |
+| [WQ-72](WQ-72-quote-links-into-markdown.md) | a note's link carrying quoted words into a Markdown file | loom, arras | T033 (annotations on Markdown) has landed |
 
-Twenty-seven active, eighteen slots of headroom.
+Twenty-eight active, seventeen slots of headroom.
 
 Every item above has an observable trigger, which is the rule. The rule does not catch a second failure: **a trigger that is observable and will never be observed is a polite way of saying no.** Such an item looks like a plan and is actually a decline, which is worse than an empty queue because it suggests work is coming. So each review asks two questions, not one — is the trigger checkable, and will it ever fire? Five items failed the second on 2026-09-16 and were closed for it; their reasons are in [closed.md](closed.md), and their ids are retired rather than reused.
