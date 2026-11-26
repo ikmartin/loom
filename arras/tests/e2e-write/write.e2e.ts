@@ -1,21 +1,8 @@
 // Writing from the viewer, against a publisher that is actually serving the write API.
 import { compileFolder, expect, readOnly, test, type Served } from '../served';
-import { openPicker, pickSession } from '../picker';
 import { acceptRow, openRow } from '../review-rows';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-
-/**
- * Select the quilt's newest open session, because a write names one (plan 0.13.1) and nothing is selected at rest; returns its id.
- *
- * This is the setup the interface asks of a reader for a note, a quote or a question to an agent: nothing is opened behind their back.
- */
-async function intoASession(page: import('@playwright/test').Page, served: Served): Promise<string> {
-	const id = served.openSessions().at(-1)!;
-	await pickSession(page, id);
-	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^Writing in /);
-	return id;
-}
 
 /** Select an element's words as a reader would, and let go: the page offers to annotate them. */
 /** Hold a type in hand before the page loads, as the format menu would leave it. */
@@ -38,7 +25,6 @@ test('a comment written from a selection lands in the log as a person, anchored 
 	// The gate of plan 0.11 Part H: not "the button appeared" -- the file changed. Annotate, holding a revision, which asks something, so the popup takes the comment before anything is written.
 	await holding(page, 'revision');
 	await page.goto('/node/sy-0003');
-	await intoASession(page, served);
 	const statement = page.locator('[data-pane="0"] .fragment .env[data-id="sy-0003"] > p[data-src]').first();
 	await statement.locator('mjx-container').first().waitFor();
 	await page.getByTestId('tool-annotate').click();
@@ -69,7 +55,6 @@ test("the publisher's refusal is shown rather than swallowed, and nothing is fil
 	// "quote not found" means something different from "no such key", and a reader told only "failed" has to guess.
 	await holding(page, 'question');
 	await page.goto('/node/sy-0003');
-	await intoASession(page, served);
 	const statement = page.locator('[data-pane="0"] .fragment .env[data-id="sy-0003"] > p[data-src]').first();
 	await statement.locator('mjx-container').first().waitFor();
 	// words that are nowhere in the source: what a reader would get from a selection loom cannot map back
@@ -91,7 +76,6 @@ test('a box drawn round an equation notes the equation itself', async ({ page, s
 		await expect.poll(edits).toEqual([]);
 	}
 	await page.goto('/node/sy-0001');
-	await intoASession(page, served);
 	const display = page.locator('[data-pane="0"] .fragment .math.display[data-label="eq:fix"]');
 	await display.locator('mjx-container').waitFor();
 	// Alt-drag draws a box, round what a selection cannot hold
@@ -119,7 +103,6 @@ test('a document is written on the same way, and what is written there is filed 
 	// decision 9 and 11 of the annotation study: the viewer implies `in` from where the reader is, so a claim made while reading main.tex is about sy-0008 as read there, and talk.tex, which also holds sy-0008, and the node's own page carry no mark for it
 	await holding(page, 'question');
 	await page.goto('/master/drafting/main');
-	await intoASession(page, served);
 	const words = page.locator('[data-pane="0"] .fragment .env[data-id="sy-0008"] > p[data-src]').first();
 	await words.scrollIntoViewIfNeeded();
 	await noteOn(page, words, 'A gadget wants an example.');
@@ -165,7 +148,6 @@ readOnly('the actions stay at the end of the selection as its pane scrolls, and 
 test('an annotation written on the node\'s own page is filed with no document', async ({ page, served }) => {
 	await holding(page, 'question');
 	await page.goto('/node/sy-0008');
-	await intoASession(page, served);
 	const words = page.locator('[data-pane="0"] .fragment .env[data-id="sy-0008"] > p[data-src]').first();
 	await noteOn(page, words, 'Everywhere a gadget is read.');
 	const mine = served.written('Everywhere a gadget is read.');
@@ -176,7 +158,6 @@ test('an annotation written on the node\'s own page is filed with no document', 
 test('a reply written in the popup leaves it open, showing the reply', async ({ page, served }) => {
 	// the mark this test opens is one the fixture carries, so a fresh copy has it before anything is written
 	await page.goto('/node/sy-0003');
-	await intoASession(page, served);
 	const mark = page.locator('.fragment mark.annotation').first();
 	await mark.waitFor();
 	const popup = page.getByTestId('ann-popup');
@@ -220,8 +201,8 @@ test('a reply written in the popup leaves it open, showing the reply', async ({ 
 
 test('what an agent says arrives in the transcript without a rebuild, and the viewer offers nothing to post with', async ({ page, served }) => {
 	// plan 0.20.1: the conversation happens in the agent's own app; the agent writes the transcript with `loom session say`, read from `/_api/events` rather than waiting for the manifest
-	await page.goto('/node/sy-0003');
-	const sid = await intoASession(page, served);
+	const sid = served.openSessions().at(-1)!;
+	await page.goto(`/node/sy-0003?beside=${encodeURIComponent('/session/' + sid)}`);
 	const chat = page.locator('[data-pane="1"]').getByTestId('chat');
 	await expect(chat).toBeVisible();
 	await expect(chat.getByRole('textbox')).toHaveCount(0);
@@ -232,8 +213,8 @@ test('what an agent says arrives in the transcript without a rebuild, and the vi
 
 test("an agent's report arrives in the transcript folded after its summary", async ({ page, served }) => {
 	// plan 0.21.2: a mode's report is one message, its blocks under `## [name]`; the publisher marks them and the viewer folds the rest
-	await page.goto('/node/sy-0003');
-	const sid = await intoASession(page, served);
+	const sid = served.openSessions().at(-1)!;
+	await page.goto(`/node/sy-0003?beside=${encodeURIComponent('/session/' + sid)}`);
 	const chat = page.locator('[data-pane="1"]').getByTestId('chat');
 	await expect(chat).toBeVisible();
 	const finding = 'The count needs the set finite, and the statement does not say so. '.repeat(10);
@@ -268,7 +249,6 @@ async function noteOn(page: import('@playwright/test').Page, at: import('@playwr
 test('an annotation is written with no session selected, and names none', async ({ page, served }) => {
 	await holding(page, 'question');
 	await page.goto('/node/sy-0003');
-	await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
 	await noteOn(page, page.locator('[data-pane="0"] .fragment .env[data-id="sy-0003"] > p[data-src]').first(), 'Which sitting is this in?');
 	const mine = served.written('Which sitting is this in?');
 	expect(mine.target).toBe('sy-0003');
@@ -278,7 +258,6 @@ test('an annotation is written with no session selected, and names none', async 
 test('an annotation is edited, then deleted, which takes its lines out of the log, and Undo puts the same lines back', async ({ page, served }) => {
 	const id = served.log().find((e) => e.event === 'created' && e.target === 'sy-0003' && e.type === 'revision')!.id as string;
 	await page.goto('/node/sy-0003');
-	await intoASession(page, served);
 	const mark = page.locator(`[data-pane="0"] .fragment mark.annotation[data-annotation~="${id}"]`).first();
 	await mark.click();
 	const box = page.locator(`[data-testid="ann-popup"][data-annotation-id="${id}"]`);
@@ -391,33 +370,9 @@ test('a comment is edited as the Markdown it was written in, its math and its li
 	await expect(field).toHaveValue(original);
 });
 
-test('deleting a session from the picker tombstones it in the index, and no annotation goes with it', async ({ page, served }) => {
-	// session-delete (SessionFooter), through the confirmation that says what goes and what does not
-	await page.goto('/node/sy-0003');
-	const id = await intoASession(page, served);
+test('Review\'s Sessions closes, reopens and deletes a session, a tombstone that takes no annotation with it', async ({ page, served }) => {
+	const id = served.openSessions().at(-1)!;
 	const written = served.log();
-	expect(written.length).toBeGreaterThan(0);
-	await openPicker(page);
-	const row = page.getByTestId(`session-${id}`);
-	await row.hover();
-	await page.getByTestId(`session-delete-${id}`).click();
-	const modal = page.getByTestId('delete-session');
-	await expect(modal.getByTestId('delete-says')).toContainText('Annotations belong to no session, so none goes with it');
-	await modal.getByTestId('delete-confirm').click();
-	await expect(modal).toHaveCount(0);
-	await expect.poll(() => sessionIndex(served).filter((e) => e.event === 'deleted' && e.id === id).length).toBe(1);
-	expect(served.openSessions()).not.toContain(id);
-	// a tombstone, not a purge, and the annotation log is untouched
-	expect(served.log()).toEqual(written);
-	// and the viewer lets go of it: nothing is selected, and the picker no longer lists it
-	await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
-	await openPicker(page);
-	await expect(page.getByTestId(`session-${id}`)).toHaveCount(0);
-});
-
-test('Review\'s Sessions closes, reopens and deletes a session through the same verbs as the picker', async ({ page, served }) => {
-	await page.goto('/node/sy-0003');
-	const id = await intoASession(page, served);
 	await page.goto('/review/record/sessions');
 	const row = page.getByTestId(`session-row-${id}`);
 	await expect(row).toContainText('open');
@@ -428,9 +383,13 @@ test('Review\'s Sessions closes, reopens and deletes a session through the same 
 	await expect(row).toContainText('open');
 	await expect.poll(() => served.openSessions()).toContain(id);
 	await page.getByTestId(`sessions-delete-${id}`).click();
-	await page.getByTestId('delete-session').getByTestId('delete-confirm').click();
+	const modal = page.getByTestId('delete-session');
+	await expect(modal.getByTestId('delete-says')).toContainText('Annotations belong to no session, so none goes with it');
+	await modal.getByTestId('delete-confirm').click();
 	await expect.poll(() => sessionIndex(served).filter((e) => e.event === 'deleted' && e.id === id).length).toBe(1);
 	await expect(row).toHaveCount(0);
+	// a tombstone, not a purge, and the annotation log is untouched
+	expect(served.log()).toEqual(written);
 });
 
 /** The keys the copy's acceptance ledger has a row for, in order. */

@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from tests.helpers import json_of, ok
-from tests.unit._quilts import demo, open_session
+from tests.unit._quilts import demo
 from tests.unit.render._serve import get, post
 
 
@@ -33,7 +33,6 @@ def test_a_server_no_tab_has_reported_to_names_where_to_open_it(session) -> None
 
 def test_a_document_a_block_and_the_words_selected_are_named_with_their_links(session) -> None:  # type: ignore[no-untyped-def]
     s, q = session
-    sid = open_session(q)
     told(
         s,
         {
@@ -42,7 +41,6 @@ def test_a_document_a_block_and_the_words_selected_are_named_with_their_links(se
             "block": {"src": "drafting/nodes/dm-0003.tex:1:4", "key": "dm-0003"},
             "selection": {"key": "dm-0003", "text": "a finite set"},
             "beside": {"kind": "work", "id": "Calloway14", "place": {"page": 2}},
-            "session": sid,
         },
     )
     got = json_of("here", "--json", cwd=q)["looking"]
@@ -51,10 +49,10 @@ def test_a_document_a_block_and_the_words_selected_are_named_with_their_links(se
     assert got["selection"]["text"] == "a finite set"
     calloway = scanned_refs(q)["Calloway14"]
     assert got["beside"]["link"] == f"quilt:{calloway}#page=2"
-    assert got["session"]["link"] == f"quilt:{sid}"
+    assert "session" not in got
     text = ok("here", cwd=q).stdout
     assert text.startswith("the person is looking at drafting/main.tex, at dm-0003 (")
-    assert '"a finite set"' in text and "[](quilt:dm-0003)" in text and "the one they have chosen" in text
+    assert '"a finite set"' in text and "[](quilt:dm-0003)" in text and "chosen" not in text
     assert "by the viewer tab touched last" in text
 
 

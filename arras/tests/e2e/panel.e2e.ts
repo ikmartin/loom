@@ -1,8 +1,7 @@
-// The side panel: the documents and their contents, the Nodes section, the write target pinned in a footer, and the session list in a picker it opens. Each test is named for the rule it holds.
+// The side panel: the documents and their contents, the Nodes section, and the foot. Each test is named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, pane, scrollPane, viewMenu } from '../workspace';
-import { openPicker, pickSession } from '../picker';
-import { QUICK, REFEREE, serveKept } from '../manifest';
+import { REFEREE, serveKept } from '../manifest';
 
 // these are about annotations and the page; the fixture's pending changes are left out, and tested apart (changes.e2e.ts)
 test.beforeEach(({ page }) => serveKept(page));
@@ -12,107 +11,18 @@ async function writes(page: Page, caps: string[]): Promise<void> {
 	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: caps, token: 't' } }));
 }
 
-test('the write target is stated once', async ({ page }) => {
-	// a title no annotation or author shares, so a count of it is a count of the places that name the session
-	await serveKept(page, (m) => {
-		m.sessions.find((s: { id: string }) => s.id === REFEREE).title = 'the refereeing sitting';
-	});
-	// a document and a node beside it: two items, two panes, and still one place that says where writes go
-	await page.goto('/master/drafting/main' + beside('/node/sy-0003'));
-	await expect(pane(page, 1)).toBeVisible();
-	await pickSession(page, REFEREE);
-	await expect(page.getByTestId('session-footer-name')).toHaveText('the refereeing sitting');
-	// choosing it opened its Chat, whose tab names the item that is open, a different question from where writes go
-	const naming = await page.evaluate(
-		() =>
-			[...document.querySelectorAll('body *')].filter(
-				(el) => !el.closest('[data-testid="item-tab"]') && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.includes('the refereeing sitting'))
-			).length
-	);
-	expect(naming).toBe(1);
-});
-
-test("the picker chooses where notes go, and nothing about which annotations the page draws", async ({ page }) => {
-	await page.goto('/node/sy-0002');
-	await openPicker(page);
-	const picker = page.getByTestId('session-picker');
-	await expect(picker.getByRole('group', { name: 'which annotations the page shows' })).toHaveCount(0);
-	await expect(picker.getByTestId('show-all')).toHaveCount(0);
-	await expect(picker.getByTestId(`session-${REFEREE}`)).not.toContainText('open');
-	await page.keyboard.press('Escape');
-});
-
-test('an annotation needs no session, and the footer says in its own tone when nothing is selected', async ({ page }) => {
+test('nothing says whether a session is chosen, and an annotation needs none', async ({ page }) => {
 	await writes(page, ['annotate']);
 	await page.goto('/node/sy-0002');
-	// a comment left on the node asks for no session
 	const words = pane(page, 0).locator('.fragment .env[data-id="sy-0002"] p[data-src]').first();
 	await expect(words).toBeVisible();
 	await page.getByTestId('tool-comment').click();
 	await words.click({ position: { x: 4, y: 4 } });
 	await page.getByTestId('popup-comment-field').fill('Say which orbit.');
 	await expect(page.getByTestId('popup-save')).toBeEnabled();
-	// the footer carries only the state: refused, in its own tone, without the sentence
-	const footer = page.getByTestId('session-footer');
-	await expect(footer).toHaveAttribute('aria-label', /^No session chosen/);
-	await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
-	await expect(page.locator('.footer.refused')).toHaveCount(1);
-	await pickSession(page, REFEREE);
-	await expect(footer).toHaveAttribute('aria-label', 'Writing in referee');
-	await expect(page.locator('.footer.refused')).toHaveCount(0);
-});
-
-test('opening a session says it is working until the publisher answers, and opens one however long that takes', async ({ page }) => {
-	// a large quilt is rebuilt before the publisher answers, which took a minute: the field closed at once and showed nothing, so the reader pressed Enter again and got two sessions
-	await writes(page, ['session-new']);
-	let calls = 0;
-	let release: () => void = () => {};
-	const answered = new Promise<void>((done) => (release = done));
-	await page.route('**/_api/session-new', async (route) => {
-		calls += 1;
-		await answered;
-		await route.fulfill({ json: { ok: true, result: 's-2026-10-02-7z63as  a long sitting  (active)' } });
-	});
-	await page.goto('/master/drafting/main');
-	await openPicker(page);
-	await page.getByTestId('session-new').click();
-	const field = page.getByTestId('session-new-title');
-	await field.fill('a long sitting');
-	await field.press('Enter');
-	const status = page.getByTestId('session-new-status');
-	await expect(status).toHaveText('opening “a long sitting”…');
-	await expect(field).toBeDisabled();
-	await expect(field).toHaveValue('a long sitting');
-	release();
-	await expect(status).toHaveCount(0);
-	expect(calls).toBe(1);
-});
-
-test('a session the publisher refuses to open says why, and keeps what was typed', async ({ page }) => {
-	await writes(page, ['session-new']);
-	await page.route('**/_api/session-new', (route) =>
-		route.fulfill({ status: 409, json: { error: { code: 'refused', message: 'no author name: set one in Settings' } } })
-	);
-	await page.goto('/master/drafting/main');
-	await openPicker(page);
-	await page.getByTestId('session-new').click();
-	const field = page.getByTestId('session-new-title');
-	await field.fill('a sitting');
-	await field.press('Enter');
-	await expect(page.getByTestId('session-new-status')).toHaveText('no author name: set one in Settings');
-	await expect(field).toBeEnabled();
-	await expect(field).toHaveValue('a sitting');
-});
-
-test('the session picker is not in the column', async ({ page }) => {
-	await page.goto('/master/drafting/main');
-	const column = page.locator('.panel .sections');
-	await expect(column).toBeVisible();
-	await expect(column.getByTestId('session-list')).toHaveCount(0);
+	await expect(page.getByTestId('session-footer')).toHaveCount(0);
 	await expect(page.getByTestId('session-picker')).toHaveCount(0);
-	await openPicker(page);
-	await expect(page.getByTestId('session-list')).toBeVisible();
-	await expect(column.getByTestId('session-picker')).toHaveCount(0);
+	await expect(page.locator('body')).not.toContainText(/session chosen|writing in/i);
 });
 
 test.describe('the contents', () => {
@@ -260,7 +170,7 @@ test.describe('the contents', () => {
 });
 
 test('a session rename shows at once', async ({ page }) => {
-	await writes(page, ['session-rename']);
+	await writes(page, ['session-rename', 'session-close']);
 	// the publisher does not answer until the name has shown, so a name that waited for it never would
 	let shown = () => {};
 	const nameShown = new Promise<void>((r) => (shown = r));
@@ -268,40 +178,19 @@ test('a session rename shows at once', async ({ page }) => {
 		await nameShown;
 		await route.fulfill({ json: { ok: true, result: '' } });
 	});
-	await page.goto('/master/drafting/main');
-	await pickSession(page, REFEREE);
-	await openPicker(page);
-	// the verbs stand over a row only while the pointer is on it, the selected row included
-	await expect(page.getByTestId(`session-edit-${REFEREE}`)).toBeHidden();
-	await page.getByTestId(`session-${REFEREE}`).hover();
-	await page.getByTestId(`session-edit-${REFEREE}`).click();
-	await page.getByTestId(`session-rename-${REFEREE}`).fill('the second reading');
-	await page.getByTestId(`session-rename-${REFEREE}`).press('Enter');
-	await expect(page.getByTestId(`session-${REFEREE}`)).toContainText('the second reading');
-	await expect(page.getByTestId('session-footer-name')).toHaveText('the second reading');
+	await page.goto('/review/record/sessions');
+	await page.getByTestId(`sessions-rename-${REFEREE}`).click();
+	const field = page.getByRole('textbox', { name: 'Rename referee' });
+	await field.fill('the second reading');
+	await field.press('Enter');
+	await expect(page.getByTestId(`session-row-${REFEREE}`)).toContainText('the second reading');
 	const answered = page.waitForResponse('**/_api/session-rename');
 	shown();
 	await answered;
 });
 
-test('⟳ reopens and selects', async ({ page }) => {
-	await writes(page, ['session-reopen']);
-	let reopened = '';
-	await page.route('**/_api/session-reopen', async (route) => {
-		reopened = route.request().postDataJSON().session;
-		await route.fulfill({ json: { ok: true, result: '' } });
-	});
-	await page.goto('/master/drafting/main');
-	await openPicker(page);
-	await page.getByTestId('show-closed').click();
-	await page.getByTestId(`session-reopen-${QUICK}`).click();
-	await expect.poll(() => reopened).toBe(QUICK);
-	await expect(page.getByTestId('session-footer-name')).toHaveText('quick');
-	await expect(page.getByTestId('session-picker')).toHaveCount(0);
-});
-
 test('accepting needs no session', async ({ page }) => {
-	// accepting and incorporating a pull name no session, so an amber footer must not mean nothing can be written
+	// accepting and incorporating a pull name no session
 	await writes(page, ['review-accept']);
 	let accepted: string[] = [];
 	await page.route('**/_api/review-accept', async (route) => {
@@ -309,44 +198,22 @@ test('accepting needs no session', async ({ page }) => {
 		await route.fulfill({ json: { ok: true, result: 'accepted 1 of 1', accepted, refused: [] } });
 	});
 	await page.goto('/review');
-	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^No session chosen/);
 	const accept = page.locator('[data-testid="review-row"][data-key="sy-0001"]').getByTestId('review-accept');
 	await expect(accept).toBeEnabled();
 	await accept.click();
 	await expect.poll(() => accepted).toEqual(['sy-0001']);
 });
 
-test.describe('sessions', () => {
-	test('the chosen session is still chosen after a load', async ({ page }) => {
-		await page.goto('/master/drafting/main');
-		await pickSession(page, REFEREE);
-		await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^Writing in /);
-		await page.reload();
-		await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^Writing in /);
-		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
-	});
-
-	test('a stored session the corpus no longer lists is let go', async ({ page }) => {
-		await page.addInitScript(() => localStorage.setItem('arras.session-view', JSON.stringify({ selected: 's-gone', view: 'all', showClosed: false })));
-		await page.goto('/master/drafting/main');
-		await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
-		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('arras.session-view') ?? '{}').selected)).toBeFalsy();
-	});
-
-	test('selecting a session narrows nothing on the page; the pane alone hides its annotations', async ({ page }) => {
-		await page.goto('/node/sy-0002');
-		const counted = pane(page, 0).locator('.fragment mark.annotation-label');
-		await expect(counted).toHaveCount(1);
-		await pickSession(page, REFEREE);
-		await expect(counted).toHaveCount(1);
-		// turned off, the pane draws no annotation at all, whatever is selected
-		await viewMenu(page, 0);
-		await page.getByTestId('toggle-hide-notes').click();
-		await expect(pane(page, 0).locator('.fragment mark.annotation:not(.hidden)')).toHaveCount(0);
-		await viewMenu(page, 0);
-		await page.getByTestId('toggle-hide-notes').click();
-		await expect(counted).toHaveCount(1);
-	});
+test("the pane alone hides a page's annotations", async ({ page }) => {
+	await page.goto('/node/sy-0002');
+	const counted = pane(page, 0).locator('.fragment mark.annotation-label');
+	await expect(counted).toHaveCount(1);
+	await viewMenu(page, 0);
+	await page.getByTestId('toggle-hide-notes').click();
+	await expect(pane(page, 0).locator('.fragment mark.annotation:not(.hidden)')).toHaveCount(0);
+	await viewMenu(page, 0);
+	await page.getByTestId('toggle-hide-notes').click();
+	await expect(counted).toHaveCount(1);
 });
 
 test.describe('sections', () => {

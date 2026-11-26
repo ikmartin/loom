@@ -45,8 +45,8 @@ test("the side panel scrolls rather than overflowing, and the contents' last ent
 	const last = page.getByRole('navigation', { name: 'Contents' }).locator('a').last();
 	await last.scrollIntoViewIfNeeded();
 	await expect(last).toBeInViewport();
-	// and the write target is pinned below the scroll rather than scrolled away with it
-	await expect(page.getByTestId('session-footer')).toBeInViewport();
+	// and the foot is pinned below the scroll rather than scrolled away with it
+	await expect(page.getByTestId('legend-open')).toBeInViewport();
 });
 
 test('the side panel collapses, and the column goes with it', async ({ page }) => {
@@ -89,7 +89,7 @@ test('the shell fits the window: nothing in a rail falls below the fold', async 
 	expect(fit.scroll).toBeLessThanOrEqual(fit.inner); // a rail is `height: 100vh`, and its padding must count inside that
 	// the things at the foot of the shell are reachable without scrolling
 	await expect(page.getByTestId('settings-toggle')).toBeInViewport();
-	await expect(page.getByTestId('session-footer')).toBeInViewport();
+	await expect(page.getByTestId('legend-open')).toBeInViewport();
 });
 
 test('Show ids puts the id and the state in the key gutter, beside a node in a document and on its own page', async ({ page }) => {

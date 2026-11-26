@@ -270,7 +270,7 @@
 					{/if}
 				{/if}
 			</div>
-			<!-- The foot, pinned outside the scroll in every view: what was just done, the legend of the marks, and the agent's row (S5: writes land in the selected session whatever is shown, so a reader must never go looking for where their work will go). -->
+			<!-- The foot, pinned outside the scroll in every view: what was just done, the legend of the marks, and whether an agent is connected. -->
 			<div class="foot">
 				<Message />
 				<Legend />

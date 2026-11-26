@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goto } from '$app/navigation';
 import type { Manifest } from '$lib/manifest/types';
-import { sessionView } from '$lib/sessions/sessions.svelte';
-import { follow, holding, interceptLinks, itemForQuilt, openChat, previewOfHref, previewOfKey, soleSession } from './links';
+import { follow, holding, interceptLinks, itemForQuilt, previewOfHref, previewOfKey, soleSession } from './links';
 import { itemKey, regionAt, type Item } from './item';
 import { workspace } from './store.svelte';
 import { linkName, regionName } from './names';
@@ -203,7 +202,6 @@ const panes = () => workspace.panes.map((p) => p.items.map((i) => (itemKey(i) ==
 beforeEach(() => {
 	workspace.reset();
 	workspace.onScreen = false;
-	sessionView.selected = null;
 	vi.mocked(goto).mockClear();
 });
 
@@ -253,45 +251,6 @@ describe('one session on screen', () => {
 		expect(panes()).toEqual([['*document:drafting/main.tex'], ['*session:s-keep']]);
 		soleSession('s-other');
 		expect(panes()).toEqual([['*document:drafting/main.tex']]);
-	});
-});
-
-describe('opening a Chat', () => {
-	it('outside reading mode only selects the session', () => {
-		openChat('s-2026-09-16-p9z37z', m);
-		expect(sessionView.selected).toBe('s-2026-09-16-p9z37z');
-		expect(workspace.panes).toEqual([]);
-	});
-
-	it('into an empty workspace opens it where the reader is', () => {
-		workspace.onScreen = true;
-		openChat('s-2026-09-16-p9z37z', m);
-		expect(panes()).toEqual([['*session:s-2026-09-16-p9z37z']]);
-	});
-
-	it('opens beside what is being read and gives focus back to the reader’s pane', () => {
-		workspace.onScreen = true;
-		workspace.openIn(doc('drafting/main.tex'), 0);
-		openChat('s-2026-09-16-p9z37z', m);
-		expect(panes()).toEqual([['*document:drafting/main.tex'], ['*session:s-2026-09-16-p9z37z']]);
-		expect(workspace.focus).toBe(0);
-		// a reader in the right-hand pane: the Chat goes left, and focus stays right
-		workspace.reset();
-		workspace.openIn(doc('drafting/main.tex'), 0);
-		workspace.beside(node('sy-9999'), 0);
-		openChat('s-2026-09-16-p9z37z', m);
-		expect(panes()).toEqual([['document:drafting/main.tex', '*session:s-2026-09-16-p9z37z'], ['*node:sy-9999']]);
-		expect(workspace.focus).toBe(1);
-	});
-
-	it('replaces the Chat of another session, and leaves the selection to a caller that set it', () => {
-		workspace.onScreen = true;
-		workspace.openIn(doc('drafting/main.tex'), 0);
-		workspace.beside(chat('s-old'), 0);
-		sessionView.selected = 's-chosen';
-		openChat('s-2026-09-16-p9z37z', m, false);
-		expect(panes()).toEqual([['*document:drafting/main.tex'], ['*session:s-2026-09-16-p9z37z']]);
-		expect(sessionView.selected).toBe('s-chosen');
 	});
 });
 

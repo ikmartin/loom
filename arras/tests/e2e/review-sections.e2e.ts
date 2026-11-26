@@ -1,6 +1,6 @@
 // Review, the quilt's management: its column lists the sections, each with what waits for the author there, and each section is a page of its own. Each test is named for the rule it holds.
 import { expect, test } from '@playwright/test';
-import { manifest, QUICK, REFEREE, serve } from '../manifest';
+import { manifest, REFEREE, serve } from '../manifest';
 
 test('Review\'s column lists its sections, each counting what waits there, the current one marked', async ({ page }) => {
 	await page.goto('/review');
@@ -43,16 +43,11 @@ test('History\'s Sessions lists every session with when it was last active, and 
 	await expect(table.getByTestId(`session-last-${REFEREE}`)).toHaveAttribute('title', referee.last);
 	await table.getByRole('link').first().click();
 	await expect(page).toHaveURL(/\/session\//);
-	// a static host serves no writes, so no verb is offered but Write here, which is the viewer's own
+	// a static host serves no writes, so no verb is offered; and nothing chooses a session or says one is chosen
 	await page.goto('/review/record/sessions');
 	await expect(page.locator('[data-testid^="sessions-close-"]')).toHaveCount(0);
-	await expect(page.getByTestId('sessions-new')).toHaveCount(0);
-	await expect(page.getByTestId('sessions-writing')).toHaveText('Not writing in a session');
-	await page.getByTestId(`sessions-write-here-${REFEREE}`).click();
-	await expect(page.getByTestId('sessions-writing-here')).toBeVisible();
-	await expect(page.getByTestId('session-footer-name')).toHaveText('referee');
-	// a closed session is not offered as a place to write
-	await expect(page.locator(`[data-testid="sessions-write-here-${QUICK}"]`)).toHaveCount(0);
+	await expect(page.getByTestId('sessions-table')).toBeVisible();
+	await expect(page.locator('body')).not.toContainText(/writing in|write here|session chosen/i);
 });
 
 test('History shows a document’s versions oldest first and Now, every act recorded on its own tab, and flags a version no live draft leads to', async ({ page }) => {

@@ -3,7 +3,6 @@
 // A test that writes (`test`) is served on its own copy of the showcase, and one that only reads (`readOnly`) on its worker's; a test that needs a note to exist writes it first through the API.
 import { ARRAS, compileFolder, expect, readOnly, test, workOf, type Served } from '../served';
 import type { Page } from '@playwright/test';
-import { openPicker, pickSession } from '../picker';
 import { beside, openHere } from '../workspace';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -23,15 +22,12 @@ function bellamy(served: Served): { ref: string; hex: string } {
 	return { ref: work.ref, hex: basename(work.pdf!, '.pdf') };
 }
 
-/** Open page 2 with a session chosen, and wait until the paper has been drawn again for the narrower pane; returns the session. */
+/** Open page 2 and wait until the paper is drawn and holding still; returns the showcase's newest open session, for writes that name one through the API. */
 async function opened(page: Page, served: Served): Promise<string> {
 	await page.goto(PAGE2);
 	await page.locator('[data-testid="pdf-page-2"] canvas').waitFor();
-	const session = await intoASession(page, served);
-	// choosing a session opens its Chat beside, which narrows the paper's pane and draws its pages again at the zoom that fits; a selection made while the text layer is being replaced would be lost with it
-	await expect(page.locator('[data-pane="1"]').getByTestId('chat')).toBeVisible();
 	await drawn(page, 2);
-	return session;
+	return served.openSessions().at(-1)!;
 }
 
 /** The text layer page `n` holds now, numbered in the order this page first saw each layer; 0 before it has one. A redraw replaces the layer, so a new number is a new draw. */
@@ -68,18 +64,6 @@ async function drawn(page: Page, n: number, { every = 300, after = 0 } = {}): Pr
 		)
 		.toBe('held');
 	return layer;
-}
-
-/**
- * Choose where the notes will be filed: the showcase's newest open session, read from the copy's session index.
- *
- * A write names its session and nothing is selected at rest (plan 0.13.1), so this is the first thing a reader does before annotating — and therefore the first thing these tests do.
- */
-async function intoASession(page: Page, served: Served): Promise<string> {
-	const id = served.openSessions().at(-1)!;
-	await pickSession(page, id);
-	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^Writing in /);
-	return id;
 }
 
 /** A person's note on page 2 of Bellamy19 over `phrase`, of type `type` or none, written through the API; returns its id. */
@@ -263,24 +247,6 @@ test('a locator in the URL is lit while the URL carries it, and a note is focuse
 	await expect(page.getByTestId(`page-mark-${id}`)).toHaveClass(/\bon\b/);
 	// and it arrives open: a link to a note is a link to what it says (plan 0.14)
 	await expect(page.locator(`[data-testid="ann-popup"][data-annotation-id="${id}"]`)).toBeVisible();
-});
-
-test('a session is named on the spot and closed from the page', async ({ page, served }) => {
-	await opened(page, served);
-	await openPicker(page);
-	await page.getByTestId('session-new').click();
-	await page.getByTestId('session-new-title').fill('reading Bellamy, closely');
-	await page.getByTestId('session-new-title').press('Enter');
-	// it is selected on being opened, and the footer says so because that is where a note would land
-	await expect(page.getByTestId('session-footer-name')).toContainText('reading Bellamy, closely');
-	// closing the selected session clears the selection, so writing is unavailable until another is chosen
-	await openPicker(page);
-	// the verbs stand over a row only while the pointer is on it
-	const row = page.locator('[data-testid="session-list"] li.selected');
-	await expect(row.locator('[data-testid^="session-close-"]')).toBeHidden();
-	await row.hover();
-	await row.locator('[data-testid^="session-close-"]').click();
-	await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
 });
 
 test('two notes on one place are each drawn there, with no count, and a click opens one of them', async ({ page, served }) => {

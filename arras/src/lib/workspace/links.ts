@@ -6,7 +6,6 @@
 
 import { goto } from '$app/navigation';
 import type { Manifest } from '$lib/manifest/types';
-import { sessionView } from '$lib/sessions/sessions.svelte';
 import { externalUrl, isWorkLink, parseWorkLink } from '$lib/worklink';
 import { anchorId, keyTarget, keyUrl, nodeUrl } from '$lib/nav';
 import { isDocument } from '$lib/review/run';
@@ -261,34 +260,12 @@ export function holding(m: Manifest, item: Item, from: number): { item: Item; pa
 }
 
 /**
- * Close every session but `id`, wherever it stands: one transcript is open at a time, the one read last. Which session writes go to is the footer's, and reading one never changes it.
+ * Close every session but `id`, wherever it stands: one transcript is open at a time, the one read last.
  */
 export function soleSession(id: string): void {
 	for (let p = workspace.panes.length - 1; p >= 0; p--) {
 		for (const it of [...workspace.panes[p].items]) if (it.kind === 'session' && it.id !== id) workspace.close(p, itemKey(it));
 	}
-}
-
-/**
- * Open a session's transcript beside what is being read, or reveal it where it is, without taking focus; with `select`, the default, also choose it as where writes go, which the picker's rows do. `select` is false to read it alone, or for a caller that has set the selection itself.
- *
- * Choosing a session is not a change of what is being read, so the focused pane, and with it the controls, stays with the item the reader was in.
- */
-export function openChat(id: string, m: Manifest | null, select = true): void {
-	if (select) sessionView.select(id);
-	if (!workspace.onScreen) return;
-	soleSession(id);
-	const item: Item = { kind: 'session', id };
-	const was = workspace.panes.length ? workspace.focus : -1;
-	if (was < 0) {
-		workspace.here(item);
-		return;
-	}
-	const current = workspace.active(was);
-	workspace.beside(item, was);
-	// beside focuses what it opened; the reader's pane is the one they were in, wherever that item now stands
-	const back = current ? workspace.paneOf(itemKey(current)) : was;
-	workspace.focusOn(back >= 0 ? back : was);
 }
 
 /**

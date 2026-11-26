@@ -356,7 +356,7 @@ Reserved colour classes: `neutral`, `positive`, `positive-strong`, `warning`, `n
 ]
 ```
 
-The **id** is minted once and is the address; the **title** is the author's and may change. `opened` is when the current round began, which is what "changed since last time" is measured from; `last` is when the session was last written in, the newest of its logged commands (§10) and its transcript's last message, `""` when nothing was. `active` marks the session a command run at a terminal writes in; the viewer's footer names the one the person has chosen, which `loom here` reports. A tombstoned session is not published at all.
+The **id** is minted once and is the address; the **title** is the author's and may change. `opened` is when the current round began, which is what "changed since last time" is measured from; `last` is when the session was last written in, the newest of its logged commands (§10) and its transcript's last message, `""` when nothing was. `active` marks the session a command run at a terminal writes in. Nothing in the viewer chooses a session: an agent's conversation writes in its own, and the viewer lists them in Review › History as the agents' reports. A tombstoned session is not published at all.
 
 ## 9.2 Suggested edits
 

@@ -1,11 +1,10 @@
-// Where the reader is (plan 0.21.8): the focused pane's item, the block at its top, the words selected or the region of a page, the annotation whose popup is open, the block under review, and the selected session, reported to the publisher's `here` so that `loom here` can tell an agent what "this" is.
+// Where the reader is (plan 0.21.8): the focused pane's item, the block at its top, the words selected or the region of a page, the annotation whose popup is open, and the block under review, reported to the publisher's `here` so that `loom here` can tell an agent what "this" is.
 //
 // **The tab touched last wins.** Every tab reports when its place settles and again the moment it gains focus or comes back into view, and the publisher keeps only the last report. The publisher holds it in memory; nothing here or there writes it down.
 
 import { itemKey, type Item } from '$lib/workspace/item';
 import { workspace } from '$lib/workspace/store.svelte';
 import { documentState, fileState, nodeState, workState } from '$lib/workspace/state.svelte';
-import { sessionView } from '$lib/sessions/sessions.svelte';
 import { store } from '$lib/manifest/client.svelte';
 import { can, write } from '$lib/write';
 import { keyOf, quoteOf } from '$lib/fragments/quote';
@@ -65,7 +64,6 @@ export interface PlaceInput {
 	/** The annotation whose popup is open in the current item. */
 	annotation?: string | null;
 	review: { key: string; cause: string | null } | null;
-	session: string | null;
 }
 
 /** An item as the publisher is told it: what it is and which, a paper's place and a file's; the view, a document's anchor and the note are the viewer's. */
@@ -78,7 +76,6 @@ function bare(item: Item | null): Record<string, unknown> | undefined {
 /** The body of a `here` report: one place, the current pane's, with the selection only when it is in the current item. */
 export function placeOf(i: PlaceInput): Record<string, unknown> {
 	const out: Record<string, unknown> = { route: i.route };
-	if (i.session) out.session = i.session;
 	if (i.route === 'review') {
 		if (i.review) out.review = i.review;
 		return out;
@@ -162,8 +159,7 @@ export function startReporting(route: () => Route, path: () => string): () => vo
 			region: here.region,
 			page: current?.kind === 'work' ? workState(current).pdf.page : undefined,
 			annotation: openIn(current),
-			review: here.review,
-			session: sessionView.selected
+			review: here.review
 		});
 	};
 	const send = (force: boolean) => {
