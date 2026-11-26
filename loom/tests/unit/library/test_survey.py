@@ -872,11 +872,26 @@ NEVER_ENDS = "\\documentclass{article}\n\\begin{document}\nSpinning.\n\\loop\\if
 
 
 def _tex_under(marker: str) -> list[str]:
-    """The command lines of TeX's programs running in a folder whose path holds `marker`."""
+    """The command lines of TeX's programs running in a folder whose path holds `marker`.
+
+    Linux's are read from `/proc`, since procps refuses `-x` as a System V option and its `-a` leaves out session leaders, which every foreign compile is (`start_new_session`); elsewhere `ps -A`, every process, at unlimited width.
+    """
     import subprocess
 
-    listed = subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True, check=False).stdout
-    return [line for line in listed.splitlines() if marker in line and ("tex" in line or "latexmk" in line)]
+    proc = Path("/proc")
+    if (proc / "self" / "cmdline").is_file():
+        listed = []
+        for p in proc.iterdir():
+            if not p.name.isdigit():
+                continue
+            try:
+                listed.append((p / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace"))
+            except OSError:
+                continue
+    else:
+        out = subprocess.run(["ps", "-A", "-ww", "-o", "command="], capture_output=True, text=True, check=False)
+        listed = out.stdout.splitlines()
+    return [line for line in listed if marker in line and ("tex" in line or "latexmk" in line)]
 
 
 def _waited(until: Callable[[], bool], seconds: float) -> bool:
