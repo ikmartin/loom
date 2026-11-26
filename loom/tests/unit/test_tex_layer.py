@@ -49,6 +49,16 @@ def test_a_source_nobody_at_loom_wrote_starts_no_command_whatever_the_shell_says
     assert tex_env()["shell_escape"] == "p"
 
 
+def test_every_tex_loom_starts_writes_its_log_lines_whole_whatever_the_shell_or_the_distribution_says(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """TeX Live breaks a log line at its 79th byte and loom's own TeX does not; loom reads warnings and paths from the log, so it has every TeX write lines whole, a person's own and a foreign source's compile alike."""
+    from loom.tex.runner import tex_env
+
+    monkeypatch.setenv("max_print_line", "79")
+    assert tex_env()["max_print_line"] == tex_env(foreign=True)["max_print_line"] == "10000"
+
+
 def test_aux_read_plain_and_hyperref() -> None:
     text = "\\relax\n\\newlabel{lem:a}{{1.1}{1}}\n\\newlabel{lem:a@cref}{{[lemma][1][1]1.1}{[1][1][]1}}\n\\newlabel{thm:b}{{2.1}{12}{Main theorem}{theorem.2.1}{}}\n\\newlabel{eq:c}{{3}{4}}\n\\newlabel{sec:s}{{2}{12}{Results}{section.2}{}}\n"
     n = parse_aux(text)

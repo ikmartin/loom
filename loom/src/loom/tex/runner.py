@@ -33,6 +33,8 @@ ENGINE_FLAGS = {
 LIMITS = {"openout_any": "p", "shell_escape": "p"}
 #: What a source nobody at loom wrote is compiled under: as `LIMITS`, and no command at all is started for it, a figure TeX would convert among them.
 FOREIGN = {**LIMITS, "shell_escape": "f"}
+#: How long a line TeX writes to its log before breaking it, for every TeX loom starts: as loom's own TeX has it, so a warning, an error's path and a missing file's name read whole in the log of any TeX, where TeX Live's default breaks them at the 79th byte.
+LOG_WIDTH = {"max_print_line": "10000"}
 #: Seconds of CPU each program a foreign compile starts may spend (`ulimit -t`): a TeX left running when loom is killed dies by itself.
 FOREIGN_CPU = 600
 #: The foreign compiles running now, ended with their process groups when loom exits.
@@ -50,12 +52,19 @@ def tex_env(*, foreign: bool = False) -> dict[str, str]:
     Returns
     -------
     dict of str to str
-        `os.environ` with what the TeX in use takes (`private.tex_vars`), `tex_date`, `LIMITS`, and `PAR_GLOBAL_TMPDIR`, the machine's one folder for `biber` to unpack into (`machine.unpacked`), whatever `TMPDIR` says: TeX Live's `biber` unpacks about 200 MB into its temporary folder on its first run there.
+        `os.environ` with what the TeX in use takes (`private.tex_vars`), `tex_date`, `LIMITS`, `LOG_WIDTH`, and `PAR_GLOBAL_TMPDIR`, the machine's one folder for `biber` to unpack into (`machine.unpacked`), whatever `TMPDIR` says: TeX Live's `biber` unpacks about 200 MB into its temporary folder on its first run there.
     """
     from loom.machine import unpacked
 
     limits = FOREIGN if foreign else LIMITS
-    return {**os.environ, **private.tex_vars(), **tex_date(), **limits, "PAR_GLOBAL_TMPDIR": str(unpacked())}
+    return {
+        **os.environ,
+        **private.tex_vars(),
+        **tex_date(),
+        **limits,
+        **LOG_WIDTH,
+        "PAR_GLOBAL_TMPDIR": str(unpacked()),
+    }
 
 
 #: A line of the context TeX prints after every error it reports: the line it stopped at (`l.12 …`), or what it was reading instead (`<*> main.tex`, `<argument> …`).

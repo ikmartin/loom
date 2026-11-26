@@ -113,3 +113,14 @@ def _running(group: int) -> bool:
         if int(pgrp) == group and state != "Z":
             return True
     return False
+
+
+@pytest.mark.tex
+def test_a_warning_longer_than_a_log_line_reads_whole_under_any_tex(tmp_path: Path) -> None:
+    """TeX Live breaks a log line at its 79th byte where loom's own TeX does not; loom has every TeX write it whole (`runner.LOG_WIDTH`), so a long warning is said the same under either."""
+    long = "w" * 120
+    res = compile_document(
+        _doc(tmp_path / "q", f"\\GenericWarning{{}}{{LaTeX Warning: {long} end}}"), "", "main.tex", tmp_path / "out"
+    )
+    assert res.pdf is not None, res.first_error
+    assert res.warnings == [f"LaTeX Warning: {long} end on input line 1."]
