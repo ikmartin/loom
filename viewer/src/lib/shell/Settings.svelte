@@ -30,16 +30,18 @@
 	let canName = $state(false);
 	let canUpdate = $state(false);
 	let canTypes = $state(false);
+	let canModes = $state(false);
 	/** Whether any loom serves this quilt: read-only then means the one serving it is older than this page. */
 	let served = $state(false);
 	// asked again at each opening, since the publisher may have restarted under the page since it was last asked
 	$effect(() => {
 		if (!open) return;
-		void Promise.all([can('settings-save'), can('reviewer-settings'), can('agents-update'), can('types-save'), capabilities()]).then(([save, name, update, types, caps]) => {
+		void Promise.all([can('settings-save'), can('reviewer-settings'), can('agents-update'), can('types-save'), can('agents-mode-save'), capabilities()]).then(([save, name, update, types, modes, caps]) => {
 			canSave = save;
 			canName = name;
 			canUpdate = update;
 			canTypes = types;
+			canModes = modes;
 			served = !!caps;
 		});
 	});
@@ -131,7 +133,7 @@
 				{:else if shown === 'annotations'}<Annotations editable={canTypes} />
 				{:else if shown === 'notes'}<Notes editable={canSave} />
 				{:else if config && shown === 'agents'}<Agents {config} editable={canSave} {canUpdate} />
-				{:else if shown === 'modes'}<Modes />
+				{:else if shown === 'modes'}<Modes editable={canModes} {served} />
 				{:else if shown === 'library'}<Library editable={canSave} />
 				{:else if shown === 'lean'}<Lean />
 				{:else if config && shown === 'overleaf'}<Overleaf />
