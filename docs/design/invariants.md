@@ -44,11 +44,13 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Why.** `refs propose --help` said "verified against the page", and an agent then told its author "All 13 verified" of thirteen proposals nobody had read.
 
-**Guard.** `loom/tests/unit/test_refs_layer.py::test_propose_does_not_hand_an_agent_the_authors_verb`
+**Guard.** `loom/tests/unit/evidence/test_acts.py::test_only_a_person_records_that_a_node_matches_its_paper_and_it_reads_matches_never_verified`
 
 **Record.** DR-183
 
 **2026-11-21.** Proposals, `refs propose` and the author's `library verify` are gone with today's library (plan 0.32, the library's phase 2), and so is the guard named above. The rule stands for what records a check of a node against its paper, the evidence lane's; until a test there holds it, it has no guard.
+
+**2026-11-26.** The guard is the evidence lane's test, named above in place of the gone `test_refs_layer.py::test_propose_does_not_hand_an_agent_the_authors_verb`: no agent and not loom records a node's match with its paper, by the act or by the evidence log, and what the person's act gives a node reads `matches`, never `verified`. The rule's text is unchanged.
 
 ### Overlooking is never accepting
 
