@@ -50,10 +50,12 @@ test('a doubly defined id has no text, and says where both definitions are', asy
 	await expect(page.locator('.fragment')).toHaveCount(0);
 	await page.goto('/review/problems?code=duplicate-id');
 	await expect(page.getByTestId('problem')).toHaveCount(0);
-	// read twice by one document's compile, it is the person's LaTeX, and the node points at Problems, where it is
+	// read twice by one document's compile, it is the person's LaTeX, which Review's Problems lists; the node, in Docs, says it in words and links nowhere outside Docs
 	await serve(page, (m) => void m.diagnostics.forEach((d: { code: string; class: string; severity: string }) => d.code === 'duplicate-id' && Object.assign(d, { class: 'latex', severity: 'error' })));
 	await page.goto('/node/' + dup.keys[0]);
-	await page.getByTestId('conflicted').getByRole('link', { name: 'problems' }).click();
+	await expect(page.getByTestId('conflicted')).toContainText('It has no text until one definition remains.');
+	await expect(page.getByTestId('conflicted').locator('a')).toHaveCount(0);
+	await page.goto('/review/problems?code=duplicate-id');
 	await expect(page.getByTestId('problem-group').getByTestId('problem').first()).toContainText('is defined by');
 });
 
@@ -61,12 +63,20 @@ test('without working documents, document views point at landmarks and the graph
 	await serve(page, (m) => {
 		m.masters = [];
 		m.corpus.home = null;
+		// a problem in the person's own LaTeX, which the empty page names nowhere
+		m.diagnostics.forEach((d: { code: string; class: string; severity: string }) => d.code === 'duplicate-id' && Object.assign(d, { class: 'latex', severity: 'error' }));
 	});
 	for (const path of ['/review', '/master/drafting/main']) {
 		await page.goto(path);
 		await expect(page.getByTestId('no-drafts')).toBeVisible();
 		await expect(page.getByTestId('no-drafts')).toContainText('Nothing is being worked on');
 	}
+	// in Docs, its one link is the newest landmark, which Docs opens; nothing on it leads to Review, the Library or the Web
+	const links = await page.getByTestId('no-drafts').locator('a').evaluateAll((as) => as.map((a) => new URL((a as HTMLAnchorElement).href).pathname));
+	expect(links).toEqual(['/canon/widgets-v3']);
+	await page.getByTestId('no-drafts').locator('a').click();
+	await expect(page).toHaveURL(/widgets-v3/);
+	expect(new URL(page.url()).pathname).not.toMatch(/^\/(review|library|web)/);
 	// with no front door, `/` and Docs open the newest landmark, which stands in for the document
 	await page.goto('/');
 	await expect(page).toHaveURL(/\/canon\/widgets-v3$/);

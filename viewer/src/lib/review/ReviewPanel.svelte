@@ -1,12 +1,11 @@
 <script lang="ts">
-	// Beside a document opened from Your Changes (`?review=KEY`), inside the document's side panel: the block, why it waits, the change when it changed since it was accepted (`SinceAccepted`), and Accept, its answer said here. A block loom cannot accept says why instead.
+	// Beside a document opened from Your Changes (`?review=KEY`), inside the document's side panel: the block, why it waits, the change when it changed since it was accepted (`SinceAccepted`), and Accept, its answer said here. A block loom cannot accept says why instead. It stands in Docs, so it links nowhere outside Docs: its `close` puts the panel away in place.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
 	import { landed } from '$lib/manifest/updating.svelte';
 	import { can, write } from '$lib/write';
 	import { displayNode } from '$lib/nodes/display';
-	import { reviewUrl } from '$lib/nav';
 	import { shortDate } from '$lib/badges';
 	import { here } from '$lib/here.svelte';
 	import Cannot from './Cannot.svelte';
@@ -63,13 +62,12 @@
 </script>
 
 <div class="panel">
-	<header><strong>{name}</strong><a href={plain}>close</a></header>
+	<header><strong>{name}</strong><a href={plain} data-testid="review-panel-close">close</a></header>
 	<p class="status" data-testid="review-panel-status">{status}</p>
 	<SinceAccepted {reviewKey} index={causes.indexOf(cause)} {master} onchoose={(i) => goto(causeHref(i), { noScroll: true, keepFocus: true })} />
 	{#if row?.refusal}<Cannot {row} testid="review-panel-refusal" />
 	{:else if row && served && m.reviewer?.name}<button class="btn primary" disabled={busy} onclick={() => void accept()} data-testid="review-panel-accept">{busy ? 'Accepting…' : 'Accept'}</button>{/if}
 	{#if said}<Said text={said.text} refused={said.refused} testid="review-panel-said" />{/if}
-	<p><a href={reviewUrl(master, reviewKey)} data-testid="review-panel-back">Back to Review</a></p>
 </div>
 
 <style>

@@ -1,18 +1,13 @@
 <script lang="ts">
-	// What a view that is about nodes shows when nothing is being worked on.
-	// It points at Problems when the person's own LaTeX has any. The landmarks are still worth naming: a reader who arrives at an empty graph should be told where the mathematics is.
+	// What a view that is about nodes shows when nothing is being worked on. The landmarks are still worth naming: a reader who arrives at an empty graph should be told where the mathematics is. It links nowhere outside the view it stands in (Docs and Review both draw it), so it does not point at Problems.
 	import { store } from '$lib/manifest/client.svelte';
-	import { forPerson, ownerOf } from '$lib/diagnostics';
 	import { canonUrl } from '$lib/nav';
-	import { route } from '$lib/paths';
 
 	let { what = 'results' }: { what?: string } = $props();
 	const m = $derived(store.manifest);
 	const landmarks = $derived(m?.canon?.length ? [...m.canon].reverse() : []);
 	// Two different emptinesses, and saying the wrong one is worse than saying nothing: a corpus that declares it has no documents is not a corpus between drafts, and telling its reader that nothing is being worked on describes a state it will never leave.
 	const never = $derived(m?.publishes.documents === false);
-	// the problems in the person's own LaTeX; an agent's copy's and loom's own say nothing about why none is open
-	const problems = $derived(forPerson(m?.diagnostics ?? []).filter((d) => ownerOf(d) === 'person').length);
 </script>
 
 <div class="empty" data-testid="no-drafts">
@@ -26,9 +21,6 @@
 		{#if landmarks.length}
 			The corpus's landmarks are still here: <a href={canonUrl(landmarks[0].path)}>{landmarks[0].title || landmarks[0].stem}</a
 			>{#if landmarks.length > 1}, and {landmarks.length - 1} older{/if}.
-		{/if}
-		{#if problems && !never}
-			<a href={route('/review/problems')}>Problems</a> says what is wrong in your LaTeX.
 		{/if}
 	</p>
 </div>

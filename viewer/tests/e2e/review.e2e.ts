@@ -86,7 +86,14 @@ test('Read opens the block in its document, with why it waits and the way back b
 	const panel = page.getByTestId('review-panel');
 	await expect(panel.getByTestId('review-panel-status')).toHaveText('Changed since you accepted it.');
 	await expect(panel.getByTestId('review-comparison')).toBeVisible();
-	await expect(panel.getByTestId('review-panel-back')).toHaveAttribute('href', '/review?document=drafting%2Fmain.tex#review-sy-0001');
+	// the panel stands in Docs: none of its links leaves Docs, and its close puts it away in place
+	const links = await panel.locator('a').evaluateAll((as) => as.map((a) => new URL((a as HTMLAnchorElement).href).pathname));
+	expect(links.length).toBeGreaterThan(0);
+	for (const l of links) expect(l).not.toMatch(/^\/(review|library|web)(\/|$)/);
+	await panel.getByTestId('review-panel-close').click();
+	await expect(page.getByTestId('review-panel')).toHaveCount(0);
+	await expect(page).toHaveURL(/\/master\/drafting\/main/);
+	expect(new URL(page.url()).searchParams.get('review')).toBeNull();
 	await page.goto('/master/drafting/main?review=sy-000B#sy-000b');
 	await expect(page.getByTestId('review-panel-status')).toHaveText('Never accepted.');
 	await expect(page.getByTestId('review-panel-refusal')).toHaveText("Can't be accepted yet: loom cannot tell whether it is proved here, cited, or assumed.");
