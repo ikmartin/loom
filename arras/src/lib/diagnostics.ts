@@ -86,6 +86,7 @@ const TITLES: Record<string, string> = {
 	'link-target-missing': 'A link to something that is not there',
 	'link-place-missing': 'A link to a heading or place that is not there',
 	'link-work-unknown': 'A link to a work the library does not hold',
+	'link-words-missing': 'A link whose quoted words are gone',
 	'bib-entry-refused': 'A bibliography entry the library cannot take',
 	'write-left': 'A write loom could neither finish nor undo',
 	'document-gone': 'A document is gone',

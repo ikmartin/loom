@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loom.paths import COPIES
 from loom.scan.diagnostics import LATEX, MODEL, can_disable
@@ -614,6 +614,25 @@ def markdown_links(result: ScanResult, drawn: Drawn | None = None) -> list[Diagn
                         fixes=[Fix("link the work as it is named now", "loom link WORK")] if exc.part == "work" else [],
                     )
                 )
+    disabled = set(result.quilt.config.lint_disable)
+    return [d for d in out if not (d.code in disabled and can_disable(d.code))]
+
+
+def link_words_missing(result: ScanResult, links: list[dict[str, Any]]) -> list[Diagnostic]:
+    """`loom:link-words-missing`: each indexed link (`backlinks.backlinks`) whose quoted words are gone from what it names, on the line that wrote it; `[lint] disable` applied."""
+    from loom.backlinks import words_found
+
+    root = result.quilt.root
+    out = [
+        Diagnostic(
+            "warning",
+            "loom:link-words-missing",
+            f"the words this link quotes are no longer in what it links to: “{' '.join(str(link['quote']).split())}”",
+            [Location(link["from"], link["line"])],
+        )
+        for link in links
+        if words_found(result, root, link) is False
+    ]
     disabled = set(result.quilt.config.lint_disable)
     return [d for d in out if not (d.code in disabled and can_disable(d.code))]
 

@@ -11,7 +11,8 @@ const m = {
 	regions: { 'sy-0003#eq:fix': { container: 'sy-0003' } },
 	files: [
 		{ path: 'notes/reading.org', kind: 'text' },
-		{ path: 'notes/lemma.md', kind: 'markdown' }
+		{ path: 'notes/lemma.md', kind: 'markdown' },
+		{ path: 'notes/book.ipynb', kind: 'notebook' }
 	],
 	backlinks: [
 		link('notes/reading.org', 2, 'work', 'sy-0099-ref', 'page=2', 'the words'),
@@ -43,5 +44,7 @@ describe('the notes beside an item', () => {
 		expect(noteHref(m, m.backlinks![2])).toBe('quilt:notes/lemma.md');
 		// a Markdown note at the heading above its link
 		expect(noteHref(m, { ...m.backlinks![2], at: 'the-lemma' })).toBe('quilt:notes/lemma.md#the-lemma');
+		// a notebook at the heading above its link too, rather than its top
+		expect(noteHref(m, { ...m.backlinks![2], from: 'notes/book.ipynb', at: 'orbits' })).toBe('quilt:notes/book.ipynb#orbits');
 	});
 });
