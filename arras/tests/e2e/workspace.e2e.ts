@@ -376,7 +376,7 @@ test.describe('the tab strip', () => {
 		await expect(pane(page, 0).getByRole('group', { name: /^views of / })).toHaveCount(0);
 	});
 
-	test('tabs are 148px, narrow evenly, then scroll with the active tab in view', async ({ page }) => {
+	test('tabs are 180px whatever their names, narrow evenly, then scroll with the active tab in view', async ({ page }) => {
 		// the right pane is two fifths of the workspace, about 450px, so ten tabs pass the floor
 		await prefs(page, { divider: 0.6 });
 		await page.setViewportSize({ width: 1440, height: 900 });
@@ -386,17 +386,17 @@ test.describe('the tab strip', () => {
 		const row = pane(page, 1).getByRole('tablist');
 		const floor = 45; // 1.5 times the strip's 30px
 
-		// two tabs have room, and are 148px
+		// two tabs have room, and are 180px, their names of different lengths
 		await open(page, 'sy-0003');
 		await expect(tabs(page, 1)).toHaveCount(2);
-		expect(await widths(page, 1)).toEqual([148, 148]);
+		expect(await widths(page, 1)).toEqual([180, 180]);
 
 		// four do not: each narrows by the same amount, and together they fill the strip
 		for (const id of ['sy-0006', 'sy-0007']) await open(page, id);
 		await expect(tabs(page, 1)).toHaveCount(4);
 		const four = await widths(page, 1);
 		expect(Math.max(...four) - Math.min(...four), 'the spread of the widths, px').toBeLessThanOrEqual(1);
-		expect(four[0]).toBeLessThan(148);
+		expect(four[0]).toBeLessThan(180);
 		expect(four[0]).toBeGreaterThan(floor);
 		const room = await row.evaluate((r) => ({ scroll: r.scrollWidth, client: r.clientWidth }));
 		expect(room.scroll).toBeLessThanOrEqual(room.client);
@@ -429,6 +429,21 @@ test.describe('the tab strip', () => {
 		await expect(active.getByTestId('tab-close')).toBeVisible();
 		// and its whole name is its title
 		await expect(active.getByRole('tab')).toHaveAttribute('title', /Lemma/);
+	});
+
+	test("the Library's tabs are the same width as a pane's, Works and each work's alike, the title cut with an ellipsis and whole on hover", async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/library?fixture=round6');
+		const works = page.getByTestId('library-tab-works');
+		await expect(works).toBeVisible();
+		await page.getByTestId('work-row').filter({ hasText: 'Widgets and their bounds' }).first().click();
+		const work = page.getByTestId('library-tab');
+		await expect(work).toHaveCount(1);
+		for (const tab of [works, work]) expect((await tab.boundingBox())!.width).toBe(180);
+		await expect(work).toHaveAttribute('title', 'Widgets and their bounds');
+		const name = work.locator('.name');
+		await expect(name).toHaveCSS('text-overflow', 'ellipsis');
+		await expect(name).toHaveCSS('white-space', 'nowrap');
 	});
 
 	test('past the floor the tabs scroll, and the views beneath them keep their place', async ({ page }) => {

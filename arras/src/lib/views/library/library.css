@@ -22,7 +22,6 @@
 	align-items: center;
 	gap: 10px;
 	padding: 0 12px;
-	min-width: 110px;
 	color: var(--ink-faint);
 	border: 0;
 	border-right: 1px solid var(--rule);
@@ -37,7 +36,6 @@
 	color: var(--ink);
 }
 .lv .tab.pin {
-	min-width: 0;
 	font-weight: 500;
 }
 .lv .tab .x {
