@@ -315,13 +315,13 @@ def _statement_hashes(decls: dict[str, _Decl]) -> dict[str, str]:
     return out
 
 
-def _resolver(root: Path) -> Callable[[str], list[Subject]]:
-    """What a marker names now: each text of a draft's result bearing it as a label, by its own label, else the library's node of that id; [] for nothing."""
+def resolver(root: Path, scanned: Any = None) -> Callable[[str], list[Subject]]:
+    """What a marker names now: each text of a draft's result bearing it as a label, by its own label, else the library's node of that id; [] for nothing. Over `scanned`, a scan of the quilt as it stands, else a fresh one; `again` asks it of what a record is on."""
     from loom.evidence.web import DraftWeb, Here, LibraryWeb
     from loom.scan.quilt import load_quilt
     from loom.scan.scan import scan
 
-    drafts = DraftWeb(scan(load_quilt(root)))
+    drafts = DraftWeb(scanned if scanned is not None else scan(load_quilt(root)))
     library = LibraryWeb(root)
 
     def resolve(marker: str) -> list[Subject]:
@@ -367,7 +367,7 @@ def _record(
         )
     imports: dict[str, list[str]] = {m: list(v) for m, v in found.get("modules", {}).items()}
     statements = _statement_hashes(decls)
-    resolve = _resolver(root)
+    resolve = resolver(root)
     named: dict[str, list[Subject]] = {}
     for decl, marker in markers.items():
         subjects = resolve(marker)

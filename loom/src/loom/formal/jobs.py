@@ -59,3 +59,14 @@ def start(root: Path, kind: str, work: Callable[[Callable[[str], None]], dict[st
 
     threading.Thread(target=run, name=f"loom-formal-{kind}", daemon=True).start()
     return job
+
+
+def start_check(root: Path) -> Job | None:
+    """Start loom's check of the quilt's Lean (`check.check`) as a job, what it found kept as `formal-state` sends it; None, starting nothing, while another job runs there. `formal-check` and `again` start it."""
+    from loom.formal import check
+
+    def work(tell: Callable[[str], None]) -> dict[str, Any]:
+        done = check.check(root, say=tell)
+        return {"written": done.written, "unchanged": done.unchanged, "unknown": done.unknown, "errors": done.errors}
+
+    return start(root, "check", work)

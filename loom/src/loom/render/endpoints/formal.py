@@ -315,16 +315,11 @@ def _formal_enable(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 def _formal_check(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`formal-check`: run loom's own check of the quilt's Lean again, in the background; `off` (409) while formalization is off here, `busy` (409) while an install or a check runs."""
-    from loom.formal import check, jobs, switch
+    from loom.formal import jobs, switch
 
     if not switch.is_on(root):
         raise ApiError("off", "formalization is off for this quilt on this machine", status=409)
-
-    def work(tell: Any) -> dict[str, Any]:
-        done = check.check(root, say=tell)
-        return {"written": done.written, "unchanged": done.unchanged, "unknown": done.unknown, "errors": done.errors}
-
-    if jobs.start(root, "check", work) is None:
+    if jobs.start_check(root) is None:
         raise ApiError("busy", "loom is already installing or checking Lean for this quilt", status=409)
     return {"ok": True, "result": "checking the Lean"}
 
