@@ -76,4 +76,6 @@ Fixed, all six must-fixes:
 
 Also fixed, from its minor findings: "Loom has no TeX yet" capitalised (2g); a log line that said "home" in another sense replaced (3b); Copy details a small bordered button (3b, 3c, 4g); no choice preselected in the one question (2d); a hint under each dead-end refusal (4c, 4e, 4f); Copy details on the unreadable list (3c); where New quilt puts the quilt (5); a name shown with no source (3); a distinct mark for a missing quilt (3b); the whole stopped page dimmed (6b); "Loom was updated." moved above the document (6c); one paper's file name throughout (2h).
 
+A confirming look by the same critic found all six must-fixes fixed and one new fault, 4c's hint promising a page that would not come back by itself; it now says to open Loom from the Applications folder or the Dock. Its minor 4f (the hint fitted a drop that was already the paper's folder) is fixed with a large drop.
+
 Not taken: round six's agent footer on the stand-in quilt page (a quilt just made has no agent connected, and showing one would claim a connection); a hint on the first launch that the name can wait; and the capitals, the window's close during the steps and a row for a quilt being made, which are listed above as open.
