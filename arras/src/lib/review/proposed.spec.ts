@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../tests/fixture/manifest.json';
 import type { Manifest } from '$lib/manifest/types';
-import { adoptionsOf, cardsOf, copySays, proposedCount, pullLabel, resultsOf } from './proposed';
+import { adoptionsOf, cardsOf, copySays, proposedCount, pullLabel } from './proposed';
 
 const m = fixture as unknown as Manifest;
 // the fixture's two open suggested edits: one on sy-0002, the newer, and one on sy-0004 answering an annotation
@@ -49,19 +49,6 @@ describe('what is proposed to the person', () => {
 		});
 		const copy = cardsOf(x)[0];
 		expect(copy.kind === 'copy' && copy.edits).toEqual([]);
-	});
-
-	it('counts each work with results proposed once, however many it has', () => {
-		const x = changed((y) => {
-			y.references.Kre99.results = {
-				a: { state: 'proposed' },
-				b: { state: 'proposed' },
-				c: { state: 'verified' }
-			} as unknown as Manifest['references'][string]['results'];
-		});
-		expect(resultsOf(x)).toEqual([{ citekey: 'Kre99', count: 2 }]);
-		expect(cardsOf(x).at(-1)).toMatchObject({ kind: 'results', id: 'Kre99', count: 2 });
-		expect(proposedCount(x)).toBe(2);
 	});
 });
 

@@ -159,26 +159,31 @@ def test_serve_spa_fallback_for_dotted_routes(session) -> None:  # type: ignore[
     assert status == 404  # so does a file-typed path the bundle lacks, outside _app/
 
 
-def test_serve_offers_a_works_fetched_artifacts(session) -> None:  # type: ignore[no-untyped-def]
-    """The viewer opens a reference at the place a comment points to, so the server offers what was fetched -- the first thing it serves that it did not generate (DR-110). Localhost, read only, and confined to the store by the same prefix check the build tree gets."""
+def test_serve_offers_a_stored_pdf_by_its_hash(session) -> None:  # type: ignore[no-untyped-def]
+    """The viewer opens a work at the place a comment points to, so the server offers the PDFs the library stores, by their hash: localhost, read only, and named by 64 hexadecimal digits and nothing else."""
+    import hashlib
+
+    from loom.paths import LIBRARY_DOCUMENTS
+
     s, d = session
-    home = d / ".loom/library" / "storage" / "arxiv" / "0805.2065v2"
-    home.mkdir(parents=True, exist_ok=True)
-    (home / "paper.pdf").write_bytes(b"%PDF-1.4\nfetched\n")
+    data = b"%PDF-1.4\nstored\n"
+    digits = hashlib.sha256(data).hexdigest()
+    (d / LIBRARY_DOCUMENTS).mkdir(parents=True, exist_ok=True)
+    (d / LIBRARY_DOCUMENTS / f"{digits}.pdf").write_bytes(data)
 
-    status, headers, body = get(s.url + "digests/storage/arxiv/0805.2065v2/paper.pdf")
-    assert status == 200 and body.startswith(b"%PDF") and headers["Content-Type"] == "application/pdf"
+    status, headers, body = get(s.url + f"_api/library/pdf/{digits}")
+    assert status == 200 and body == data and headers["Content-Type"] == "application/pdf"
 
-    status, _, _ = get(s.url + "digests/storage/arxiv/0805.2065v2/absent.pdf")
-    assert status == 404  # a missing artifact is a 404, never the app shell
+    status, _, _ = get(s.url + f"_api/library/pdf/{'0' * 64}")
+    assert status == 404  # a PDF the store lacks is a 404, never the app shell
 
-    status, _, _ = get(s.url + "digests/storage/../../config.toml")
-    assert status == 404  # nothing outside the store is reachable through it
+    status, _, _ = get(s.url + "_api/library/pdf/../../config.toml")
+    assert status == 404  # nothing but a hash names a stored PDF
 
 
 def test_each_served_folder_answers_its_own_files_and_no_sibling_s(session) -> None:  # type: ignore[no-untyped-def]
-    """The site, the compile folders and the store are served from folders side by side, so a sibling whose name begins the same (`tex` and `texx`) is outside, by path and not by spelling."""
-    from loom.paths import SITE, STORAGE, TEX, document_build
+    """The site and the compile folders are served from folders side by side, so a sibling whose name begins the same (`tex` and `texx`) is outside, by path and not by spelling."""
+    from loom.paths import SITE, TEX, document_build
 
     s, d = session
     pdf = d / document_build("drafting/main.tex") / "main.pdf"
@@ -186,11 +191,11 @@ def test_each_served_folder_answers_its_own_files_and_no_sibling_s(session) -> N
     pdf.write_bytes(b"%PDF-1.4\ncompiled\n")
     status, _, body = get(s.url + f"build/tex/{pdf.parent.name}/main.pdf")
     assert status == 200 and body.startswith(b"%PDF")
-    for folder in (SITE, TEX, STORAGE):
+    for folder in (SITE, TEX):
         sibling = d / f"{folder}x"
         sibling.mkdir(parents=True, exist_ok=True)
         (sibling / "leak.txt").write_text("not served", encoding="utf-8")
-    for address in ("build/../sitex/leak.txt", "build/tex/../texx/leak.txt", "digests/storage/../storagex/leak.txt"):
+    for address in ("build/../sitex/leak.txt", "build/tex/../texx/leak.txt"):
         assert get(s.url + address)[0] == 404, address
 
 
@@ -222,7 +227,6 @@ def test_a_change_under_a_lake_project_s_build_wakes_no_rebuild(
     lake = q / "lean" / ".lake" / "packages" / "mathlib"
     lake.mkdir(parents=True)
     (q / "config.toml").write_text('[quilt]\nname = "q"\n', encoding="utf-8")
-    (q / "lean" / "lakefile.toml").write_text('name = "proof"\n', encoding="utf-8")
     (q / "main.tex").write_text("x", encoding="utf-8")
     (lake / "notes.tex").write_text("x", encoding="utf-8")
     listed: list[str] = []
@@ -242,6 +246,33 @@ def test_a_change_under_a_lake_project_s_build_wakes_no_rebuild(
     (lake / "notes.tex").write_text("changed", encoding="utf-8")
     (lake / "lean.sty").write_text("new", encoding="utf-8")
     assert snapshot(q, shown) == before
+
+
+def test_the_watcher_never_walks_a_lake_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Lake project is the agents' own and the scan reads none of it (`scan.source.lake_root`), so the one-second poll prunes its root: a `.tex` the skills' linters copy there and the project's `.toml` and `.json` wake no build; what of it the viewer shows is watched for the file tree alone."""
+    from loom.render import watch
+    from loom.render.watch import snapshot
+
+    q = tmp_path / "q"
+    (q / "lean" / "source").mkdir(parents=True)
+    (q / "config.toml").write_text('[quilt]\nname = "q"\n', encoding="utf-8")
+    (q / "main.tex").write_text("x", encoding="utf-8")
+    (q / "lean" / "lakefile.toml").write_text('name = "proof"\n', encoding="utf-8")
+    (q / "lean" / "lake-manifest.json").write_text("{}", encoding="utf-8")
+    (q / "lean" / "source" / "n.tex").write_text("x", encoding="utf-8")
+    listed: list[str] = []
+    walk = os.walk
+
+    def recorded(top: Path):  # type: ignore[no-untyped-def]
+        for here, dirs, files in walk(top):
+            listed.append(Path(here).relative_to(q).as_posix())
+            yield here, dirs, files
+
+    monkeypatch.setattr(watch.os, "walk", recorded)
+    before = snapshot(q)
+    assert q / "main.tex" in before
+    assert not [p for p in before if p.is_relative_to(q / "lean")], before
+    assert not [d for d in listed if d == "lean" or d.startswith("lean/")], listed
 
 
 def test_a_delete_changes_records_alone_and_a_saved_preview_changes_nothing_the_watcher_sees(tmp_path: Path) -> None:

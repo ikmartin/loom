@@ -11,8 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from loom.paths import LOOM
-from loom.scan.bib import citekey_slug
-from loom.scan.directives import HEAD_LINES, file_level, parse_directives, within
+from loom.scan.directives import file_level, parse_directives, within
 from loom.scan.envtree import FileEnvs, labels_in, scan_environments
 from loom.scan.expand import Expansion, Segment
 from loom.scan.labels import is_id_shaped, plain_key
@@ -74,7 +73,6 @@ class NodeRec:
     external: bool = False
     basis: str = "unclassified"
     basis_reason: str = ""
-    digest: str | None = None
     incomplete: list[str] = field(default_factory=list)
     directives: dict[str, str] = field(default_factory=dict)
     reached_by: list[str] = field(default_factory=list)
@@ -139,21 +137,6 @@ class Assembly:
     sections: dict[str, list[SectionUnit]] = field(default_factory=dict)  # per master
     diagnostics: list[Diagnostic] = field(default_factory=list)
     directives: dict[str, list[Directive]] = field(default_factory=dict)
-    digest_files: dict[str, str] = field(default_factory=dict)  # file -> citekey
-    digest_prefixes: dict[str, str] = field(default_factory=dict)  # file -> the prefix its node ids carry
-    digest_taxa: dict[str, dict[str, Taxon]] = field(
-        default_factory=dict
-    )  # digest file -> the environments its results declare for themselves
-    citeslugs: set[str] = field(default_factory=set)  # slugs of the bibliography's citekeys, for the id grammar
-
-    def prefix_of(self, citekey: str) -> str:
-        """The id prefix a citekey's digest nodes carry: declared in its header, or the citekey's slug when it declares none."""
-        from loom.scan.bib import citekey_slug
-
-        for f, ck in self.digest_files.items():
-            if ck == citekey:
-                return self.digest_prefixes.get(f, citekey_slug(citekey))
-        return citekey_slug(citekey)
 
     def key_of_env(self, file: str, env: Env) -> str | None:
         return self._env_keys.get((file, env.start))
@@ -166,7 +149,6 @@ def assemble(
     closures: dict[str, PreambleClosure],
     expansions: dict[str, Expansion],
     taxa: dict[str, Taxon],
-    citekeys: set[str],
     default_master: str | None,
     basis_names: dict[str, str] | None = None,
 ) -> Assembly:
@@ -174,27 +156,12 @@ def assemble(
     asm = Assembly()
     masters = list(closures)
     theorem_names = set(taxa)
-    slugs = {citekey_slug(k) for k in citekeys}
-    asm.citeslugs = slugs
     for path, src in files.items():
         if src.ignored:
             continue
         asm.directives[path] = parse_directives(src)
-        head = {d.key: d.value for d in asm.directives[path] if d.form == "kv" and d.line <= HEAD_LINES}
-        if "digest" in head:
-            asm.digest_files[path] = head["digest"]
-            # the prefix is declared so that it survives a citekey rename and stays typeable in \uses; the slug is only the default (DR-109)
-            prefix = head.get("prefix", "").strip() or citekey_slug(head["digest"])
-            asm.digest_prefixes[path] = prefix
-            slugs.add(prefix)
-            own = {env: t for env, t in digest_taxa(path, src).items() if env not in taxa}
-            if own:
-                asm.digest_taxa[path] = own
-    for path, src in files.items():
-        if src.ignored:
-            continue
         body = document_start(src) if path in closures else None
-        asm.envs[path] = scan_environments(src, theorem_names | set(asm.digest_taxa.get(path, {})), body or 0)
+        asm.envs[path] = scan_environments(src, theorem_names, body or 0)
     for master, exp in expansions.items():
         asm.sections[master] = find_sections(exp, files)
     reached_any = {f for exp in expansions.values() for f in exp.reached}
@@ -204,14 +171,14 @@ def assemble(
         # a file no master reaches is sectioned on its own; the file path stands in for the master
         solo = Expansion(master=path, text=src.clean, segments=[Segment(path, 0, len(src.clean), 0, 0)])
         asm.sections[path] = find_sections(solo, files)
-    conflicted = _conflicted_ids(asm, files, slugs)
+    conflicted = _conflicted_ids(asm, files)
     # the files documents read, the documents among them: labels key statements only there
     read = reached_any | set(expansions)
-    _statement_nodes(asm, files, taxa, slugs, masters, conflicted, _keyable_labels(files, slugs, read), read)
-    _section_nodes(asm, files, slugs, masters, default_master, conflicted)
+    _statement_nodes(asm, files, taxa, masters, conflicted, _keyable_labels(files, read), read)
+    _section_nodes(asm, files, masters, default_master, conflicted)
     _placeholders(asm, files, conflicted)
     _container_nodes(asm, files, masters)
-    _proof_nodes(asm, files, slugs, expansions, default_master)
+    _proof_nodes(asm, files, expansions, default_master)
     _partition(asm, files)
     _regions_and_details(asm, files, expansions, default_master, basis_names or {})
     _grade_definitions(asm, expansions)
@@ -229,7 +196,7 @@ def _grade_definitions(asm: Assembly, expansions: dict[str, Expansion]) -> None:
         if not any(sum(loc.file in e.reached for loc in d.locations) >= 2 for e in expansions.values()):
             d.severity, d.class_ = "warning", MODEL
         rec = asm.nodes.get(d.keys[0]) if d.code == "duplicate-id" and len(d.keys) == 1 else None
-        if rec is not None and rec.kind == "conflict" and not any(p in asm.digest_files for p in rec.conflict):
+        if rec is not None and rec.kind == "conflict":
             paths = list(rec.conflict)
             label = "give one of the two a fresh id" if len(paths) == 1 else "give the definition in {} a fresh id"
             d.fixes = [Fix(label.format(p), fresh_id_fix(rec.key, p, paths, expansions)) for p in paths]
@@ -262,62 +229,7 @@ def _order(exp: Expansion | None, file: str, offset: int, files: dict[str, Sourc
     return 1e12 + idx * 1e9 + offset
 
 
-#: Display names a digest's locator may begin with, and the style each takes when no document declares the environment.
-_RESULT_WORDS = {
-    **{
-        w: "plain"
-        for w in (
-            "theorem",
-            "lemma",
-            "proposition",
-            "corollary",
-            "conjecture",
-            "claim",
-            "question",
-            "axiom",
-            "postulate",
-            "fact",
-        )
-    },
-    **{
-        w: "definition"
-        for w in (
-            "definition",
-            "example",
-            "notation",
-            "construction",
-            "convention",
-            "assumption",
-            "hypothesis",
-            "setting",
-            "condition",
-            "problem",
-            "exercise",
-        )
-    },
-    **{w: "remark" for w in ("remark", "note", "observation")},
-}
-_RESULT_ENV = re.compile(r"\\begin\{([A-Za-z@*]+)\}\s*\[\s*\{?\s*\\cite\[([^\]]*)\]")
-
-
-def digest_taxa(path: str, src: SourceFile) -> dict[str, Taxon]:
-    """The environments a digest's results are written in, each declared by its own locator.
-
-    A digest's results take whatever environment names the quilt's documents declared when it was extracted, so a quilt with no document (a reading project, say) would otherwise see none of them as results. Every result opens `\\begin{ENV}[{\\cite[LOCATOR]{key}}]`, so the environment is theorem-like by construction; its display name is the locator's first word when that names a kind of result, else the environment's own name. A document's declaration wins wherever there is one.
-    """
-    out: dict[str, Taxon] = {}
-    for m in _RESULT_ENV.finditer(src.clean):
-        env, locator = m.group(1), m.group(2)
-        if env in out or env in ("proof", "document"):
-            continue
-        first = re.match(r"[A-Za-z]+", locator.strip())
-        word = first.group(0).lower() if first else ""
-        name = word.capitalize() if word in _RESULT_WORDS else env.rstrip("*").capitalize()
-        out[env] = Taxon(env, name, _RESULT_WORDS.get(name.lower(), "plain"), False, path, m.start())
-    return out
-
-
-def _conflicted_ids(asm: Assembly, files: dict[str, SourceFile], slugs: set[str]) -> dict[str, list[str]]:
+def _conflicted_ids(asm: Assembly, files: dict[str, SourceFile]) -> dict[str, list[str]]:
     """Ids defined more than once -> the files that define them, in path order. A node is defined once and included many times; a second definition of an id, in another file or the same one, leaves it with no text rather than a winner, so the decision is made here before any record exists."""
     defs: dict[str, list[str]] = {}
     for path, fe in asm.envs.items():
@@ -325,12 +237,12 @@ def _conflicted_ids(asm: Assembly, files: dict[str, SourceFile], slugs: set[str]
         for env in fe.theorem_envs:
             found = labels_in(src.clean, env.own_ranges())
             first = found[0][0] if found else None
-            if first and is_id_shaped(first, slugs):
+            if first and is_id_shaped(first):
                 defs.setdefault(first, []).append(path)
     for units in asm.sections.values():
         for u in units:
             first = u.labels[0] if u.labels else None
-            if first and is_id_shaped(first, slugs):
+            if first and is_id_shaped(first):
                 defs.setdefault(first, []).append(u.file)
     return {i: sorted(set(fs)) for i, fs in defs.items() if len(fs) > 1}
 
@@ -368,7 +280,7 @@ def _placeholders(asm: Assembly, files: dict[str, SourceFile], conflicted: dict[
             Location(d.file, files[d.file].line_of(d.start)) for d in sorted(demoted, key=lambda d: (d.file, d.start))
         ]
         locations = locations or [Location(path, 1) for path in paths]
-        # a digest is loom's to rewrite, not the author's; the person's ways out are given once the documents' reach is known (`_grade_definitions`)
+        # the person's ways out are given once the documents' reach is known (`_grade_definitions`)
         fixes: list[Fix] = []
         asm.diagnostics.append(
             Diagnostic(
@@ -401,7 +313,7 @@ def _anchor(label: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", label).strip("-").lower() or "x"
 
 
-def _keyable_labels(files: dict[str, SourceFile], slugs: set[str], reached: set[str]) -> set[str]:
+def _keyable_labels(files: dict[str, SourceFile], reached: set[str]) -> set[str]:
     """The labels that key the statement carrying them first: shaped as a key, not an id, defined once among the files documents read (`reached`), and read as an anchor no other label is.
 
     Every `\\label` of every file a document reads is counted, so a label a draft copied to a new document defines again keys neither, while a backup or a fragment no document reads changes no key; the anchor is folded as the viewer folds it, so `thm:main` and `Thm-Main` would share one and key nothing.
@@ -414,15 +326,15 @@ def _keyable_labels(files: dict[str, SourceFile], slugs: set[str], reached: set[
     return {
         lab
         for lab, n in counts.items()
-        if n == 1 and label_shaped(lab, slugs) and lab not in files and anchors[_anchor(lab)] == 1
+        if n == 1 and label_shaped(lab) and lab not in files and anchors[_anchor(lab)] == 1
     }
 
 
-def label_shaped(label: str, slugs: set[str]) -> bool:
+def label_shaped(label: str) -> bool:
     """Whether `label` is shaped as a key a label gives: key characters only, no id, and none of the forms other keys take (`equation:`, a document's path)."""
     return (
         bool(_KEY_SHAPED.fullmatch(label))
-        and not is_id_shaped(label, slugs)
+        and not is_id_shaped(label)
         and not label.startswith(_OTHER_KEYS)
         and not label.endswith((".tex", ".md"))
     )
@@ -432,7 +344,6 @@ def _statement_nodes(
     asm: Assembly,
     files: dict[str, SourceFile],
     taxa: dict[str, Taxon],
-    slugs: set[str],
     masters: list[str],
     conflicted: dict[str, list[str]],
     keyable: set[str],
@@ -448,19 +359,19 @@ def _statement_nodes(
             found = labels_in(src.clean, own)
             labels = [lab for lab, _ in found]
             first = labels[0] if labels else None
-            node_id = first if first and is_id_shaped(first, slugs) else None
+            node_id = first if first and is_id_shaped(first) else None
             conflict_of = node_id if node_id in conflicted else None
             if conflict_of:
                 node_id = None  # demoted: the placeholder holds the id and claims every label; this record claims none
             place = f"{path}#{env.name}:{counts[env.name]}"
-            # an agent's copy and a digest keep what they key by: their labels are loom's, made for them
-            own_file = path in reached and path not in asm.digest_files and not path.startswith(f"{LOOM}/")
+            # an agent's copy keeps what it keys by: its labels are loom's, made for it
+            own_file = path in reached and not path.startswith(f"{LOOM}/")
             by_label = first if node_id is None and conflict_of is None and own_file and first in keyable else None
             key = node_id or by_label or place
             if key != place:
                 # a label added later to a statement that had none must not lose the notes already on it
                 asm.places[place] = key
-            taxon = taxa.get(env.name) or asm.digest_taxa.get(path, {}).get(env.name)
+            taxon = taxa.get(env.name)
             rec = NodeRec(
                 key=key,
                 kind="environment",
@@ -496,7 +407,6 @@ def _statement_nodes(
 def _section_nodes(
     asm: Assembly,
     files: dict[str, SourceFile],
-    slugs: set[str],
     masters: list[str],
     default_master: str | None,
     conflicted: dict[str, list[str]],
@@ -509,7 +419,7 @@ def _section_nodes(
         keys: dict[int, str] = {}
         for u in units:
             first = u.labels[0] if u.labels else None
-            node_id = first if first and is_id_shaped(first, slugs) else None
+            node_id = first if first and is_id_shaped(first) else None
             conflict_of = node_id if node_id in conflicted else None
             if conflict_of:
                 node_id = None
@@ -563,7 +473,6 @@ def _container_nodes(asm: Assembly, files: dict[str, SourceFile], masters: list[
 def _proof_nodes(
     asm: Assembly,
     files: dict[str, SourceFile],
-    slugs: set[str],
     expansions: dict[str, Expansion],
     default_master: str | None,
 ) -> None:
@@ -613,7 +522,7 @@ def _proof_nodes(
             unattached[path] = unattached.get(path, 0) + 1
             found = labels_in(src.clean, proof.own_ranges())
             labels = [lab for lab, _ in found]
-            key, pid = _unattached_key(asm, path, labels, unattached[path], slugs)
+            key, pid = _unattached_key(asm, path, labels, unattached[path])
             asm.nodes[key] = NodeRec(
                 key=key,
                 kind="proof",
@@ -642,7 +551,7 @@ def _proof_nodes(
             first = labels[0] if labels else None
             statement = asm.nodes[stmt_key]
             place = None
-            if first and is_id_shaped(first, slugs):
+            if first and is_id_shaped(first):
                 key, pid = first, first
             else:
                 count += 1
@@ -685,13 +594,13 @@ def _proof_nodes(
             )
 
 
-def _unattached_key(asm: Assembly, path: str, labels: list[str], n: int, slugs: set[str]) -> tuple[str, str | None]:
+def _unattached_key(asm: Assembly, path: str, labels: list[str], n: int) -> tuple[str, str | None]:
     """The key of a proof attached to no statement, and its id if it has one.
 
     Its first label, else `n`, its place among the file's unattached proofs, so lengthening other text leaves the key alone. A label some node already holds gives way to the next form.
     """
     first = labels[0] if labels else None
-    if first and is_id_shaped(first, slugs) and first not in asm.nodes:
+    if first and is_id_shaped(first) and first not in asm.nodes:
         return first, first
     if first and f"{path}#{first}" not in asm.nodes:
         return f"{path}#{first}", None
@@ -766,12 +675,6 @@ def _regions_and_details(
         for d in node_dirs:
             if d.form == "kv":
                 n.directives[d.key] = d.value
-        if n.file in asm.digest_files and n.kind in ("environment", "section", "proof"):
-            # Every node a digest defines is someone else's, sections included. Only statements used to be marked,
-            # so the 226 section nodes of sixteen real digests reached the author's graph: `\cite[Section 3.6]{Kresch}`
-            # resolves to one, and nothing that filters on `external` could tell it from the author's own work.
-            n.digest = asm.digest_files[n.file]
-            n.external = True
     for path, src in files.items():
         if src.ignored or path not in asm.envs:
             continue
@@ -806,10 +709,6 @@ def _classify_basis(
     explicit = n.directives.get("basis", "").strip().lower()
     if explicit and explicit not in _BASES:
         return "unclassified", f"unknown basis {explicit!r}; choose {', '.join(sorted(_BASES))}"
-    if n.digest:
-        if explicit and explicit != "cited-result":
-            return "unclassified", "a digest block must have basis cited-result"
-        return "cited-result", "identified by the digest source"
     title_cites = list(_CITE.finditer(n.title or ""))
     body = src.clean[env.body_start : env.body_end] if env else ""
     first_body_cite = _CITE.match(body.lstrip())
@@ -887,7 +786,7 @@ def _claim(
         other_key, other_file, other_off = seen[lab]
         if other_key == key:
             return
-        code = "duplicate-id" if is_id_shaped(lab, asm.citeslugs) else "loom:duplicate-label"
+        code = "duplicate-id" if is_id_shaped(lab) else "loom:duplicate-label"
         asm.diagnostics.append(
             Diagnostic(
                 "error",

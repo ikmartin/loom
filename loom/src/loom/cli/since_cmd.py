@@ -29,7 +29,7 @@ def since_command(
 ) -> None:
     """Report what people did since you last looked, and move your marker past it.
 
-    People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; the boxes they set in the viewer, each as it last stood; and each other file the viewer shows that was added, changed or removed, by its path: not a .tex file, what a compile writes beside one, or the research state. Loom cannot tell who changed a file, so your own edits are listed too. Your first look reports what happened since the active session was last opened, and no files, having seen none. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.
+    People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; their answers to the questions you asked with `loom ask`; the boxes they set in the viewer, each as it last stood; and each other file the viewer shows that was added, changed or removed, by its path: not a .tex file, what a compile writes beside one, or the research state. Loom cannot tell who changed a file, so your own edits are listed too. Your first look reports what happened since the active session was last opened, and no files, having seen none. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.
     """
     from loom.cli._common import find_session
     from loom.since import since, write_marker, write_shown
@@ -68,6 +68,7 @@ def _verdict(got: Any) -> str:
         counted(len(got.stale), "key gone stale", "keys gone stale") if got.stale else "",
         "the research state changed" if got.state else "",
         counted(len(got.said), "message") if got.said else "",
+        counted(len(got.answers), "answer to your questions", "answers to your questions") if got.answers else "",
         counted(len(got.ticks), "box set", "boxes set") if got.ticks else "",
         counted(len(got.files), "file changed", "files changed") if got.files else "",
     ]
@@ -118,6 +119,13 @@ def _lines(got: Any) -> list[str]:
         if m["body"]:
             said.append(f'      "{m["body"]}"')
     block("said", len(got.said), said)
+    answers = []
+    for a in got.answers:
+        answers.append(f"  {a['task']}  {a['question']}")
+        answers.append(f"      {a['by'] or 'the person'} at {_at(a['when'])}: {a['choice'] or 'in their own words'}")
+        if a["words"]:
+            answers.append(f'      "{a["words"]}"')
+    block("answers", len(got.answers), answers)
     block(
         "boxes set",
         len(got.ticks),

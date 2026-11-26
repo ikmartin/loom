@@ -80,7 +80,7 @@ class Diagnostic:
     keys: list[str] = field(default_factory=list)
     fixes: list[Fix] = field(default_factory=list)
     subject: str | None = None  # "source" (the default when absent) or "record": what the diagnostic is about
-    # "person", "copy" (an agent's copy) or "work" (a cited work's digest): whose it is to fix (`scan.owners`)
+    # "person" or "copy" (an agent's copy): whose it is to fix (`scan.diagnostics.stamped`)
     owner: str | None = None
     # "latex", "model" or "internal": what kind of problem it is (`scan.diagnostics`); its code's class unless the emitter says
     class_: str = ""

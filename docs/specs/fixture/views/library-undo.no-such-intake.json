@@ -1,0 +1,14 @@
+{
+ "answer": {
+  "error": {
+   "code": "no-such-intake",
+   "message": "there is nothing to take back: it is undone already, or was never taken in"
+  },
+  "status": 404
+ },
+ "endpoint": "library-undo",
+ "request": {
+  "act": "x-zc6vb0",
+  "id": "t-3548c0d6cf799ebf"
+ }
+}

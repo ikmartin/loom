@@ -58,7 +58,7 @@ def given_by_label(result: ScanResult, key: str) -> str:
     from loom.scan.nodes import label_shaped
 
     m = _BY_LABEL.fullmatch(key)
-    return m["label"] if m and label_shaped(m["label"], result.assembly.citeslugs) else ""
+    return m["label"] if m and label_shaped(m["label"]) else ""
 
 
 def shared_label(result: ScanResult, key: str) -> list[NodeRec] | None:

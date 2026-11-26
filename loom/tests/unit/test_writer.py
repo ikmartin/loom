@@ -69,16 +69,6 @@ def test_under_a_marker_a_name_that_does_not_say_it_is_an_agent_is_refused(tmp_p
             ["write", "state", "A state."],
             ["new", "lemma", "--print"],
             ["draft", "drafting/main.tex", "--ai", "copy.tex"],
-            [
-                "library",
-                "relate",
-                "Calloway14-prop-3.2",
-                "Calloway14-prop-3.3",
-                "--kind",
-                "same-notion",
-                "--why",
-                "A reason.",
-            ],
         ):
             refused(*act, "--as", name, cwd=q, env=marked, code=2, match=f"{name} does not say it is an agent")
     refused(
@@ -145,18 +135,27 @@ def test_the_authors_verbs_refuse_a_declared_agent_whatever_shell_it_is_in(tmp_p
     """The declared name alone must refuse, so every agent marker is unset here to prove it is the name doing the work."""
     q = showcase(tmp_path)
     unmarked = {m: None for m in AGENT_MARKERS}
-    for verb in (
-        ["library", "ignore", "Bellamy19", "--why", "no"],
-        ["library", "verify", "Bellamy19-prop-3.1"],
-    ):
-        refused(*verb, "--as", "Referee (Agent)", "--quilt", str(q), code=2, match="is an agent", env=unmarked)
+    bib = tmp_path / "more.bib"
+    bib.write_text("@book{Hal21, title={Gadget towers}, author={Halberd, C.}, year={2021}}\n", encoding="utf-8")
+    refused(
+        "library",
+        "add",
+        str(bib),
+        "--as",
+        "Referee (Agent)",
+        "--quilt",
+        str(q),
+        code=2,
+        match="is an agent",
+        env=unmarked,
+    )
     # and under an agent marker the author's name does not pass either: a name cannot be checked, and an agent typing the author's is the case to stop (DR-325-ikmartin)
     refused(
-        "library", "ignore", "Bellamy19", "--why", "a study", "--as", "A. Author", "--quilt", str(q),
+        "library", "add", str(bib), "--as", "A. Author", "--quilt", str(q),
         code=2, match="whatever --as says", env={"AI_AGENT": "1"},
     )  # fmt: skip
     # without the marker the author, named, is the author
-    ok("library", "ignore", "Bellamy19", "--why", "a study", "--as", "A. Author", "--quilt", str(q), env=unmarked)
+    ok("library", "add", str(bib), "--as", "A. Author", "--quilt", str(q), env=unmarked)
 
 
 def test_every_act_that_is_the_authors_or_destroys_refuses_under_an_agent_marker(tmp_path: Path) -> None:
@@ -165,12 +164,7 @@ def test_every_act_that_is_the_authors_or_destroys_refuses_under_an_agent_marker
     marked = {"AI_AGENT": "1"}
     acts = [
         ["accept", "sh-0001", "--as", "A. Author"],
-        ["library", "verify", "Bellamy19-prop-3.1", "--as", "A. Author"],
-        ["library", "discard", "Bellamy19-prop-3.1", "--why", "no", "--as", "A. Author"],
-        ["library", "ignore", "Bellamy19", "--why", "no", "--as", "A. Author"],
-        ["library", "drop", "--work", "Bellamy19", "--yes"],
-        ["library", "verify", "a-0000-00-00-m2qyj6", "--as", "A. Author"],
-        ["library", "import", str(q / ".loom/library" / "Bellamy19.tex"), "--name", "Other20"],
+        ["library", "add", str(q / "drafting" / "refs.bib"), "--as", "A. Author"],
         ["ai", "delete", "--before", "2100-01-01", "--yes"],
         ["changes", "--keep", "e-0000-00-00-m2qyj6"],
         ["changes", "--discard-all"],
@@ -178,25 +172,3 @@ def test_every_act_that_is_the_authors_or_destroys_refuses_under_an_agent_marker
     ]
     for act in acts:
         refused(*act, "--quilt", str(q), code=2, match="an agent is running this shell", env=marked)
-
-
-def test_an_agent_may_remove_only_a_link_a_session_asserted(tmp_path: Path) -> None:
-    """Removing the author's link is the author's; an agent's own link is its own to withdraw, and either removal is recorded with who made it."""
-    import json
-
-    from loom.refs.links import add_link, read_links
-
-    q = showcase(tmp_path)
-    theirs = add_link(q, "Bellamy19-thm-2.3", "Bellamy19-thm-3.2", "depends-on", "the author's reading", "A. Author")
-    mine = add_link(
-        q, "Bellamy19-thm-3.2", "Bellamy19-thm-2.3", "same-notion", "an agent's reading", "s-2026-09-16-p9z37z"
-    )
-    marked = {"AI_AGENT": "1"}
-    undo = ("library", "relate", "--quilt", str(q), "--why", "a misreading", "--undo")
-    refused(*undo, theirs.id, code=2, match="asserted by A. Author", env=marked)
-    # a declared agent name is refused the same way, with no marker in the shell
-    refused(*undo, theirs.id, "--as", "Referee (Agent)", code=2, match="asserted by A. Author")
-    ok(*undo, mine.id, env=marked)
-    assert [x.id for x in read_links(q)].count(theirs.id) == 1
-    removed = [json.loads(ln) for ln in (q / ".loom/library" / "links-removed.jsonl").read_text().splitlines()]
-    assert removed[-1]["link"]["id"] == mine.id and removed[-1]["removed_by"] and removed[-1]["why"] == "a misreading"

@@ -9,11 +9,10 @@
 	import { forPerson } from '$lib/diagnostics';
 	import RailList from '$lib/components/RailList.svelte';
 	import LocalGraphPanel from '$lib/graph/LocalGraphPanel.svelte';
-	import { keyUrl, nodeUrl, readUrl, tagUrl, threadUrl, workUrl } from '$lib/nav';
+	import { keyUrl, nodeUrl, readUrl, tagUrl, threadUrl } from '$lib/nav';
 	import { nodeName } from '../names';
 	import { onAny } from '$lib/annotations';
 	import type { Annotation } from '$lib/manifest/types';
-	import Locator from '$lib/components/Locator.svelte';
 	import ClosurePanel from '$lib/review/ClosurePanel.svelte';
 	import { lookVars, typeName } from '$lib/review/annotationTypes';
 	import { versionLabel } from '$lib/badges';
@@ -115,13 +114,8 @@
 			</RailList>
 		{/if}
 
-		{#if (node.external && node.digest) || versions.length || node.tags.length}
+		{#if versions.length || node.tags.length}
 			<RailList label="from">
-				{#if node.external && node.digest}
-					<p class="line">
-						<a href={workUrl(node.digest)}>{node.digest}</a>{#if node.locator}, <Locator id={key} locator={node.locator} />{/if}
-					</p>
-				{/if}
 				{#each versions as v (v.key)}<p class="line" data-testid="version"><code>{v.key}</code> {v.label}</p>{/each}
 				{#if node.tags.length}<p class="line">{#each node.tags as t (t)}<a class="tag" href={tagUrl(t)}>#{t}</a> {/each}</p>{/if}
 			</RailList>

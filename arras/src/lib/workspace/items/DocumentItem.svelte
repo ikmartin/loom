@@ -10,6 +10,8 @@
 	import Fragment from '$lib/fragments/Fragment.svelte';
 	import FragmentNotes from '$lib/fragments/FragmentNotes.svelte';
 	import SideHost from '$lib/review/SideHost.svelte';
+	import LeanMarks from '$lib/views/docs/LeanMarks.svelte';
+	import NotCompiled from '$lib/views/docs/NotCompiled.svelte';
 	import { anchorId, keyUrl } from '$lib/nav';
 	import { followNodes, followReading, reading, sectionIds } from '$lib/reading.svelte';
 	import { contentsOf } from '$lib/contents';
@@ -87,7 +89,12 @@
 	// a result this document holds is a jump within it; anything else opens its page
 	const hrefFor = (id: string) => (master && m.nodes[id]?.reached_by.includes(master.path) ? '#' + anchorId(id) : keyUrl(m, id));
 
+	/** The draft's column, which the Lean marks are laid over, and a count raised each time the draft is drawn, which lays them again. */
+	let columnBox = $state<HTMLElement | null>(null);
+	let drawnSeq = $state(0);
+
 	function fill(root: HTMLElement) {
+		drawnSeq++;
 		docRoot = root;
 	}
 
@@ -98,7 +105,8 @@
 	}
 </script>
 
-<div class="page item document">
+<!-- the draft's own text size, which its fragments read as the body size -->
+<div class="page item document" style:--body-size="{documentState(item).size}px" data-text-size={documentState(item).size}>
 	{#if landmark && doc}
 		<div class="gutters-host" use:guttersHost>
 			<div class="gutters" class:beside={!!notes.side}>
@@ -124,7 +132,9 @@
 		<div class:with-comparison={hasComparison} class="review-layout">
 			<div class="gutters-host" use:guttersHost>
 				<div class="gutters" class:beside={!!notes.side}>
-					<div class="column">
+					<div class="column" bind:this={columnBox}>
+						<NotCompiled path={master.path} />
+						<LeanMarks doc={master.path} host={columnBox} drawn={drawnSeq} />
 						<FragmentNotes {notes} fallback={master.path} in={master.path}>
 							{#key hasComparison}<Fragment
 									path={master.fragment}

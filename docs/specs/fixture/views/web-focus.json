@@ -1,0 +1,100 @@
+{
+ "answer": {
+  "gen": 1789516800000,
+  "more": {
+   "lean": [],
+   "proofs": [],
+   "record": []
+  },
+  "ok": true,
+  "relative_to": null,
+  "rests_on": [],
+  "row": {
+   "lean": {
+    "lean": "none",
+    "role": null,
+    "waiting_on": []
+   },
+   "name": "Definition 1.1",
+   "paper": null,
+   "reading": null,
+   "result": "sy-0001",
+   "source": {
+    "doc": "drafting/main.tex"
+   },
+   "taxon": "definition",
+   "title": "Widget"
+  },
+  "statement": {
+   "fragment": "fragments/nodes/sy-0001.html"
+  },
+  "used_by": {
+   "more": 0,
+   "outside": 0,
+   "rows": [
+    {
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Lemma 1.2",
+     "paper": null,
+     "reading": null,
+     "result": "sy-0002",
+     "source": {
+      "doc": "drafting/main.tex"
+     },
+     "taxon": "lemma",
+     "title": "Orbits"
+    },
+    {
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Theorem 2.1",
+     "paper": null,
+     "reading": null,
+     "result": "sy-0003",
+     "source": {
+      "doc": "drafting/main.tex"
+     },
+     "taxon": "theorem",
+     "title": "Parity"
+    },
+    {
+     "lean": {
+      "lean": "changed",
+      "role": "proved",
+      "waiting_on": []
+     },
+     "name": "Lemma 2.3",
+     "paper": null,
+     "reading": null,
+     "result": "sy-0007",
+     "source": {
+      "doc": "drafting/main.tex"
+     },
+     "taxon": "lemma",
+     "title": "Deferred"
+    }
+   ]
+  },
+  "uses": {
+   "outside": {
+    "proof": 0,
+    "statement": 0
+   },
+   "proof": [],
+   "statement": []
+  }
+ },
+ "endpoint": "web-focus",
+ "request": {
+  "more": true,
+  "result": "sy-0001",
+  "scope": "all"
+ }
+}

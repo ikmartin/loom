@@ -1,0 +1,41 @@
+{
+ "answer": {
+  "body": {
+   "at": "2026-09-16T00:00:00Z"
+  },
+  "ok": true,
+  "row": {
+   "attestation": "ev-2026-09-16-czt81y",
+   "attested_at": "2026-09-16T00:00:00Z",
+   "causes": [
+    {
+     "changed": {
+      "label": "sy-0001"
+     },
+     "now": "sha256:82b543a99a381579805073f55d6b139b7c7746567af05abb14fe1d0b5d2f8e66",
+     "then": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+   ],
+   "changed": "used",
+   "doc": "drafting/main.tex",
+   "docs": [
+    "drafting/main.tex"
+   ],
+   "kind": "attested-changed",
+   "lean": {
+    "lean": "changed",
+    "role": "proved",
+    "waiting_on": []
+   },
+   "name": "Lemma 2.3",
+   "reading": null,
+   "resting": [],
+   "result": "sy-0007",
+   "row": "attested-changed:sy-0007"
+  }
+ },
+ "endpoint": "review-row",
+ "request": {
+  "row": "attested-changed:sy-0007"
+ }
+}

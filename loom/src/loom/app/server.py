@@ -25,7 +25,7 @@ from loom.app.registry import HOME_PORT, Entry, address
 from loom.app.supervise import SETTLE, Supervisor, tail
 from loom.files import FILES_URL
 from loom.render.endpoints.base import ApiError
-from loom.render.serve import BUILD_URL, STORE_URL, HeldBundle, LoomHandler, from_elsewhere
+from loom.render.serve import BUILD_URL, LIBRARY_PDF_URL, LIBRARY_THUMB_URL, HeldBundle, LoomHandler, from_elsewhere
 from loom.version import code_stamp
 
 #: The largest JSON body the home reads; its writes are a few fields each.
@@ -239,7 +239,7 @@ class HomeHandler(LoomHandler):
     home: Any = None
 
     def _resolve(self) -> Path | None:
-        if self.path.split("?", 1)[0].startswith((BUILD_URL, STORE_URL, FILES_URL)):
+        if self.path.split("?", 1)[0].startswith((BUILD_URL, LIBRARY_PDF_URL, LIBRARY_THUMB_URL, FILES_URL)):
             return None  # the home holds no quilt, so none of a quilt's files
         return super()._resolve()
 

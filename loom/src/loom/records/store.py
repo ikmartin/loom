@@ -17,12 +17,12 @@ from pathlib import Path
 from typing import Any
 
 from loom.clock import today
-from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, EDIT_LOG, LINKS, REVIEW_OBSERVATIONS
+from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, ASK_LOG, EDIT_LOG, EVIDENCE_LOG, REVIEW_OBSERVATIONS
 from loom.records.annotations import Annotation, Record, load_records
 from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
 from loom.records.locate import block_hash, follow
-from loom.records.selectors import Selector, resolve_selector
+from loom.records.selectors import CONTEXT, Selector, _common_prefix_len, _common_suffix_len, resolve_selector
 from loom.records.snapshots import read_snapshot
 from loom.render.uses import used
 from loom.scan.hashing import hash_text, mathematical_hash, normalize
@@ -73,14 +73,6 @@ class KeyState:
         return self.state
 
 
-def wid_path(target: str) -> str:
-    """The store directory of a work identifier, or '' when the target is not one."""
-    from loom.refs.identity import parse
-
-    wid = parse(target)
-    return wid.path if wid else ""
-
-
 @dataclass
 class ResolvedAnnotation:
     annotation: Annotation
@@ -88,7 +80,7 @@ class ResolvedAnnotation:
     span: tuple[int, int] | None  # in the target's own text (concatenated pieces); on a page, offsets into its text
     detached: bool
     recorded: bool = True  # the text this was written against is still recoverable: it is the current text, or frozen
-    work: str = ""  # the citekey, when the target is a page of a cited work rather than a key (plan 0.13 item 2)
+    work: str = ""  # the reference, when the target is a work or a page of its PDF rather than a key (plan 0.13 item 2)
     target: str = ""  # the target key now: a whole document's path followed across moves, else the key as written
     in_doc: str | None = None  # the document `in` names now, followed across moves; as written when it is gone
     # on a PDF page: where it stands now, found again on a changed file (`marks.refind`) when `refound`
@@ -362,11 +354,6 @@ class Records:
                 continue
             if n.incomplete:
                 ks.state = "incomplete"
-            if n.file.endswith(".proposed.tex"):
-                # A proposal: read from a page and rendered by an agent, and not yet vouched for by anyone. It lives in a file no bundle inputs, so it cannot be cited or compiled; `loom library verify` moves it into the digest and records the row that makes it verified (plan 0.12 §5.1, digest contract §9.9).
-                ks.state = "proposed"
-                states[key] = ks
-                continue
             if row is not None:
                 ks.state = "incomplete" if n.incomplete else "accepted"
                 current = current_hashes[key]
@@ -682,51 +669,46 @@ class Records:
         return out
 
     def _on_page(self, result: ScanResult, a: Annotation, rec: Record, works: dict[str, str]) -> ResolvedAnnotation:
-        """An annotation on a page of a cited work, resolved against the store rather than against a key's text.
+        """An annotation on a page of a work's PDF, resolved against that PDF's page text rather than against a key's text.
 
-        `recorded` is whether the artifact the anchor names is the one in the store -- copy-once makes that the normal case for ever. `detached` is a text anchor whose quotation no longer locates in the page's committed text; a box is never detached, because the rectangles are the record. The target is the work's identifier, and the citekey is looked up through the bibliography so that a renamed citekey changes nothing.
+        `recorded` is whether the PDF the anchor names is the one the reference holds now. `detached` is a text anchor whose quotation no longer locates in the page's text; a box is never detached, because the rectangles are the record. The target is the work's reference.
         """
-        from loom.refs.identity import identify, parse
-        from loom.refs.pages import read_map, read_page
-        from loom.refs.search import locate_offsets
+        from loom.library.store import read
+        from loom.refs.pages import mapped, read_map, read_page
 
         assert a.anchor is not None
-        if a.target_key not in works:
-            wid = parse(a.target_key)
-            found = ""
-            for ck, entry in result.bib.items():
-                if wid and any((w.scheme, w.value) == (wid.scheme, wid.value) for w in identify(entry)):
-                    found = ck
-                    break
-            works[a.target_key] = found
-        ck = works[a.target_key]
-        if not ck or not wid_path(a.target_key):
-            return ResolvedAnnotation(a, rec, None, True, False, ck)
-        from loom.refs.fetch import work_dir
-
-        # the copy the work's page and PDF are read from, as the manifest's `artifacts.dir` names it; a work filed by its file's hash keeps its copy there, not under its identifier
-        home = work_dir(self.root, result.bib[ck])
+        ref = self._work(result, a, works)
+        node = read(self.root, ref) if ref else None
+        home = mapped(self.root, node.pdf) if node is not None and node.pdf else None
+        if home is None:
+            return ResolvedAnnotation(a, rec, None, True, False, ref)
         m = read_map(home)
         recorded = m is not None and bool(m.sha256) and m.sha256 == a.anchor.sha256
         if a.anchor.basis != "text":
-            moved = None if recorded or m is None else self._box_again(result, home, a)
+            moved = None if recorded or m is None else self._box_again(result, ref, a)
             if moved is None:
-                return ResolvedAnnotation(a, rec, None, False, recorded, ck, page=a.anchor.page)
+                return ResolvedAnnotation(a, rec, None, False, recorded, ref, page=a.anchor.page)
             return ResolvedAnnotation(
-                a, rec, None, False, recorded, ck, rects=moved.rects, page=moved.page, refound=True
+                a, rec, None, False, recorded, ref, rects=moved.rects, page=moved.page, refound=True
             )
         exact = a.selector.exact if a.selector else ""
         page = read_page(home, a.anchor.page)
-        span = locate_offsets(page, exact) if page and exact else None
-        if span is not None or recorded or m is None or not exact:
-            return ResolvedAnnotation(a, rec, span, span is None, recorded, ck, page=a.anchor.page)
-        # the work's file changed: its words are looked for on every page's committed text, its own first
-        for n in range(1, m.pages + 1):
-            text = read_page(home, n) if n != a.anchor.page else None
-            span = locate_offsets(text, exact) if text else None
-            if span is not None:
-                return ResolvedAnnotation(a, rec, span, False, recorded, ck, page=n, refound=True)
-        return ResolvedAnnotation(a, rec, None, True, recorded, ck, page=a.anchor.page)
+        if recorded or m is None or not exact:
+            span = _occurrence(page, a) if page and exact else None
+            return ResolvedAnnotation(a, rec, span, span is None, recorded, ref, page=a.anchor.page)
+        # the work's PDF changed: its words are looked for on its own page's text, then on every other page's, and stand where they and the words around them are found once
+        here = _scored(page, a) if page else []
+        if here:
+            span = _best(here)
+            return ResolvedAnnotation(a, rec, span, span is None, recorded, ref, page=a.anchor.page)
+        there = [
+            (n, s) for n in range(1, m.pages + 1) if n != a.anchor.page for s in _scored(read_page(home, n) or "", a)
+        ]
+        found = _best([((n, span), score) for n, (span, score) in there])
+        if found is None:
+            return ResolvedAnnotation(a, rec, None, True, recorded, ref, page=a.anchor.page)
+        n, span = found
+        return ResolvedAnnotation(a, rec, span, False, recorded, ref, page=n, refound=True)
 
     @staticmethod
     def _on_kept(
@@ -751,7 +733,7 @@ class Records:
 
     @staticmethod
     def _source(result: ScanResult, res: ResolvedAnnotation) -> dict[str, Any] | None:
-        """Where a mark on a cited work's page stands in the work's source (`refs.sourcemap.source_of`), or None; computed as the manifest is published, never recorded."""
+        """Where a mark on a work's page stands in the work's source (`refs.sourcemap.source_of`), or None; computed as the manifest is published, never recorded."""
         a = res.annotation
         page = res.page or (a.anchor.page if a.anchor else a.page)
         if not res.work or not page or res.detached or a.selector is None or not a.selector.exact:
@@ -760,44 +742,38 @@ class Records:
 
         return source_of(result, res.work, a.selector.exact, a.selector.prefix, a.selector.suffix, page)
 
-    def _box_again(self, result: ScanResult, home: Path, a: Annotation) -> Any:
-        """A box on a work's page found again on the work's changed file by the words around it and its gap (`marks.refound`), or None; a box that records neither stands where it was drawn."""
-        from loom.records.marks import artifact_of, refound
+    def _box_again(self, result: ScanResult, ref: str, a: Annotation) -> Any:
+        """A box on a work's page found again on the reference's changed PDF by the words around it and its gap (`marks.refound`), or None; a box that records neither stands where it was drawn."""
+        from loom.records.marks import artifact_of, reference_pdf, refound
 
-        pdf = home / "paper.pdf"
-        if a.gap is None or a.anchor is None or not pdf.is_file():
+        pdf = reference_pdf(self.root, ref)
+        if a.gap is None or a.anchor is None or pdf is None:
             return None
         return refound(result, pdf, a, artifact_of(pdf))
 
     def _work(self, result: ScanResult, a: Annotation, works: dict[str, str]) -> str:
-        """The citekey of the cited work `a`'s target identifies, '' when it names none; looked up once per target."""
-        from loom.refs.identity import identify, parse
+        """The reference `a`'s target names, '' when it names none; looked up once per target."""
+        from loom.library.ids import REFERENCE, kind_of
+        from loom.library.store import exists
 
         if a.target_key not in works:
-            wid = parse(a.target_key) if not a.target_key.lower().endswith(".pdf") else None
-            works[a.target_key] = next(
-                (
-                    ck
-                    for ck, entry in result.bib.items()
-                    if wid and any((w.scheme, w.value) == (wid.scheme, wid.value) for w in identify(entry))
-                ),
-                "",
-            )
+            ref = a.target_key
+            works[ref] = ref if kind_of(ref) == REFERENCE and exists(self.root, ref) else ""
         return works[a.target_key]
 
     def _on_pdf_or_work(
         self, result: ScanResult, a: Annotation, rec: Record, works: dict[str, str]
     ) -> ResolvedAnnotation:
-        """An annotation on a page of a PDF that records its own place, or on a cited work as a whole.
+        """An annotation on a page of a PDF that records its own place, or on a work as a whole.
 
         On a page, unchanged bytes keep it where it was written, and nothing reads the file. When the PDF's bytes changed under it, it is found again anywhere in the document by the words it recorded around it (`marks.refound`) and stands there, `refound`; when they are not found, or the file is gone, it is detached (A3). One that names no hash was written with nothing to compare, and nothing is claimed of it. A whole work has nothing to detach from.
         """
         from loom.records.marks import artifact_of, pdf_of, refound
 
-        ck = self._work(result, a, works)
+        ref = self._work(result, a, works)
         if a.page is None:
-            return ResolvedAnnotation(a, rec, None, False, True, ck, target=a.target_key)
-        pdf = pdf_of(result, a.target_key, ck)
+            return ResolvedAnnotation(a, rec, None, False, True, ref, target=a.target_key)
+        pdf = pdf_of(result, a.target_key, ref)
 
         def where(detached: bool, hides: str | None = None) -> ResolvedAnnotation:
             return ResolvedAnnotation(
@@ -806,7 +782,7 @@ class Records:
                 None,
                 detached,
                 True,
-                ck,
+                ref,
                 target=a.target_key,
                 rects=a.rects,
                 page=a.page,
@@ -817,9 +793,9 @@ class Records:
         if pdf is None or not pdf.is_file():
             return where(bool(a.artifact))
         now = artifact_of(pdf)
-        ref, sha = (a.origin or {}).get("ref"), (a.origin or {}).get("sha")
+        own, sha = (a.origin or {}).get("ref"), (a.origin or {}).get("sha")
         # the PDF's own annotation it came from is still in the file, so a viewer drawing the file's annotations hides that one
-        hides = str(ref) if ref and sha == now else None
+        hides = str(own) if own and sha == now else None
         if a.artifact is None or a.artifact == now:
             return where(False, hides)
         moved = refound(result, pdf, a, now)
@@ -831,7 +807,7 @@ class Records:
             None,
             False,
             True,
-            ck,
+            ref,
             target=a.target_key,
             rects=moved.rects,
             page=moved.page,
@@ -864,6 +840,16 @@ class Records:
 
         for p in replay_edits(self.root)[1]:
             diags.append(Diagnostic("warning", "loom:foreign-annotations", f"not a valid suggested edit: {p}", []))
+        from loom.evidence import asks, log
+
+        for p in log.replay(self.root).problems:
+            diags.append(
+                Diagnostic("warning", "loom:foreign-evidence", f"not a record of evidence: {p}", [], subject="record")
+            )
+        for p in asks.replay(self.root).problems:
+            diags.append(
+                Diagnostic("warning", "loom:foreign-asks", f"not an ask or its event: {p}", [], subject="record")
+            )
         # a missing file is the defaults, which loses nothing, so it is said quietly; one that cannot be read is a warning
         missing = not (self.root / ANNOTATION_TYPES).is_file()
         for p in self.types.problems:
@@ -872,7 +858,8 @@ class Records:
             (ANNOTATION_LOG, ("created", "replied")),
             (EDIT_LOG, ("created",)),
             (SESSION_INDEX, ("created",)),
-            (LINKS, ()),
+            (EVIDENCE_LOG, ()),
+            (ASK_LOG, ("asked",)),
         ):
             for _line, said in repeated(self.root, rel, events):
                 diags.append(Diagnostic("warning", "loom:repeated-id", f"{rel}: {said}", [], subject="record"))
@@ -1099,7 +1086,7 @@ class Records:
                 "id": a.id,
                 "author": {"kind": a.author_kind, "id": a.author_id, "label": a.author_id},
                 "created": a.created,
-                # an annotation on a cited work names the work by identifier; the citekey and the page travel beside it so a viewer needs no lookup to say where it is (plan 0.13 item 2)
+                # an annotation on a work names its reference, which travels as `work` with the page, so a viewer needs no lookup to say where it is (plan 0.13 item 2)
                 "target": {
                     # '' for one on no block: no block is named so, and nothing that reads a key throws on it
                     "key": res.target,
@@ -1138,6 +1125,10 @@ class Records:
                 "on_changes": list(res.on_changes),
                 "earlier": dict(a.earlier) if a.earlier else None,
                 "mark": a.mark,
+                # what it is for: `to-digest` on a mark asking for a result to be read, which no list of notes holds; null on a note
+                "purpose": a.purpose,
+                # on a mark to digest, the stub it locates, by its node's id; null where it names none
+                "node": a.node,
                 "origin": a.origin,
                 "hides": res.hides,
                 "resolved_why": a.resolved_why,
@@ -1372,3 +1363,37 @@ def _render_markdown(
     # a column's alignment arrives as an inline style, which the dialect does not carry: the viewer sets a table's look
     out = re.sub(r' style="text-align:(?:left|right|center)"', "", out)
     return _restore_math(out, spans)
+
+
+def _scored(text: str, a: Annotation) -> list[tuple[tuple[int, int], int]]:
+    """Each occurrence of a page note's words in `text`, as offsets, with how far the words around it match the note's `prefix` and `suffix`, compared as the words are (`refs.search.every_offset`)."""
+    from loom.refs.search import _loose, every_offset
+
+    sel = a.selector
+    if sel is None or not sel.exact:
+        return []
+    before, after = _loose(sel.prefix), _loose(sel.suffix)
+    out: list[tuple[tuple[int, int], int]] = []
+    for lo, hi in every_offset(text, sel.exact):
+        here, there = _loose(text[max(0, lo - 2 * CONTEXT) : lo]), _loose(text[hi : hi + 2 * CONTEXT])
+        out.append(((lo, hi), _common_suffix_len(here, before) + _common_prefix_len(there, after)))
+    return out
+
+
+def _best(scored: list[tuple[Any, int]]) -> Any:
+    """The one candidate whose words around it match best; None when there is none, or two match alike, which nothing tells apart."""
+    if not scored:
+        return None
+    best = max(score for _c, score in scored)
+    winners = [c for c, score in scored if score == best]
+    return winners[0] if len(winners) == 1 else None
+
+
+def _occurrence(text: str, a: Annotation) -> tuple[int, int] | None:
+    """Which occurrence of a page note's words it stands on, on the copy it was written on: the one at its recorded offsets, else the only one, else the one the words around it single out; None when nothing does."""
+    scored = _scored(text, a)
+    if a.anchor is not None:
+        hit = next((span for span, _s in scored if span[0] == a.anchor.start), None)
+        if hit is not None:
+            return hit
+    return scored[0][0] if len(scored) == 1 else _best(scored)

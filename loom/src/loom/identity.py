@@ -127,7 +127,7 @@ def signed(declared: str | None) -> str:
 def whoever(root: Path, author: str | None = None, *, sniff: bool = True) -> str:
     """Who is running this, for a record that wants provenance and must not refuse for want of it.
 
-    Opening, retitling or closing a session is not an authored claim about anybody's mathematics, so an unconfigured author name costs the record a name and never the command; a name that is declared is held to `signed` like any other. The verbs that *are* claims -- `accept`, `library verify`, a comment -- keep asking. `sniff=False` is the write API's: a write over HTTP is somebody at a browser, and the shell `loom serve` was started in says nothing about them.
+    Opening, retitling or closing a session is not an authored claim about anybody's mathematics, so an unconfigured author name costs the record a name and never the command; a name that is declared is held to `signed` like any other. The verbs that *are* claims -- `accept`, a comment -- keep asking. `sniff=False` is the write API's: a write over HTTP is somebody at a browser, and the shell `loom serve` was started in says nothing about them.
     """
     from loom.scan.quilt import NoAuthorError, resolve_author
 

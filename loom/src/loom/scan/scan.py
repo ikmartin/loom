@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 
 from loom.history.ledger import History, load_history
 from loom.paths import COPIES, document_dir
-from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib
+from loom.scan.bib import BibEntry
 from loom.scan.diagnostics import LATEX, MODEL
 from loom.scan.edges import EdgeResult, find_edges
 from loom.scan.expand import Expansion, expand_master
@@ -24,7 +24,7 @@ from loom.scan.nodes import Assembly, NodeRec, assemble
 from loom.scan.preamble import PreambleClosure, build_closure, taxa_conflicts, taxa_union
 from loom.scan.quilt import Quilt
 from loom.scan.relations import RelationRec, find_relations
-from loom.scan.source import SKIP_DIRS, discover_files, read_source
+from loom.scan.source import SKIP_DIRS, discover_files, lake_project, read_source
 
 _DOCCLASS = re.compile(r"\\documentclass\b")
 
@@ -48,7 +48,9 @@ class ScanResult:
     closures: dict[str, PreambleClosure] = field(default_factory=dict)
     expansions: dict[str, Expansion] = field(default_factory=dict)
     taxa: dict[str, Taxon] = field(default_factory=dict)
+    #: The library's references by the key their entries have: each entry, and the reference holding it (`library.references.entries`).
     bib: dict[str, BibEntry] = field(default_factory=dict)
+    refs: dict[str, str] = field(default_factory=dict)
     assembly: Assembly = field(default_factory=Assembly)
     diagnostics: list[Diagnostic] = field(default_factory=list)
     edges: EdgeResult = field(default_factory=EdgeResult)
@@ -250,12 +252,12 @@ def unread_dir(quilt: Quilt, rel: str) -> str | None:
     Returns
     -------
     str or None
-        The tool or loom directory `discover_files` skips, or the `skipped_dirs` entry, that `rel` sits in; None when the scan reads it.
+        The tool or loom directory `discover_files` skips, the Lake project root (`lake_project`) or the `skipped_dirs` entry that `rel` sits in; None when the scan reads it.
     """
     for part in Path(rel).parts[:-1]:
         if part in SKIP_DIRS:
             return part
-    return next((d for d in skipped_dirs(quilt) if rel.startswith(f"{d}/")), None)
+    return lake_project(quilt.root, rel) or next((d for d in skipped_dirs(quilt) if rel.startswith(f"{d}/")), None)
 
 
 def landmark_bases(quilt: Quilt) -> dict[str, str]:
@@ -304,7 +306,12 @@ def _scan(quilt: Quilt, overlay: Mapping[str, str | None] | None, bases: dict[st
     skip = skipped_dirs(quilt)
     paths = [rel for rel in discover_files(root, skip) if not (rel in overlay and overlay[rel] is None)]
     for extra in sorted(overlay):
-        if overlay[extra] is not None and extra not in paths and not extra.startswith(tuple(f"{d}/" for d in skip)):
+        if (
+            overlay[extra] is not None
+            and extra not in paths
+            and not extra.startswith(tuple(f"{d}/" for d in skip))
+            and lake_project(root, extra) is None
+        ):
             paths.append(extra)
     result.canon_files = landmark_documents(quilt)
     for rel in paths:
@@ -370,9 +377,12 @@ def _scan(quilt: Quilt, overlay: Mapping[str, str | None] | None, bases: dict[st
                 [],
             )
         )
-    # the quilt's own bibliography, gathered from the landmarks by `loom library update`; an author's `.bib` reaches it only through a landmark that names it
-    if (root / BIBLIOGRAPHY).is_file():
-        result.bib.update(parse_bib(read_source(root, BIBLIOGRAPHY).text))
+    # the citekeys loom knows are the library's references' (gathering makes one for each entry a document's bibliography holds)
+    from loom.library.references import entries
+
+    for key, (ref, held) in entries(root).items():
+        result.bib[key] = held
+        result.refs[key] = ref
     from loom.scan.directives import parse_directives
 
     for m in result.masters:
@@ -398,7 +408,6 @@ def _scan(quilt: Quilt, overlay: Mapping[str, str | None] | None, bases: dict[st
         result.closures,
         result.expansions,
         result.taxa,
-        set(result.bib),
         result.default_master,
         result.quilt.config.basis,
     )
@@ -427,9 +436,7 @@ def _scan(quilt: Quilt, overlay: Mapping[str, str | None] | None, bases: dict[st
                     class_=LATEX if unended else MODEL,
                 )
             )
-    from loom.refs.scan import other_versions
-
-    result.edges = find_edges(result.assembly, result.files, other_versions(result.bib))
+    result.edges = find_edges(result.assembly, result.files)
     # relations are resolved beside the edges and stored beside them; nothing that walks the graph can reach one
     seen = find_relations(result.assembly, result.files)
     result.relations = seen.relations

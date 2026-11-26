@@ -284,7 +284,7 @@ def render_changes(changed: list[dict[str, Any]]) -> str:
     lines: list[str] = []
     for c in changed:
         who = c.get("by", "")
-        # what a reader can act on: the citekey or the project PDF and the page for an annotation on a PDF, the key otherwise
+        # what a reader can act on: the work's reference or the project PDF and the page for an annotation on a PDF, the key otherwise
         where = f"{c.get('work') or c.get('target', '')} p.{c['page']}" if c.get("page") else c.get("target", "")
         mine = " · to your annotation" if c.get("yours") else ""
         now = f" · now {c['status']}" if c.get("status") else ""
@@ -299,27 +299,11 @@ def render_changes(changed: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def work_of(root: Path, annotation: Any) -> str | None:
-    """The citekey an annotation on a cited work names, or None when the target is a key in the corpus.
+def work_of(annotation: Any) -> str | None:
+    """The reference an annotation on a work names, or None when its target is anything else."""
+    from loom.library.ids import REFERENCE, kind_of
 
-    The record stores the work's identifier, which is what two quilts agree on; every `loom library` command wants the citekey, which is what this machine calls it. Nothing mapped one to the other, so an agent given a changed-annotation block had an address it could not use.
-    """
-    if annotation.anchor is None:
-        return None
-    from loom.refs.identity import identify, parse
-    from loom.scan.bib import BIBLIOGRAPHY, parse_bib
-
-    wid = parse(annotation.target_key)
-    if wid is None:
-        return None
-    try:
-        bib = parse_bib((root / BIBLIOGRAPHY).read_text(encoding="utf-8", errors="replace"))
-    except OSError:
-        return None
-    for ck, entry in bib.items():
-        if any((w.scheme, w.value) == (wid.scheme, wid.value) for w in identify(entry)):
-            return ck
-    return None
+    return annotation.target_key if kind_of(annotation.target_key) == REFERENCE else None
 
 
 def _placed(result: Any, a: Any) -> str | None:
@@ -334,14 +318,14 @@ def _placed(result: Any, a: Any) -> str | None:
 def annotation_row(root: Path, a: Any, result: Any = None) -> dict[str, Any]:
     """One annotation or reply as a message carries it and `loom since` reports it: whole, with the words it is on.
 
-    Such an annotation's target is the work's identifier, which no `loom library` command takes, so the citekey and the page travel with it, as `ai annotations` prints them. With the scan, one on a PDF page carries what `on_page` gives besides.
+    One on a work carries the work's reference and the page, as `ai annotations` prints them. With the scan, one on a PDF page carries what `on_page` gives besides.
     """
     row: dict[str, Any] = {
         "id": a.id,
         "type": a.type,
         # the block it is shown on now, with the scan; null for one on no block
         "target": _placed(result, a),
-        "work": work_of(root, a),
+        "work": work_of(a),
         "page": a.page or (a.anchor.page if a.anchor else None),
         "act": "replied" if a.in_reply_to else "created",
         "by": a.author_id,
@@ -457,7 +441,12 @@ def pending(root: Path, session: Any, who: str) -> list[dict[str, Any]]:
         a
         for record in records
         for a in record.annotations
-        if a.id not in sent and a.created >= since and a.author_kind == "person" and a.author_id == who
+        if a.id not in sent
+        and a.created >= since
+        and a.author_kind == "person"
+        and a.author_id == who
+        # a mark to digest is a request, which an agent meets as a task (`loom tasks`), not as a note
+        and a.purpose is None
     ]
     # one on a PDF page carries a crop of the page and where it stands now, which want the quilt scanned
     result = None

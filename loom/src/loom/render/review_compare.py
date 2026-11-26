@@ -100,17 +100,6 @@ def _render_into(
     )
 
 
-def _machine_made(result: ScanResult) -> set[str]:
-    """The cited papers' results their extraction recorded (`mechanical`), which no person reviews and so get no review preview."""
-    from loom.refs.proposals import load_results
-
-    root = result.quilt.root
-    out: set[str] = set()
-    for citekey in {n.digest for n in result.nodes.values() if n.external and n.digest}:
-        out |= {rid for rid, r in load_results(root, citekey).items() if r.cls == "mechanical"}
-    return out
-
-
 def attach_comparisons(
     result: ScanResult,
     records: Records,
@@ -120,7 +109,6 @@ def attach_comparisons(
 ) -> None:
     """Attach lazy fragment paths and source ranges to text-edit causes only."""
     states = records.key_states(result)
-    machine = _machine_made(result)
     master = result.default_master
     closure = result.closures.get(master) if master else None
     current_preamble = closure.raw_text() if closure else ""
@@ -134,7 +122,6 @@ def attach_comparisons(
             key in manifest["keys"]
             and result.nodes[key].kind in ("environment", "proof")
             and (not state.row or not state.fresh)
-            and key not in machine
         ):
             text = result.dependencies.texts.get(key) or ""
             digest = hashlib.sha256((key + text + current_preamble).encode()).hexdigest()[:20]

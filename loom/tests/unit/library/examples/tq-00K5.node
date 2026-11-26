@@ -1,0 +1,12 @@
++++
+schema = 1
+id = "tq-00K5"
+taxon = "proposition"
+number = "3.4"
+title = "Test proposition"
+source = "tq-00A1-ref"
+label = "prop:test"
+pages = "13"
+uses = ["tq-00A4"]
++++
+Let $W$ be a widget as in Definition~\ref{tq-00A4}. Then $W$ lies in a ball about the origin.

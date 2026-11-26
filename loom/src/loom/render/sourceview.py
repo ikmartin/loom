@@ -93,8 +93,6 @@ def source_node(
         attrs += f' data-id="{_attr(n.id)}"'
     attrs += f' data-key="{_attr(key)}" data-taxon="{_attr(n.taxon or "")}" data-style="{_attr(n.style or "plain")}"'
     attrs += f' data-src="{n.file}:{n.start}:{n.end}"{pairs}'
-    if n.digest:
-        attrs += f' data-macros="{_attr(n.digest)}"'
     label = html_of(label_el(n, owner.numbers, None, owner.macros))
     out = f"<div {attrs}>{label}{body}</div>"
     if proofs:

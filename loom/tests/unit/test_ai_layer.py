@@ -151,7 +151,7 @@ def test_an_agent_is_never_allowed_to_delete(tmp_path: Path) -> None:
 def test_modes_templates_present_and_contracts_listed(tmp_path: Path) -> None:
     """Every mode says in one line when it fits, names its report's blocks from the catalogue, and carries none of the ceremony the contract cut removed (plan 0.21.1)."""
     q = bare(tmp_path)
-    assert len(MODES) == 9 and "flow" in MODES and "brainstorm" not in MODES  # rules.md is not a mode
+    assert len(MODES) == 8 and "flow" in MODES and "brainstorm" not in MODES  # rules.md is not a mode
     assert not (q / ".loom/agents/instructions" / "modes" / "blocks.md").exists()
     rules = (q / ".loom/agents/instructions" / "rules.md").read_text()
     assert rules.startswith("# Standing rules, contracts, and blocks") and "## Never" in rules
@@ -331,7 +331,7 @@ def test_orient_static_plus_live(tmp_path: Path) -> None:
     r = ok("ai", "orient", cwd=q)
     assert r.output.startswith("# Orientation: working in a quilt")
     assert "# Live state" in r.output and "- status: " in r.output and "prefix `dm`" in r.output
-    assert "- undigested citekeys: " in r.output and "- open sessions: none" in r.output
+    assert "- open sessions: none" in r.output
 
 
 def test_the_orientation_opens_with_what_must_not_be_missed(tmp_path: Path) -> None:
@@ -562,7 +562,7 @@ def test_the_allow_list_and_the_permission_file_cannot_disagree(tmp_path: Path) 
     writes_outside_a_session = {
         "accept", "atomize", "import", "stamp", "fork",
         "revert", "live", "mv", "linearize", "upgrade", "ai init",
-        "library add", "library verify", "library discard", "library ignore", "library import", "library drop",
+        "library add",
     }  # fmt: skip
     missing = sorted(writes_outside_a_session - denied)
     assert not missing, f"agent-writable commands missing from the deny list: {missing}"
@@ -645,9 +645,9 @@ def test_every_command_an_agent_writes_with_takes_as() -> None:
     options = dict(walk(main))
     # who acts is `--as` everywhere (K2); `--author` names nothing an agent may pass
     assert not [c for c in AGENT_COMMANDS if "--author" in options.get(c, set())]
-    writers = {"annotate", "session say", "session new", "library relate", "library propose"}
+    writers = {"annotate", "session say", "session new"}
     assert writers <= AGENT_COMMANDS
-    assert not [c for c in sorted(writers) if "--as" not in options[c] and c != "library propose"]
+    assert not [c for c in sorted(writers) if "--as" not in options[c]]
 
 
 def test_every_command_the_agent_is_told_to_run_is_allowed() -> None:
@@ -660,11 +660,6 @@ def test_every_command_the_agent_is_told_to_run_is_allowed() -> None:
     named_to_refuse = {
         "accept",
         "library add",
-        "library verify",
-        "library discard",
-        "library ignore",
-        "library drop",
-        "library import",
         "session delete",
         "ai delete",
         "sync publish",
@@ -678,20 +673,7 @@ def test_every_command_the_agent_is_told_to_run_is_allowed() -> None:
     }
     told = {c for c in author_commands() if re.search(rf"`loom {re.escape(c)}\b", docs)}
     assert told <= named_to_refuse, sorted(told - named_to_refuse)
-    assert "library read" in AGENT_COMMANDS
-
-
-def test_findings_for_a_run_include_what_the_author_decided(tmp_path: Path) -> None:
-    """`ai annotations --by NAME` shows the author's decision on each result NAME proposed, so an agent that reattaches need not ask `library why` id by id."""
-    from tests.unit._quilts import mapped, propose
-
-    q, ck = mapped(tmp_path)
-    propose(q, ck, "thm-1.1", 1, "Let $f$ be a DM-type morphism", "Y", **{"as": "Reader Agent"})
-    ok("library", "discard", f"{ck}-thm-1.1", "--why", "wrong theorem", "--as", "i", cwd=q)
-    out = ok("ai", "annotations", "--by", "Reader Agent", cwd=q).output
-    assert f"{ck}-thm-1.1" in out and "discarded -- wrong theorem" in out
-    # with nobody named, the listing is of annotations alone
-    assert f"{ck}-thm-1.1" not in ok("ai", "annotations", cwd=q).output
+    assert not [c for c in AGENT_COMMANDS if c.startswith("library")], "every library command left is the author's"
 
 
 def test_upgrade_leaves_a_loom_sty_alone(tmp_path: Path) -> None:

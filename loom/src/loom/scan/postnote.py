@@ -1,4 +1,4 @@
-"""Postnote matching: `\\cite[POSTNOTE]{citekey}` becomes an edge to the digest node whose locator matches, after both sides are normalised.
+"""Postnote matching: the normal form of a citation's postnote, `\\cite[POSTNOTE]{citekey}`, and of a result's locator, which two are compared in.
 
 Normalisation lowercases, expands the abbreviation table, strips `~`, `\\S`, `\\href`, parentheses, trailing part selectors such as `(1)` or `(ii)`, page references, and the words see/cf/also, and folds plurals and Roman numerals; a postnote naming several results is split on commas, semicolons, and `and`, a bare number inheriting the taxon of the part before it.
 """
@@ -6,13 +6,6 @@ Normalisation lowercases, expands the abbreviation table, strips `~`, `\\S`, `\\
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
-
-from loom.scan.model import Diagnostic, Fix, Location
-
-if TYPE_CHECKING:
-    from loom.scan.edges import EdgeResult
-    from loom.scan.nodes import Assembly, NodeRec
 
 ABBREV = {
     "thm": "theorem",
@@ -101,7 +94,6 @@ DROP_WORDS = {"see", "cf", "also", "eg", "ie", "the", "of", "in", "compare", "es
 _SPLIT = re.compile(r"\s*(?:;|,|\band\b|&)\s*")
 _PAGE = re.compile(r"\b(?:pp?|pages?)\.?\s*\d+\s*(?:--?|–|—)?\s*\d*")
 _PART = re.compile(r"\s*\((?:\d+|[ivxl]+|[a-z])\)")
-_LOCATOR = re.compile(r"\\cite\s*\[([^\]]*)\]")
 
 
 def normalize(text: str) -> str:
@@ -146,115 +138,9 @@ def parts(postnote: str) -> list[str]:
     return out
 
 
-def locator_of(title: str | None) -> str | None:
-    """The locator inside a digest node's title, `{\\cite[LOCATOR]{citekey}}`."""
-    if not title:
-        return None
-    m = _LOCATOR.search(title)
-    return m.group(1).strip() if m else None
-
-
-def locator_forms(node: NodeRec, slug: str) -> set[str]:
-    """Every normalised string that names this digest node: its locator, each part of the locator, and `<taxon> <number>` read off its id."""
-    forms: set[str] = set()
-    loc = locator_of(node.title)
-    if loc:
-        forms.add(normalize(loc))
-        forms.update(parts(loc))
-    for label in [
-        node.id,
-        *node.aliases,
-    ]:  # an alias such as `thm-1.2.1` beside the id `thm-1.0.1` names the same result under an older numbering
-        if not label or not label.startswith(slug + "-"):
-            continue
-        local = label[len(slug) + 1 :]
-        if local == "setup":
-            forms.add(normalize("standing assumptions"))
-        pieces = local.split("-")
-        if len(pieces) >= 2 and pieces[0] in ABBREV:
-            forms.add(normalize(f"{ABBREV[pieces[0]]} {'-'.join(pieces[1:])}"))  # `thm-A.20` names `theorem a.20`
-    forms.discard("")
-    return forms
-
-
 def match(postnote: str, candidates: list[tuple[str, set[str]]]) -> list[str]:
     """Keys of the candidates any part of the postnote names, in candidate order."""
     wanted = set(parts(postnote))
     if not wanted:
         return []
     return [key for key, forms in candidates if forms & wanted]
-
-
-def postnote_edges(asm: Assembly, res: EdgeResult, versions: dict[str, list[str]] | None = None) -> None:
-    """Add a `postnote` edge for every `\\cite[postnote]{citekey}` that names a node of the citekey's digest; warn `loom:unmatched-postnote` when a digest exists but nothing matches, and add the citation to `res.unmatched`. A postnote naming a page alone names no result and is passed over.
-
-    `versions` maps a citekey to its work's other versions (`refs.scan.other_versions`): a postnote the key's own digest does not match is matched against theirs, in order, and `loom:postnote-from-another-version` says which one answered.
-    """
-    from loom.scan.edges import EdgeRec, _kind_of
-
-    versions = versions or {}
-    by_citekey: dict[str, list[tuple[str, set[str]]]] = {}
-    for key, n in asm.nodes.items():
-        ck = asm.digest_files.get(n.file)
-        if ck is None or n.kind not in ("environment", "section"):
-            continue
-        forms = locator_forms(n, asm.prefix_of(ck))
-        if forms:
-            by_citekey.setdefault(ck, []).append((key, forms))
-    for c in res.cites:
-        others = [v for v in versions.get(c.citekey, []) if v in by_citekey]
-        if not c.postnote or (c.citekey not in by_citekey and not others) or not parts(c.postnote):
-            continue  # a postnote naming a page alone names no result
-        src_node = asm.nodes.get(c.src)
-        if src_node is not None and asm.digest_files.get(src_node.file) in {c.citekey, *versions.get(c.citekey, [])}:
-            continue  # a digest node's own locator title cites the paper it digests; that is not a dependency
-        kind = _kind_of(src_node.kind) if src_node else "prose"
-        hits = [k for k in match(c.postnote, by_citekey.get(c.citekey, [])) if k != c.src]
-        answered = c.citekey
-        for v in others if not hits else []:
-            hits = [k for k in match(c.postnote, by_citekey[v]) if k != c.src]
-            if hits:
-                answered = v
-                break
-        if hits:
-            # A proposal is never an edge target: nobody has vouched for it, so it enters no closure, no closure document and no compile. The warning below still reports the citation.
-            pending = [k for k in hits if asm.nodes[k].file.endswith(".proposed.tex")]
-            for to in hits:
-                if to not in pending:
-                    res.edges.append(EdgeRec(c.src, to, kind, "postnote", c.file, c.line, f"{c.citekey}|{c.postnote}"))
-            if answered != c.citekey:
-                res.diagnostics.append(
-                    Diagnostic(
-                        "info",
-                        "loom:postnote-from-another-version",
-                        f"\\cite[{c.postnote}]{{{c.citekey}}} names {hits[0]}, from the digest of {answered}, "
-                        f"another version of {c.citekey}",
-                        [Location(c.file, c.line)],
-                        [c.src],
-                    )
-                )
-            # Citing a result nobody has vouched for is a normal intermediate state of drafting, so this is a warning: the node is in no closure and no bundle, so the compile already tells the truth.
-            if pending:
-                res.diagnostics.append(
-                    Diagnostic(
-                        "warning",
-                        "loom:cites-proposed-node",
-                        f"\\cite[{c.postnote}]{{{c.citekey}}} names {pending[0]}, which is proposed and not yet verified",
-                        [Location(c.file, c.line)],
-                        [c.src],
-                    )
-                )
-        else:
-            digests = [k for k in (c.citekey, *others) if k in by_citekey]
-            res.unmatched.add((c.citekey, c.postnote))
-            res.diagnostics.append(
-                Diagnostic(
-                    "warning",
-                    "loom:unmatched-postnote",
-                    f"\\cite[{c.postnote}]{{{c.citekey}}} names no result in the digest of {' or of '.join(digests)}",
-                    [Location(c.file, c.line)],
-                    [c.src],
-                    # the locator is mistyped, or the digest lacks the result: the work's report says which
-                    fixes=[Fix("see what its digest holds", f"loom library {digests[0]}")] if digests else [],
-                )
-            )

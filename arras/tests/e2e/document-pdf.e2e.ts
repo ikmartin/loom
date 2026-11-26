@@ -83,7 +83,7 @@ test("an agent's copy has view PDF too, and its PDF saves under the copy's own n
 	await viewOpenAndSave(page, copy);
 });
 
-test('view PDF says in words when nothing is compiled yet, while it compiles and when the last compile failed, greyed while there is no PDF; one compiled with errors, or kept from before a failure, still opens', async ({ page }) => {
+test('view PDF says in words when nothing is compiled yet, while it compiles and when the last compile failed, greyed while there is no PDF; one compiled with errors, or kept from before a failure, still opens, and errors that made a PDF are said over the document', async ({ page }) => {
 	let said: Record<string, unknown> = {};
 	await compiling(page, () => said);
 	await servePdfs(page);
@@ -103,13 +103,16 @@ test('view PDF says in words when nothing is compiled yet, while it compiles and
 
 	said = { [main.path]: { state: 'compiling', again: false, last: null } };
 	await expect(word).toHaveText('compiling');
+	await expect(pane(page, 0).getByTestId('doc-not-compiled')).toHaveCount(0);
 	await expect(view).toHaveAttribute('aria-disabled', 'true');
 	said = { [main.path]: { state: 'queued', again: false, last: null } };
 	await expect(word).toHaveText('waiting to compile');
 	const failed = { result: 'failed', ended: 'now', error: '! Undefined control sequence.', at: 'l.12 \\hlind' };
 	said = { [main.path]: { state: 'idle', again: false, last: failed } };
 	await expect(word).toHaveText('did not compile');
-	await expect(view).toHaveAttribute('title', '! Undefined control sequence. at l.12 \\hlind');
+	// the document itself says so, in the person's words, its line and no command
+	await expect(pane(page, 0).getByTestId('doc-not-compiled')).toHaveText('main.tex has not compiled since it last changed: a command it uses is not defined (line 12). The PDF is the one from before.');
+	await expect(view).toHaveAttribute('title', 'a command it uses is not defined (line 12)');
 	await expect(view).toHaveAttribute('aria-disabled', 'true');
 	await page.keyboard.press('Escape');
 
@@ -119,9 +122,13 @@ test('view PDF says in words when nothing is compiled yet, while it compiles and
 	await viewMenu(page, 0);
 	await expect(word).toHaveText('did not compile');
 	await expect(view).not.toHaveAttribute('aria-disabled');
+	await expect(pane(page, 0).getByTestId('doc-compiled-errors')).toHaveCount(0);
 	said = { [talk.path]: { state: 'idle', again: false, last: { ...failed, result: 'errors' } } };
 	await expect(word).toHaveText('compiled with errors');
-	await expect(view).toHaveAttribute('title', '! Undefined control sequence. at l.12 \\hlind');
+	// errors that still made a PDF are said over the document too, not only in a hover
+	await expect(pane(page, 0).getByTestId('doc-compiled-errors')).toHaveText('talk.tex compiled with errors: a command it uses is not defined (line 12). The PDF was made anyway and may be wrong there.');
+	await expect(pane(page, 0).getByTestId('doc-not-compiled')).toHaveCount(0);
+	await expect(view).toHaveAttribute('title', 'a command it uses is not defined (line 12)');
 	await view.click();
 	await expect(pane(page, 1).getByTestId('pdf-item')).toHaveAttribute('data-document', talk.path);
 	await expect(pane(page, 1).getByTestId('pdf-compile')).toContainText('LaTeX reported errors');

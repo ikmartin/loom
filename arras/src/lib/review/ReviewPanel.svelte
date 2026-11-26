@@ -10,6 +10,7 @@
 	import { here } from '$lib/here.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
 	import DiffView from '$lib/components/DiffView.svelte';
+	import Cannot from './Cannot.svelte';
 	import { causeLabel } from './evidence';
 	import { takenLabel } from './queue';
 	import Said from './Said.svelte';
@@ -38,12 +39,11 @@
 		};
 	});
 
-	const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 	const status = $derived(
 		!row
 			? key?.acceptance?.fresh
 				? `Accepted by ${key.acceptance.author}, ${shortDate(key.acceptance.date)}.`
-				: 'Not waiting in Your Changes.'
+				: 'Not waiting to be accepted.'
 			: row.cause === 'never-accepted'
 				? 'Never accepted.'
 				: row.cause === 'earlier-change'
@@ -76,21 +76,19 @@
 			<Fragment path={acceptedSide ? comparison.accepted : comparison.current} macroSet={acceptedSide ? comparison.accepted_macros : ''} isolatedMacros={acceptedSide} />
 		</div>
 	{:else if cause?.diff}<DiffView path={cause.diff} />{/if}
-	{#if row?.refusal}<p class="cannot" data-testid="review-panel-refusal">Can't be accepted yet: {lower(row.refusal)}</p>
+	{#if row?.refusal}<Cannot {row} testid="review-panel-refusal" />
 	{:else if row && served && m.reviewer?.name}<button class="btn primary" disabled={busy} onclick={() => void accept()} data-testid="review-panel-accept">{busy ? 'Accepting…' : 'Accept'}</button>{/if}
 	{#if said}<Said text={said.text} refused={said.refused} testid="review-panel-said" />{/if}
-	<p><a href={reviewUrl(master, reviewKey)} data-testid="review-panel-back">Back to Your Changes</a></p>
+	<p><a href={reviewUrl(master, reviewKey)} data-testid="review-panel-back">Back to Review</a></p>
 </div>
 
 <style>
 	.status,
-	.why,
-	.cannot {
+	.why {
 		font-size: 13px;
 		margin: 0 0 var(--gap-tight);
 	}
-	.why,
-	.cannot {
+	.why {
 		color: var(--ink-soft);
 	}
 	h4 {

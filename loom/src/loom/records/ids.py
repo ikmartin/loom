@@ -1,10 +1,12 @@
-"""The ids of what loom's shared logs hold: an annotation, a suggested edit, a session and a link.
+"""The ids of what loom's shared logs hold: an annotation, a suggested edit, a session, a record of evidence and an ask.
 
 Clones of a quilt write apart and merge later, so a number counted from what one clone can see is the number another clone counts too. Each of these ids ends in a token drawn at random instead, so two clones draw two ids. A log's lock still keeps one clone's writers apart.
 
 Two records can still reach one log under one id, by a line a hand-resolved merge kept twice or a draw that came up the same. `repeated` reports that (P13); it drops nothing and renumbers nothing, since which record an id should keep is not loom's to choose.
 
 An id is otherwise opaque: nothing reads an order out of its token, so a listing that wants the oldest first sorts by when a record was written.
+
+The library draws its ids here too, though they stay on one machine: an intake's acts (`x-`) and questions (`q-`), and a delete's undo (`u-`).
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ TOKEN = r"[0-9a-z]+"
 ANNOTATION = rf"a-{DAY}-{TOKEN}"
 EDIT = rf"e-{DAY}-{TOKEN}"
 SESSION = rf"s-{DAY}-{TOKEN}"
+EVIDENCE = rf"ev-{DAY}-{TOKEN}"
+ASK = rf"t-{DAY}-{TOKEN}"
 
 #: Crockford's base 32 in lower case: no `i`, `l`, `o` or `u`, so a token survives being read aloud and rarely spells a word.
 _ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
@@ -41,7 +45,7 @@ def _token(prefix: str, attempt: int) -> str:
     return "".join(_ALPHABET[(value >> shift) & 31] for shift in range(_BITS - 5, -1, -5))
 
 
-def draw(prefix: str, taken: Collection[str]) -> str:
+def draw(prefix: str, taken: Collection[str], *, seed: str = "") -> str:
     """`prefix` and a fresh token, the first drawn that `taken` does not hold.
 
     What is written draws this under its log's lock, so `taken` is still true at the write; a dry run has no lock and writes nothing, so what it prints is an example of what a write would draw.
@@ -49,16 +53,18 @@ def draw(prefix: str, taken: Collection[str]) -> str:
     Parameters
     ----------
     prefix : str
-        Everything before the token: `a-2026-11-05-`, `link-`.
+        Everything before the token: `a-2026-11-05-`, `s-2026-11-05-`.
     taken : collection of str
         The ids this clone can already see.
+    seed : str, default ''
+        What the id is drawn for, which picks the fixed sequence under LOOM_FIXED_TIME besides `prefix`: an id whose record goes away is then not drawn again for something else.
 
     Returns
     -------
     str
     """
     for attempt in count():
-        fresh = prefix + _token(prefix, attempt)
+        fresh = prefix + _token(prefix + seed, attempt)
         if fresh not in taken:
             return fresh
     raise AssertionError("count() never ends")

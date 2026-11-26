@@ -123,7 +123,7 @@ def test_the_text_leads_with_its_verdict_and_fits(path: str, i: int, case: Case,
     long = [ln for ln in lines if len(ln) > WIDTH]
     assert long == [], f"lines over {WIDTH} columns" + describe(argv, r)
     text = r.stdout + r.stderr
-    assert ".loom/library/storage/" not in text, "a storage path in the text" + describe(argv, r)
+    assert ".loom/library/documents/" not in text, "a storage path in the text" + describe(argv, r)
     assert not HASH.search(r.stdout), f"a hash in the text: {HASH.search(r.stdout)}" + describe(argv, r)
 
 

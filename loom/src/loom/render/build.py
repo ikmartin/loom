@@ -10,7 +10,6 @@ import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from functools import cache
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -19,7 +18,6 @@ from loom.history.ledger import load_history
 from loom.lifetimes import BuildIndex, in_cache, read_index, write_index
 from loom.paths import (
     BLOCK_PREVIEWS,
-    BLOCK_SPANS,
     BLOCKS,
     BUILD_INDEX,
     SITE,
@@ -30,15 +28,14 @@ from loom.paths import (
 )
 from loom.records.lastseen import freeze_moved
 from loom.records.store import Records
-from loom.refs.pages import storage_root, store_home
 from loom.render.attach import ATTACH, Attaching
 from loom.render.canon import CanonRenderer, canon_fragment_path, load_canon
 from loom.render.fragments import FragmentRenderer, RenderPlan
 from loom.render.keys import aux_bytes, code_hash
 from loom.render.manifest import build_manifest
 from loom.render.marks import MarkEntry, place_marks
-from loom.render.publish import publish, write_atomic
-from loom.render.uses import noting, used
+from loom.render.publish import publish
+from loom.render.uses import noting
 from loom.render.versions import Gone, attach_versions, gone_annotations, gone_marks
 from loom.scan.memo import forget, reading
 from loom.scan.model import Diagnostic
@@ -61,161 +58,6 @@ class BuildReport:
     def kept(self) -> BuildReport:
         """This report without its manifest, which is on disk once published: what a server holds between builds, where a large quilt's manifest runs to tens of megabytes as objects."""
         return replace(self, manifest={})
-
-
-class _PageTable:
-    """The word boxes of one work's pages, read once each, and the page table the sidecar publishes for them."""
-
-    def __init__(self, home: Path) -> None:
-        self.home = home
-        self.boxes: dict[int, str] = {}
-        self.pages: dict[str, dict[str, float]] = {}
-
-    def boxes_of(self, page: int) -> str:
-        from loom.refs.pages import page_box, page_rotation, token_boxes
-
-        if page not in self.boxes:
-            try:
-                self.boxes[page] = token_boxes(self.home / "paper.pdf", page, self.home)
-            except Exception:  # noqa: BLE001 -- geometry is a convenience; a page without it still reads
-                self.boxes[page] = ""
-        if self.boxes[page] and str(page) not in self.pages:
-            box = page_box(self.boxes[page])
-            if box:
-                self.pages[str(page)] = {
-                    "width": box[0],
-                    "height": box[1],
-                    "rotate": page_rotation(self.home / "paper.pdf", page, self.home),
-                }
-        return self.boxes[page]
-
-
-def _attach_spans(root: Path, manifest: dict[str, Any], files: dict[str, Any]) -> None:
-    """One sidecar per work holding the geometry of its anchors, and a pointer to it on the reference (plan 0.13 item 2).
-
-    Beside the manifest for the reason `_write_source` gives: the manifest is loaded whole on every poll, and geometry is wanted for the one paper being read. The pointer carries the sidecar's own hash, which is what lets a viewer notice a stale copy while `loom serve` rebuilds under it.
-
-    Two maps: `quads` for the work's results, keyed by result id, and `marks` for the annotations on its pages, keyed by annotation id. A text anchor's rectangles are derived here from the word boxes and never recorded; a box anchor's are the record itself, read back from the log, or where a changed copy found it again (`refound`); a mark that records its own place stands where the manifest says it stands now. A work whose PDF is not on this machine gets no sidecar, and the viewer has nothing to draw, which is the honest state.
-
-    Runs after `Records.apply`, so it reads the published annotations and writes each reference's `reading` count.
-    """
-    from loom.records.annotations import load_records
-    from loom.refs.pages import read_map, read_page
-    from loom.refs.proposals import load_results
-    from loom.refs.search import locate_span
-
-    published = manifest.get("annotations", {})
-    # the box anchors' own rectangles, which the manifest does not carry
-    drawn: dict[str, list[list[float]]] = {}
-    if any(a.get("basis") == "box" for a in published.values()):
-        for record in load_records(root)[0]:
-            for a in record.annotations:
-                if a.anchor is not None and a.anchor.basis == "box" and a.anchor.quads:
-                    drawn[a.id] = a.anchor.quads
-
-    # open means of a type that stays open until resolved, and not resolved yet
-    staying = {t["id"] for t in manifest.get("annotation_types", []) if t.get("open")}
-    for citekey, ref in manifest.get("references", {}).items():
-        on_work = [a for a in published.values() if a["target"].get("work") == citekey]
-        ref["reading"] = {
-            "total": len(on_work),
-            "open": sum(
-                1 for a in on_work if a["status"] == "open" and a["in_reply_to"] is None and a.get("type") in staying
-            ),
-        }
-        artifacts = ref.get("artifacts") or {}
-        home = store_home(root, str(artifacts.get("dir", "")))
-        if not artifacts.get("pdf") or not (home / "paper.pdf").is_file():
-            continue
-        results = {rid: r for rid, r in load_results(root, citekey).items() if r.anchor.kind == "pdf" and r.anchor.page}
-        if not results and not on_work:
-            continue
-        m = read_map(home)
-        rel = f"spans/{home.relative_to(storage_root(root)).as_posix()}.json"
-        # what the geometry is made from: the results' anchors and words, the annotations on the pages and their drawn boxes, the copy filed, and the matching code
-        key = hashlib.sha256(
-            json.dumps(
-                [
-                    _spans_code(),
-                    m.sha256 if m else "",
-                    sorted(
-                        [rid, r.anchor.page, r.anchor.basis, r.anchor.start, r.anchor.end, r.source_text]
-                        for rid, r in results.items()
-                    ),
-                    sorted(
-                        [
-                            a["id"],
-                            a["target"].get("page") or 0,
-                            a.get("basis") or "",
-                            a.get("quote") or "",
-                            drawn.get(a["id"]) or a.get("rects") or [],
-                        ]
-                        for a in on_work
-                    ),
-                ]
-            ).encode()
-        ).hexdigest()[:32]
-        kept = root / BLOCK_SPANS / f"{key}.json"
-        used(kept)
-        if kept.is_file():
-            body = kept.read_text(encoding="utf-8")
-            if body:
-                files[rel] = body
-                ref["spans"] = {"path": rel, "sha256": hashlib.sha256(body.encode()).hexdigest()}
-            continue
-        table = _PageTable(home)
-        quads: dict[str, list[list[float]]] = {}
-        marks: dict[str, list[list[float]]] = {}
-        for rid, r in results.items():
-            xml = table.boxes_of(r.anchor.page)
-            # An anchor that records a span says which words on the page it means, and the page's own text is what those offsets index; a result read off a page instead carries the words it quoted. A mechanically extracted result's `source_text` is its LaTeX, which is not what the page says, so matching that was what left an extracted digest with no geometry at all.
-            needle = r.source_text
-            if r.anchor.basis == "text" and r.anchor.end > r.anchor.start:
-                page_text = read_page(home, r.anchor.page) or ""
-                needle = page_text[r.anchor.start : r.anchor.end] or needle
-            span = locate_span(xml, needle, r.anchor.page) if xml else None
-            if span is not None:
-                quads[rid] = [list(q) for q in span.lines]
-        for a in on_work:
-            page = int(a["target"].get("page") or 0)
-            if not page:
-                continue
-            if a.get("basis") is None and a.get("rects"):
-                # drawn on the page with its own place, which the record holds
-                marks[a["id"]] = a["rects"]
-                table.boxes_of(page)  # for the page table
-                continue
-            if a.get("basis") == "box":
-                # a box found again on a changed copy stands where it was found; any other where it was drawn
-                found = a["rects"] if a.get("refound") and a.get("rects") else drawn.get(a["id"])
-                if found:
-                    marks[a["id"]] = found
-                    table.boxes_of(page)  # for the page table
-                continue
-            xml = table.boxes_of(page)
-            span = locate_span(xml, a.get("quote") or "", page) if xml and a.get("quote") else None
-            if span is not None:
-                marks[a["id"]] = [list(q) for q in span.lines]
-        pages = table.pages
-        if not quads and not marks:
-            write_atomic(kept, "")  # nothing found is remembered too, so the pages are not searched again
-            continue
-        body = json.dumps(
-            {"artifact": m.sha256 if m else "", "pages": pages, "quads": quads, "marks": marks},
-            indent=1,
-            sort_keys=True,
-        )
-        write_atomic(kept, body)
-        files[rel] = body
-        ref["spans"] = {"path": rel, "sha256": hashlib.sha256(body.encode()).hexdigest()}
-
-
-@cache
-def _spans_code() -> str:
-    """The word matching and page reading `_attach_spans` uses, fingerprinted so a cached sidecar is made again when either changes."""
-    from loom.refs import pages, search
-
-    return hashlib.sha256(Path(search.__file__).read_bytes() + Path(pages.__file__).read_bytes()).hexdigest()[:16]
 
 
 def _write_source(result: ScanResult, fragments: dict[str, str], files: dict[str, Any]) -> None:
@@ -241,10 +83,6 @@ def fragment_path(result: ScanResult, key: str) -> str:
     n = result.nodes[key]
     if n.kind == "master":
         return f"fragments/masters/{document_name(key)}.html"
-    if n.kind == "file" and key in result.assembly.digest_files:
-        # a work's proposals file names the work's citekey as its digest does, so it takes a page of its own beside the digest's
-        shadow = ".proposed" if key.endswith(".proposed.tex") else ""
-        return f"fragments/digests/{result.assembly.digest_files[key]}{shadow}.html"
     if n.id:
         return f"fragments/nodes/{n.id}.html"
     from urllib.parse import quote
@@ -255,9 +93,9 @@ def fragment_path(result: ScanResult, key: str) -> str:
 def _input_hash(
     result: ScanResult, key: str, aux: bytes, texts: dict[str, str] | None = None, pages: dict[str, Any] | None = None
 ) -> str:
-    """The cache key of a node, master or digest fragment: loom's version and code, the text of every file it draws on (its own, its claimants', and every file a section's span runs through), `aux` from `keys.aux_bytes`, and the digest of each page as TeX made it that the fragment may be cut from.
+    """The cache key of a node or master fragment: loom's version and code, the text of every file it draws on (its own, its claimants', and every file a section's span runs through), `aux` from `keys.aux_bytes`, and the digest of each page as TeX made it that the fragment may be cut from.
 
-    `texts` holds each file's text hash, filled as files are met, so a file every digest node draws on is hashed once per scan rather than once per node; `pages` maps each document to its current page, or None.
+    `texts` holds each file's text hash, filled as files are met, so a file many nodes draw on is hashed once per scan rather than once per node; `pages` maps each document to its current page, or None.
     """
     texts = {} if texts is None else texts
     n = result.nodes[key]
@@ -536,24 +374,15 @@ def _build(
             targets.append((key, "node"))
         elif n.kind == "master":
             targets.append((key, "master"))
-        elif n.kind == "file" and key in result.assembly.digest_files:
-            targets.append((key, "digest"))
 
     def render_one(key: str, kind: str) -> str:
         # a mark that names a document is drawn in that document and nowhere else (plan 0.15, decision 9)
         if kind == "node":
             return place_marks(renderer.node_fragment(key), [m for m in marks.get(key, []) if m.in_doc is None])
-        if kind == "master":
-            return place_marks(
-                renderer.master_fragment(key),
-                [
-                    m
-                    for k, ms in marks.items()
-                    for m in ms
-                    if key in result.nodes[k].reached_by and m.in_doc in (None, key)
-                ],
-            )
-        return renderer.digest_fragment(key)
+        return place_marks(
+            renderer.master_fragment(key),
+            [m for k, ms in marks.items() for m in ms if key in result.nodes[k].reached_by and m.in_doc in (None, key)],
+        )
 
     jobs: list[tuple[str, str, str, str]] = []
     aux = aux_bytes(numbers, cite_labels)
@@ -589,7 +418,7 @@ def _build(
             canon_jobs.append((doc, rel, digest))
         fragments[f"canon:{doc.path}"] = rel
         canon_entries.append(canon_entry(doc, rel, digest))
-    # What no compile makes, nodes no document reaches and digests, is made by TeX first, one batch per preamble, so the pool below only cuts fragments.
+    # What no compile makes, nodes no document reaches, is made by TeX first, in one batch, so the pool below only cuts fragments.
     renderer.prepare([key for key, _kind, _rel, _digest in jobs])
     # Rendered on a pool, assembled in order. The expensive part is waiting on TeX, a landmark's snippets or a page's diagrams, and waiting on a subprocess releases the GIL, so threads overlap exactly that.
     # Landmarks share the pool and are submitted first: each is one long job, so started last it would run alone after every node had finished.
@@ -642,7 +471,6 @@ def _build(
     attach_context(result, manifest, files, marks)
     from loom.render.review_compare import attach_comparisons
 
-    _attach_spans(result.quilt.root, manifest, files)
     attach_comparisons(result, records, renderer, manifest, files)
     from loom.render.incoming import attach_adoptions
 
@@ -680,12 +508,12 @@ def _build(
 
     manifest["overleaf"] = published_overleaf(result.quilt.root)
     # every diagnostic, lint's, the renderer's and the records', whole and with whose it is to fix
-    from loom.scan.owners import stamped
+    from loom.scan.diagnostics import stamped
 
     report.diagnostics = stamped(result, [Diagnostic.from_dict(d) for d in manifest["diagnostics"]])
     manifest["diagnostics"] = [d.to_dict() for d in report.diagnostics]
     report.manifest = manifest
-    prune = ("fragments/", "source/", "spans/", "transcripts/", f"{BODIES}/", f"{DIFFS}/") if wanted is None else ()
+    prune = ("fragments/", "source/", "transcripts/", f"{BODIES}/", f"{DIFFS}/") if wanted is None else ()
     if wanted is None:
         for rel in list(index):
             if rel not in fragments.values():

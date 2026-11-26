@@ -1,4 +1,4 @@
-"""Looking a pasted identifier up for a work added by hand, against services faked here: what is found, what names nothing, what could not be asked, and what loom does not look up."""
+"""Recognising a pasted identifier, and looking one up against services faked here: what is found, what names nothing, what could not be asked, and what loom does not look up; and the key a new work's entry is given."""
 
 from __future__ import annotations
 
@@ -7,26 +7,7 @@ from typing import Any
 
 import pytest
 
-from loom.refs.lookup import key_for, look_up
-from loom.refs.resolve import NothingFound, ResolveRefused
-from loom.scan.bib import BibEntry
-
-LIBRARY = {
-    "Man12": BibEntry(
-        "Man12",
-        "article",
-        {
-            "author": "Manolache, Cristina",
-            "title": "Virtual pull-backs",
-            "year": "2012",
-            "eprint": "0805.2065v2",
-            "archiveprefix": "arXiv",
-        },
-    ),
-    "Kre99": BibEntry(
-        "Kre99", "article", {"author": "Kresch, Andrew", "title": "Cycle groups for Artin stacks", "year": "1999"}
-    ),
-}
+from loom.refs.lookup import LookupRefused, NothingFound, key_for, look_up, recognise
 
 CSL = {
     "type": "article-journal",
@@ -70,64 +51,54 @@ def fake(answers: dict[str, Any]) -> Any:
 
 def test_a_doi_is_asked_of_doi_org_and_found() -> None:
     http = fake({"https://doi.org/10.5555/widget.2018.031": CSL})
-    got = look_up("https://doi.org/10.5555/widget.2018.031", LIBRARY, online=True, http=http)
+    got = look_up("https://doi.org/10.5555/widget.2018.031", online=True, http=http)
     assert got.state == "found" and got.kind == "doi"
     assert got.entry["title"] == "Widget categories and their duals" and got.entry["year"] == "2018"
     assert got.entry["author"] == "Ostrander, D. and Vale, E." and got.entry["journal"] == "J. Widget Theory"
-    assert got.key == "ostranderWidgetCategoriesTheir2018" and got.digest == "lookup" and got.duplicates == []
+    assert key_for(got.entry, set()) == "ostranderWidgetCategoriesTheir2018"
     # content negotiation, so every registry's DOIs answer
     assert http.asked[0][1]["Accept"] == "application/vnd.citationstyles.csl+json"
 
 
 def test_a_doi_that_names_nothing_did_not_resolve() -> None:
     http = fake({"https://doi.org/": NothingFound("https://doi.org/10.9999/x")})
-    got = look_up("10.9999/not.a.real.doi", LIBRARY, online=True, http=http)
+    got = look_up("10.9999/not.a.real.doi", online=True, http=http)
     assert got.state == "missing" and "did not resolve" in got.message and "10.9999/not.a.real.doi" in got.message
 
 
-def test_an_arxiv_id_is_found_digestible_and_a_duplicate_of_its_other_version() -> None:
-    got = look_up("arXiv:0805.2065", LIBRARY, online=True, http=fake({"https://export.arxiv.org/api/query": ATOM}))
-    assert got.state == "found" and got.digest == "source"
+def test_an_arxiv_id_is_found() -> None:
+    got = look_up("arXiv:0805.2065", online=True, http=fake({"https://export.arxiv.org/api/query": ATOM}))
+    assert got.state == "found"
     assert got.entry["title"] == "Virtual pull-backs" and got.entry["author"] == "Manolache, Cristina"
     assert got.entry["eprint"] == "0805.2065" and got.entry["year"] == "2008"
-    # the library holds v2 of the same preprint
-    assert got.duplicates == ["Man12"] and got.key == "manolacheVirtualPullBacks2008"
+    assert key_for(got.entry, set()) == "manolacheVirtualPullBacks2008"
 
 
 def test_an_arxiv_id_arxiv_does_not_have_is_missing() -> None:
-    got = look_up("2499.99999", LIBRARY, online=True, http=fake({"https://export.arxiv.org/api/query": ATOM_ERROR}))
+    got = look_up("2499.99999", online=True, http=fake({"https://export.arxiv.org/api/query": ATOM_ERROR}))
     assert got.state == "missing" and "arXiv has no paper" in got.message
 
 
 def test_a_service_that_cannot_be_reached_says_why() -> None:
     http = fake(
-        {"https://doi.org/": ResolveRefused("https://doi.org/10.5555/x: [Errno 8] nodename nor servname provided")}
+        {"https://doi.org/": LookupRefused("https://doi.org/10.5555/x: [Errno 8] nodename nor servname provided")}
     )
-    got = look_up("10.5555/x", LIBRARY, online=True, http=http)
+    got = look_up("10.5555/x", online=True, http=http)
     assert got.state == "unreachable" and "nodename" in got.message
 
 
-def test_without_the_network_an_identifier_is_not_looked_up_and_an_entry_still_is() -> None:
+def test_without_the_network_an_identifier_is_not_looked_up() -> None:
     def never(url: str, headers: dict[str, str]) -> bytes:
         raise AssertionError("asked the network offline")
 
-    assert look_up("10.5555/x", LIBRARY, online=False, http=never).state == "offline"
-    got = look_up(
-        "@article{Kre99,\n author = {Kresch, A.},\n title = {Cycle groups for {A}rtin stacks},\n year = {1999},\n loom-added = {someone}\n}",
-        LIBRARY,
-        online=False,
-        http=never,
-    )
-    # the entry is what it says; its own key is taken, so it gets a letter; loom's fields are never a paste's
-    assert got.state == "found" and got.key == "Kre99a" and "loom-added" not in got.entry
-    assert got.duplicates == ["Kre99"]
+    assert look_up("10.5555/x", online=False, http=never).state == "offline"
 
 
 @pytest.mark.parametrize(
     ("text", "kind"), [("ISBN 978-0-387-98549-7", "isbn"), ("MR1667326", "mr"), ("widgets, somewhere", "unknown")]
 )
 def test_what_loom_does_not_look_up_asks_for_more(text: str, kind: str) -> None:
-    got = look_up(text, LIBRARY, online=True, http=fake({}))
+    got = look_up(text, online=True, http=fake({}))
     assert got.state == "cannot" and got.kind == kind and "DOI" in got.message
 
 
@@ -151,18 +122,42 @@ def test_a_key_is_better_bibtexs_and_never_one_taken() -> None:
     godel = {"author": r"G{\"o}del, Kurt", "title": r"{\"U}ber formal unentscheidbare S{\"a}tze", "year": "1931"}
     assert key_for(godel, set()) == "godelUberFormalUnentscheidbare1931"
     assert key_for({"author": "Kresch, Andrew", "year": "1999"}, {"kresch1999", "kresch1999a"}) == "kresch1999b"
-    assert key_for({}, {"Hal21"}, wanted="Hal21") == "Hal21a"
+    assert key_for({"title": "1 2 3"}, set()) == "untitled"
 
 
-def test_a_work_nothing_names_is_untitled_by_its_pdfs_hash() -> None:
-    sha = "1a2b3c4d" + "0" * 56
-    assert key_for({"author": "", "year": "2001"}, set(), sha=sha) == "untitled-1a2b3c4d"
-    assert key_for({"title": "Untitled PDF 1a2b3c4d"}, set(), sha=sha) == "untitled-1a2b3c4d"
-    assert key_for({"title": "1 2 3"}, set(), sha=sha) == "untitled-1a2b3c4d"
+@pytest.mark.parametrize(
+    ("text", "kind", "value"),
+    [
+        ("10.1007/s002220050351", "doi", "10.1007/s002220050351"),
+        ("doi:10.1090/S1056-3911-2011-00606-1", "doi", "10.1090/S1056-3911-2011-00606-1"),
+        ("https://doi.org/10.1112/S0010437X20007393.", "doi", "10.1112/S0010437X20007393"),
+        ("http://dx.doi.org/10.1007/BF01234659", "doi", "10.1007/BF01234659"),
+        # arXiv's own DOI names a preprint
+        ("10.48550/arXiv.2207.01652", "arxiv", "2207.01652"),
+        ("arXiv:0805.2065", "arxiv", "0805.2065"),
+        ("0805.2065v2", "arxiv", "0805.2065v2"),
+        ("https://arxiv.org/abs/2207.01652v3", "arxiv", "2207.01652v3"),
+        ("https://arxiv.org/pdf/2207.01652.pdf", "arxiv", "2207.01652"),
+        ("math/9810166", "arxiv", "math/9810166"),
+        ("arXiv:math.AG/9810166v2", "arxiv", "math.AG/9810166v2"),
+        ("solv-int/9901001", "arxiv", "solv-int/9901001"),
+        ("Zbl 0921.14007", "zbl", "0921.14007"),
+        ("https://zbmath.org/?q=an:0921.14007", "zbl", "0921.14007"),
+        ("MR1667326", "mr", "1667326"),
+        ("MR 1667326", "mr", "1667326"),
+        ("ISBN 978-0-387-98549-7", "isbn", "9780387985497"),
+        ("0-387-98549-2", "isbn", "0387985492"),
+    ],
+)
+def test_each_identifier_is_recognised_in_each_form(text: str, kind: str, value: str) -> None:
+    got = recognise(text)
+    assert (got.kind, got.value) == (kind, value), got
 
 
-def test_a_second_document_of_a_work_is_its_version_and_no_collision() -> None:
-    from loom.refs.scan import version_key
-
-    assert version_key("Arden24", {"Arden24"}) == "Arden24-v2"
-    assert version_key("Arden24", {"Arden24", "Arden24-v2"}) == "Arden24-v3"
+@pytest.mark.parametrize(
+    "text",
+    ["", "somewhere I read about widgets", "978-0-387-98549-8", "10.1/x", "@article{X, title={y}}", "MR12"],
+)
+def test_what_is_none_of_them_is_not_recognised(text: str) -> None:
+    """A wrong ISBN check digit, a prefix too short for a DOI, an entry with no body: none is guessed at."""
+    assert recognise(text).kind == "unknown"

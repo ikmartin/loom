@@ -30,10 +30,10 @@ engine = "pdflatex"         # default engine; % !TEX program in a document overr
 # home = "README.md"        # the file the viewer opens on when it remembers no place; unset, README.md
 
 [library]
-# online = true             # may loom look papers up (arXiv, Crossref, zbMATH Open) and fetch them; unset, the viewer asks the first time a paper is added; --online allows one run
+# online = true             # may loom look a paper's identifier up (doi.org, arXiv, zbMATH Open); unset, the viewer asks the first time a paper is added; --online allows one run
 
 [lint]
-disable = []                # diagnostic codes to silence, e.g. ["loom:unmatched-postnote"]
+disable = []                # diagnostic codes to silence, e.g. ["loom:uses-unused"]
 
 [agents]
 # where an agent may not write, gitignore-style from the quilt root, e.g. ["paper/"]; .loom/, config.toml and the research state are always protected

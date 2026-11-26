@@ -288,29 +288,64 @@ test("the agents' config documents leave the tree when the reader hides them in 
 	await expect(tree.getByRole('link', { name: 'AGENTS.md', exact: true })).toBeVisible();
 });
 
-test('the project tree stands under Files, a shelf open by default that folds as Library does', async ({ page }) => {
+test('the project tree stands under a Files head, open by default; folded, it counts the files, a hover slides what is below down to show the top edge of the first row, and a click opens it all', async ({ page }) => {
 	await page.goto('/master/drafting/main');
 	const files = page.getByTestId('files-toggle');
 	await expect(files).toHaveAttribute('aria-expanded', 'true');
+	// the tree's rows stand where today's shelf put them: under a head as tall as its head (a 12 px line and 6 px), with the tree's own 2 px above its first row, and 4 px in from the head's left
+	const head = (await files.boundingBox())!;
+	const first = (await page.getByTestId('docs-tree').getByRole('link').first().boundingBox())!;
+	const tree = (await page.getByTestId('docs-tree').boundingBox())!;
+	expect(Math.abs(head.height - 22.8)).toBeLessThanOrEqual(0.5);
+	expect(Math.abs(tree.y - (head.y + 24.8))).toBeLessThanOrEqual(0.5);
+	expect(Math.abs(tree.x - (head.x + 4))).toBeLessThanOrEqual(0.5);
+	expect(first.y).toBeGreaterThanOrEqual(tree.y);
 	// hovering it says what it is a view of: the project's own directory
 	await expect(files).toHaveAttribute('title', 'View of files in synthetic/');
 	await expect(page.getByTestId('docs-tree')).toBeVisible();
-	// the same kind of control as Library's, above it
-	expect(await files.getAttribute('class')).toBe(await page.getByTestId('library-toggle').getAttribute('class'));
-	const at = async (id: string) => (await page.getByTestId(id).boundingBox())!.y;
-	expect(await at('files-toggle')).toBeLessThan(await at('library-toggle'));
 	await files.click();
 	await expect(files).toHaveAttribute('aria-expanded', 'false');
 	await expect(page.getByTestId('docs-tree')).toHaveCount(0);
+	await expect(files.locator('.count')).toHaveText(/^\d+$/);
+	// the head is the word and the count, with no caret beside it in either state
+	await expect(files).toHaveText(/^Files\d+$/);
+	await page.mouse.move(600, 400);
+	// a hover lays nothing over the column: it opens a gap of about 12 px under the head, in the flow, so what is below moves down by as much, and the gap shows the first row's top edge, clipped
+	const peek = page.getByTestId('files-peek');
+	// where what stands below the shelf in the column begins: the shelf's own foot
+	const below = async () => { const b = (await page.getByTestId('files-shelf').boundingBox())!; return b.y + b.height; };
+	const before = await below();
+	await expect(peek).toHaveCSS('transition-duration', '0.18s');
+	await files.hover();
+	await expect.poll(async () => (await peek.boundingBox())!.height).toBe(12);
+	expect(await peek.evaluate((el) => getComputedStyle(el).position)).toBe('static');
+	expect((await below()) - before).toBeCloseTo(12, 0);
+	await expect(peek.getByTestId('docs-tree')).toHaveCount(1);
+	expect(await peek.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+	await page.mouse.move(600, 400);
+	await expect.poll(async () => (await peek.boundingBox())!.height).toBe(0);
 	await files.click();
+	await expect(files).toHaveText(/^Files$/);
 	await expect(page.getByTestId('docs-tree')).toBeVisible();
-	// open, the shelf is one box holding its head and the tree, whose top rows start where the head's caret does
-	const shelf = page.getByTestId('files-shelf');
-	await expect(shelf.getByTestId('files-toggle')).toBeVisible();
-	await expect(shelf.getByTestId('docs-tree')).toBeVisible();
-	const caret = (await files.locator('.caret').boundingBox())!.x;
-	const top = (await page.getByTestId('docs-tree').getByRole('link', { name: 'README.md', exact: true }).boundingBox())!.x;
-	expect(Math.abs(top - caret)).toBeLessThanOrEqual(2);
+	await expect(page.getByTestId('files-peek')).toHaveCount(0);
+});
+
+test('under reduced motion the folded Files head opens its gap without sliding', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.goto('/master/drafting/main');
+	await page.getByTestId('files-toggle').click();
+	await expect(page.getByTestId('files-peek')).toHaveCSS('transition-duration', '0s');
+});
+
+test("the tree carries no PDF row and no compile state, and a document's row is current while its compiled PDF is read", async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	const tree = page.getByTestId('docs-tree');
+	await expect(tree.getByTestId('docs-file').first()).toBeVisible();
+	await expect(tree.getByTestId('docs-pdf')).toHaveCount(0);
+	await expect(tree.getByTestId('docs-compile')).toHaveCount(0);
+	await expect(tree.getByRole('link', { name: 'PDF', exact: true })).toHaveCount(0);
+	await page.goto('/pdf/drafting/main');
+	await expect(tree.locator('a[title="drafting/main.tex"]')).toHaveAttribute('aria-current', 'page');
 });
 
 test('each row says whether agents edit it too, and the mark says why under the pointer', async ({ page }) => {
@@ -329,7 +364,7 @@ test('each row says whether agents edit it too, and the mark says why under the 
 	await expect(page.getByTestId('access-config.toml-says')).toHaveCount(0);
 	// a copy's mark names the document its changes go back to
 	await page.getByTestId('access-.loom/agents/copies/aidoc.tex').hover();
-	await expect(page.getByTestId('access-.loom/agents/copies/aidoc.tex-says')).toContainText('back to main.tex through Review › Proposed Changes');
+	await expect(page.getByTestId('access-.loom/agents/copies/aidoc.tex-says')).toContainText('back to main.tex through Review.');
 	// and the copy hangs from that document by a hooked line pointing up into it
 	const hook = await page.getByTestId('docs-copies').locator('li').first().evaluate((li) => [getComputedStyle(li, '::before').borderLeftStyle, getComputedStyle(li, '::after').clipPath]);
 	expect(hook[0]).toBe('solid');

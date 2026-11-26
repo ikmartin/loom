@@ -1,4 +1,4 @@
-// A document's compiled PDF (plan 0.29.1): a row under its document in the tree, and `view PDF` in the document's *view* menu, open it to read, and a new compile opens it again where the reader is, with nobody asking; its own *view* menu opens the file the server answers in a tab of its own and saves it. The suite serves with `--no-compile`, so the test stands in for the compile by putting PDFs where one writes.
+// A document's compiled PDF (plan 0.29.1): `view PDF` in the document's *view* menu opens it to read, the document's row in the tree current meanwhile, and a new compile opens it again where the reader is, with nobody asking; its own *view* menu opens the file the server answers in a tab of its own and saves it. The suite serves with `--no-compile`, so the test stands in for the compile by putting PDFs where one writes.
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { ARRAS, compileFolder, expect, test } from '../served';
@@ -21,18 +21,21 @@ test.use({
 	}
 });
 
-test("a document's compiled PDF opens from its row in the tree, and a new compile opens it again at the reader's page", async ({ page, served }) => {
+test("a document's compiled PDF opens from view PDF, the document's row current in the tree, and a new compile opens it again at the reader's page", async ({ page, served }) => {
 	await page.goto('/master/drafting/main');
-	const row = page.getByTestId('docs-tree').getByTestId('docs-pdf').and(page.locator('[data-document="drafting/main.tex"]'));
-	await expect(row.getByRole('link')).toHaveText('PDF');
-	await row.getByRole('link').click();
-	await expect(page).toHaveURL(/\/pdf\/drafting\/main$/);
-	const paper = pane(page, 0).getByTestId('pdf-item');
+	await viewMenu(page, 0);
+	await page.getByTestId('toolbar-menu').getByTestId('view-pdf').click();
+	await expect(page).toHaveURL(/beside=%2Fpdf%2Fdrafting%2Fmain$/);
+	const paper = pane(page, 1).getByTestId('pdf-item');
 	await expect(paper.locator('canvas').first()).toBeVisible();
 	await expect(page.getByTestId('page-count')).toHaveText('/ 2');
-	await expect(pane(page, 0).getByTestId('item-tab').filter({ hasText: 'main.tex · PDF' })).toHaveCount(1);
+	await expect(pane(page, 1).getByTestId('item-tab').filter({ hasText: 'main.tex · PDF' })).toHaveCount(1);
+	// the tree has no row for the PDF: with the PDF the one read, its document's own row is the one marked
+	await pane(page, 1).getByTestId('item-tab').filter({ hasText: 'main.tex · PDF' }).click();
+	await expect(page.getByTestId('docs-tree').getByTestId('docs-pdf')).toHaveCount(0);
+	await expect(page.getByTestId('docs-tree').locator('a[title="drafting/main.tex"]')).toHaveAttribute('aria-current', 'page');
 	// it is read here, not marked: neither Annotate nor the PDF's drawing tools nor PDF ▾ among its tools
-	for (const id of ['tool-annotate', 'tool-comment', 'tool-ink', 'pdf-menu']) await expect(page.getByTestId(id)).toHaveCount(0);
+	for (const id of ['tool-annotate', 'tool-comment', 'tool-ink', 'pdf-menu']) await expect(pane(page, 1).getByTestId(id)).toHaveCount(0);
 
 	const at = page.getByTestId('page-at');
 	await at.fill('2');
@@ -44,7 +47,7 @@ test("a document's compiled PDF opens from its row in the tree, and a new compil
 	appendFileSync(join(served.root, 'notes/intro.md'), '\nAnother line.\n');
 	await expect(page.getByTestId('page-count')).toHaveText('/ 3');
 	await expect(at).toHaveValue('2');
-	await expect(page).toHaveURL(/\/pdf\/drafting\/main$/);
+	await expect(pane(page, 1).getByTestId('pdf-item')).toHaveAttribute('data-document', 'drafting/main.tex');
 });
 
 test("view PDF opens the compiled PDF beside its document, whose view menu opens the file the server answers in a tab of its own and saves its bytes under the document's name; a document never compiled says so", async ({ page, served }) => {

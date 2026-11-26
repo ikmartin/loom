@@ -1,0 +1,10 @@
++++
+schema = 1
+id = "tq-00K5-proof00"
+taxon = "proof"
+source = "tq-00A1-ref"
+pages = "13"
+uses = ["tq-00B7", "tq-00K3"]
+mentions = ["tq-00B1-ref"]
++++
+By Lemma~\ref{tq-00K3}, the bound \eqref{tq-00K3-eq00} holds for a fixed $x_0$. The covering estimate of \ref{tq-00B7} then gives the radius. For sets that are not compact see \cite{tq-00B1-ref}.

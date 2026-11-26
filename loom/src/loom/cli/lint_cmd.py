@@ -1,4 +1,4 @@
-"""`loom lint`: every diagnostic, each code's class said, one group per code with the author's before the cited works', and one line for works nothing cites; exit 1 on an error outside those works. `--nodes` groups by node id."""
+"""`loom lint`: every diagnostic, each code's class said, one group per code; exit 1 on an error. `--nodes` groups by node id."""
 
 from __future__ import annotations
 
@@ -46,10 +46,10 @@ def _sorted(diags: list[Diagnostic]) -> list[Diagnostic]:
 
 
 def all_diagnostics(result: ScanResult) -> list[Diagnostic]:
-    """Scanner diagnostics plus those derived from the ledger, the review records, the full walk of the history, the documents' last compiles and the Markdown files' links, in the scanner's order, each with whose it is to fix (`scan.owners`), as the manifest has them."""
+    """Scanner diagnostics plus those derived from the ledger, the review records, the full walk of the history, the documents' last compiles and the Markdown files' links, in the scanner's order, each with whose it is to fix (`scan.diagnostics.stamped`), as the manifest has them."""
     from loom.render.compiles import compile_problems
+    from loom.scan.diagnostics import stamped
     from loom.scan.lint import markdown_links
-    from loom.scan.owners import stamped
 
     records = Records(result.quilt.root, result.quilt.history_dir)
     extra = records.diagnostics(result, records.key_states(result))
@@ -73,22 +73,21 @@ def _safe(result: ScanResult, history: History, d: Diagnostic) -> Diagnostic:
             return replace(d, fixes=[Fix("finish the fork", finish), *d.fixes])
         return d
     n = result.nodes.get(d.keys[0]) if d.code == "duplicate-id" and len(d.keys) == 1 else None
-    if n is None or n.kind != "conflict" or all(f in result.assembly.digest_files for f in n.conflict):
-        return d  # a digest's id defined twice is mended by digesting its work again, never by the person's hand
+    if n is None or n.kind != "conflict":
+        return d
     commands = conflict_fixes(result, history, d.keys[0], list(n.conflict))
     return replace(d, fixes=[Fix("the way out that keeps what was there", c) for c in commands])
 
 
 def by_node(result: ScanResult, diags: list[Diagnostic]) -> tuple[dict[str, list[Diagnostic]], list[Diagnostic]]:
     """Diagnostics about a node's identity, per id, plus the superseded-file block: the hygiene report of `loom lint --nodes`."""
-    slugs = result.assembly.citeslugs
     per: dict[str, list[Diagnostic]] = {}
     for d in diags:
         if d.code not in NODE_CODES:
             continue
         for k in d.keys:
             stmt = k.split("/", 1)[0]
-            if is_id_shaped(stmt, slugs):
+            if is_id_shaped(stmt):
                 per.setdefault(stmt, []).append(d)
     superseded = [d for d in diags if d.code == "loom:superseded-file"]
     return dict(sorted(per.items())), superseded

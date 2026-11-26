@@ -10,11 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from loom.paths import COPIES
-from loom.refs.identity import declared
-from loom.refs.resolve import load as load_candidates
-from loom.scan.bib import BibEntry, citekey_slug
 from loom.scan.diagnostics import LATEX, MODEL, can_disable
-from loom.scan.digests import digest_header, extracted_from, missing_packages, other_version, source_version
 from loom.scan.directives import KNOWN_KEYS, REGION_KEYS
 from loom.scan.edges import EdgeResult
 from loom.scan.graph import Graph
@@ -293,8 +289,6 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
     diags.extend(_agent_permissions(result))
     diags.extend(_home(result))
     diags.extend(_writes_left(result))
-    digest_keys = set(asm.digest_files.values())
-    slugs = {citekey_slug(k) for k in result.bib} | {citekey_slug(k) for k in digest_keys}
     for path, directives in asm.directives.items():
         for d in directives:
             if d.key == "basis" and not any(
@@ -341,8 +335,6 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
         if target is None or source is None:
             continue
         src_masters = set(source.reached_by)
-        if target.file in asm.digest_files:  # digests are loose by construction
-            continue
         loose_to_loose = not src_masters and not target.reached_by and target.file != source.file
         reach = src_masters.union(*(external.get(m, ()) for m in src_masters))
         if (src_masters and not (reach & set(target.reached_by))) or loose_to_loose:
@@ -452,9 +444,8 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
     # theorem-like environments the preamble does not declare
     for path, fe in asm.envs.items():
         seen: set[str] = set()
-        own = asm.digest_taxa.get(path, {})  # a digest's results declare their own environments
         for env in fe.all_envs():
-            if env.name in result.taxa or env.name in own or env.name in seen or env.is_proof:
+            if env.name in result.taxa or env.name in seen or env.is_proof:
                 continue
             if env.name in COMMON_THEOREM_ENVS:
                 seen.add(env.name)
@@ -507,131 +498,9 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
                             [Location(frag.file, 1)],
                         )
                     )
-    # prefix vs citekeys
-    if citekey_slug(result.quilt.config.prefix) in slugs:
-        diags.append(
-            Diagnostic(
-                "warning",
-                "loom:prefix-is-citekey",
-                f"the id prefix {result.quilt.config.prefix} is also a bibliography key",
-                [],
-            )
-        )
-    # citekey slug collisions
-    by_slug: dict[str, set[str]] = {}
-    for k in set(result.bib) | digest_keys:
-        by_slug.setdefault(citekey_slug(k), set()).add(k)
-    for slug, keys in sorted(by_slug.items()):
-        if len(keys) > 1:
-            diags.append(
-                Diagnostic(
-                    "warning",
-                    "loom:citekey-slug-collision",
-                    f"citekeys {', '.join(sorted(keys))} share the digest prefix {slug}",
-                    [],
-                )
-            )
-    # citations without digests
-    undigested: dict[str, list[str]] = {}
-    from loom.refs.scan import other_versions
-
-    # a key whose version is digested is answered through it (`postnote_edges`)
-    answered = digest_keys | {k for k, vs in other_versions(result.bib).items() if digest_keys & set(vs)}
-    for c in edges.cites:
-        # a citation inside a digest is the cited paper's own bibliography, not a work the author cites: counting them
-        # listed thirty "undigested" citekeys of which three were the author's, and two agents took the rest as real
-        if c.file in asm.digest_files:
-            continue
-        if c.postnote and c.citekey not in answered:
-            undigested.setdefault(c.citekey, []).append(c.src)
-    for ck, srcs in sorted(undigested.items()):
-        diags.append(
-            Diagnostic(
-                "info",
-                "loom:undigested-citekey",
-                f"{ck} is cited with a locator but has no digest",
-                [],
-                sorted(set(srcs)),
-                fixes=[
-                    Fix(
-                        "digest it",
-                        f"loom library update {ck}",
-                        {"endpoint": "library-update", "body": {"works": [ck]}},
-                    )
-                ],
-            )
-        )
-    # a cited work with no global identifier can never be deduplicated, fetched, or matched against another quilt's
-    for ck in sorted({c.citekey for c in edges.cites}):
-        entry = result.bib.get(ck)
-        # holding its document, a work wants nothing fetched: its identifier is the person's to add or not
-        if entry is not None and not declared(entry) and not _holds_document(result.quilt.root, entry):
-            # a lookup already made is named here, read from loom's store; lint itself never touches the network
-            found = load_candidates(result.quilt.root, entry)
-            if found:
-                best = found[0]
-                scheme, _, value = best.id.partition(":")
-                field_name = {"doi": "doi", "zbl": "zbl", "mr": "mrnumber", "arxiv": "eprint"}.get(scheme, scheme)
-                advice = f"a lookup found {best.id} ({best.strength} match, {best.source}); if it is the right work, add {field_name} = {{{value}}} to the entry"
-            else:
-                advice = "add doi = {...} or eprint = {...} to its bibliography entry, or look it up with loom library update --online"
-            diags.append(
-                Diagnostic(
-                    "info",
-                    "loom:unresolved-work",
-                    f"{ck} states no identifier, so loom cannot name the work the same way on another machine; {advice}",
-                    [],
-                    [ck],
-                )
-            )
-    for ck in sorted(digest_keys):
-        if ck not in result.bib:
-            diags.append(
-                Diagnostic(
-                    "warning", "loom:digest-without-bib", f"digest {ck} names a citekey not in the bibliography", []
-                )
-            )
-    diags.extend(_no_readable_copy(result, digest_keys))
-    # digest provenance against the bibliography, and requires: against the default master's preamble closure
-    dm = result.default_master
-    dm_closure = result.closures.get(dm) if dm else None
-    for f, ck in sorted(asm.digest_files.items()):
-        header = digest_header(asm, f)
-        bib = result.bib.get(ck)
-        got = extracted_from(header)
-        other = other_version(asm, f)
-        if other is not None:
-            diags.append(
-                Diagnostic(
-                    "warning",
-                    "loom:unverified-locators",
-                    f"digest {ck} {other.why}; its result numbers and page references are unverified against the version a reader will open",
-                    [Location(f, 1)],
-                )
-            )
-        sv = source_version(got)
-        if bib is not None and bib.version and sv and bib.version != sv:
-            diags.append(
-                Diagnostic(
-                    "warning",
-                    "loom:version-mismatch",
-                    f"digest {ck} was made from v{sv} but the bibliography cites v{bib.version}",
-                    [Location(f, 1)],
-                )
-            )
-        missing = missing_packages(asm, f, dm_closure)
-        if missing:
-            diags.append(
-                Diagnostic(
-                    "warning",
-                    "loom:missing-package",
-                    f"digest {ck} requires {', '.join(missing)}, which the preamble of {dm} does not load",
-                    [Location(f, 1)],
-                )
-            )
     # loose files
     for path, src in files.items():
-        if src.ignored or path in result.masters or path in asm.digest_files:
+        if src.ignored or path in result.masters:
             continue
         if not any(path in e.reached for e in result.expansions.values()):
             node_keys = [k for k, n in asm.nodes.items() if n.file == path and n.kind in ("environment", "section")]
@@ -727,8 +596,6 @@ def markdown_links(result: ScanResult, drawn: Drawn | None = None) -> list[Diagn
                 why = str(exc).removeprefix(f"{href}: ")
                 if exc.part != "work":
                     why = _as_seen(root, href, why)
-                if exc.part == "work" and href.startswith("cited:work:"):
-                    why += "; where a work states no identifier and was not filed from its PDF, its work: id is made from its authors, title and year, and correcting those changes it"
                 out.append(
                     Diagnostic(
                         "warning",
@@ -739,9 +606,7 @@ def markdown_links(result: ScanResult, drawn: Drawn | None = None) -> list[Diagn
                         else "loom:link-target-missing",
                         f"a link goes nowhere: {why}",
                         [Location(rel, link.line)],
-                        fixes=[Fix("link the work as it is named now", "loom link CITEKEY")]
-                        if exc.part == "work"
-                        else [],
+                        fixes=[Fix("link the work as it is named now", "loom link WORK")] if exc.part == "work" else [],
                     )
                 )
     disabled = set(result.quilt.config.lint_disable)
@@ -807,64 +672,6 @@ def _written_links(result: ScanResult) -> dict[str, bool]:
     done = writes(result.quilt.root, result.quilt.history_dir, state_page(result.quilt.config))
     links = (done[-1].get("links") or {}) if done else {}
     return {unquote(href): bool(entry.get("hash")) for href, entry in links.items()}
-
-
-def _holds_document(root: Path, entry: BibEntry) -> bool:
-    """Whether loom's store holds a document for the work: its PDF, or its LaTeX."""
-    from loom.refs.fetch import work_dir
-
-    home = work_dir(root, entry)
-    return (home / "paper.pdf").is_file() or (home / "src").is_dir()
-
-
-def _no_readable_copy(result: ScanResult, digest_keys: set[str]) -> list[Diagnostic]:
-    """The artifact invariant (plan 0.13 §4, as relaxed): renderable content with no artifact behind it, or none that can be read.
-
-    Renderable content is a digest file or a recorded result; a bibliography entry alone is not, and a work nobody has fetched is a perfectly good state. What backs it may be either artifact, and which one decides what can be done with it. **Source** is enough to check a statement against -- it is the paper's own LaTeX, better evidence than a page image -- but carries no pagination and no page to read, so it reports as `info`. **Nothing at all** is the state the invariant is about and reports as `warning`. Never an error either way: loom cannot fetch without consent, and a build must not fail for want of a document.
-
-    A work the author has declared unreadable is silent here, and `library update` lists it instead.
-    """
-    from loom.refs.fetch import work_dir
-    from loom.refs.pages import read_map
-    from loom.refs.proposals import load_results
-    from loom.refs.unreadable import declarations
-
-    root = result.quilt.root
-    silent = declarations(root, "unreadable")
-    out: list[Diagnostic] = []
-    for ck in sorted(set(result.bib)):
-        if ck in silent:
-            continue
-        if ck not in digest_keys and not load_results(root, ck):
-            continue
-        try:
-            home = work_dir(root, result.bib[ck])
-        except Exception:  # noqa: BLE001 -- an entry with no identifier has no home; loom:unresolved-work says so
-            continue
-        m = read_map(home)
-        if m is not None and m.pages > 0:
-            continue
-        has_pdf, has_source = (home / "paper.pdf").is_file(), (home / "src").is_dir()
-        if has_pdf:
-            sev, what, how = "warning", "its pages have never been read", f"loom library update {ck} --only map"
-        elif has_source:
-            sev = "info"
-            what = "loom holds its LaTeX and no PDF, so there is no page to read and its page locators are unverified"
-            how = f"loom library update {ck} --online, or loom library add FILE --for {ck}"
-        else:
-            sev = "warning"
-            what = "no copy of the paper is on this machine, so nothing it says can be checked against the paper"
-            how = f"loom library update {ck} --online, or loom library add FILE --for {ck}"
-        out.append(
-            Diagnostic(
-                sev,
-                "loom:no-readable-copy",
-                f"{ck} has a digest but {what}; {how}, or loom library ignore {ck} --why '...' when there is no document to hold",
-                [],
-                [ck],
-            )
-        )
-    return out
 
 
 def _stmt(asm: Assembly, key: str | None) -> str | None:

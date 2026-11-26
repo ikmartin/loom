@@ -1,0 +1,35 @@
+{
+ "answer": {
+  "gen": 1789808400001,
+  "ok": true,
+  "result": "took in 1: 1 added",
+  "rows": [
+   {
+    "act": "x-bfsajw",
+    "authors": [],
+    "found_by": "arxiv",
+    "id": "cfe8c29f7460d429b515b44414e69d565ef9eb84195699d4fd63b82737d318aa",
+    "identifier": "arxiv:2209.01234v2",
+    "item": 0,
+    "name": "2209.01234v2.pdf",
+    "ref": "sh-0408-ref",
+    "short": "2209.01234v2.pdf",
+    "state": "added",
+    "tex": false,
+    "title": "2209.01234v2.pdf",
+    "unconfirmed": true,
+    "under": false,
+    "year": ""
+   }
+  ]
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "incoming": "cfe8c29f7460d429b515b44414e69d565ef9eb84195699d4fd63b82737d318aa"
+   }
+  ],
+  "online": false
+ }
+}

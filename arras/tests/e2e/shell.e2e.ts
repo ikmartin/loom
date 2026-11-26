@@ -1,4 +1,4 @@
-// The shell: the column's frame (its head, the two primary views, its footer), the key gutter Show ids opens, and a window the whole of it fits. What the column holds is in panel.e2e.ts, the frame at each width in frame.e2e.ts. Each test is named for the rule it holds.
+// The shell: the column's frame (its head, the four views, its footer), the key gutter Show ids opens, and a window the whole of it fits. What the column holds is in panel.e2e.ts, the frame at each width in frame.e2e.ts. Each test is named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
 import { pane, prefs } from '../workspace';
 import { manifest } from '../manifest';
@@ -8,7 +8,7 @@ async function openContents(page: Page): Promise<void> {
 	await page.getByRole('navigation', { name: 'Contents' }).waitFor();
 }
 
-test('the column leads with the quilt, Settings and the fold, then Docs and Review, and holds no list of views', async ({ page }) => {
+test('the column leads with the quilt, Settings and the fold, then the four views, Docs, Library, Web and Review', async ({ page }) => {
 	await page.goto('/master/drafting/main');
 	await expect(page.getByTestId('docs-tree')).toBeVisible();
 	await openContents(page);
@@ -16,19 +16,18 @@ test('the column leads with the quilt, Settings and the fold, then Docs and Revi
 	await expect(page.getByTestId('quilt-name')).toHaveText(manifest.corpus.name);
 	await expect(page.getByTestId('settings-toggle')).toBeVisible();
 	await expect(page.getByTestId('panel-fold')).toBeVisible();
-	const primary = page.getByRole('navigation', { name: 'Primary views' });
-	await expect(primary.getByRole('link')).toHaveText(['Docs', 'Review']);
+	const primary = page.getByRole('navigation', { name: 'Views', exact: true });
+	await expect(primary.getByRole('link')).toHaveText(['Docs', 'Library', 'Web', 'Review']);
 	await expect(page.getByTestId('primary-docs')).toHaveAttribute('aria-current', 'page');
 	// Review opens where something waits: here the person's text
 	await expect(page.getByTestId('primary-review')).toHaveAttribute('href', '/review');
-	// the icon strip and its views are gone; search is ⌘K alone, and what is wrong is counted in Review, not at the column's foot
-	await expect(page.getByRole('navigation', { name: 'Views', exact: true })).toHaveCount(0);
+	// search is ⌘K alone, and what is wrong is not counted at the column's foot
 	await expect(page.getByTestId('column-search')).toHaveCount(0);
 	await expect(page.getByTestId('problems-chip')).toHaveCount(0);
 });
 
-test('Review is current on the quilt-management pages, and Docs everywhere else', async ({ page }) => {
-	for (const [path, on] of [['/review', 'review'], ['/review/problems', 'review'], ['/graph', 'docs'], ['/review/library', 'review'], ['/review/record/sessions', 'review'], ['/review/record', 'review'], ['/master/drafting/main', 'docs']] as const) {
+test('Review is current on its pages, the Library and the Web on theirs, and Docs everywhere else', async ({ page }) => {
+	for (const [path, on] of [['/review', 'review'], ['/review/problems', 'review'], ['/library', 'library'], ['/web', 'web'], ['/graph', 'docs'], ['/review/record/sessions', 'review'], ['/review/record', 'review'], ['/master/drafting/main', 'docs']] as const) {
 		await page.goto(path);
 		await expect(page.getByTestId(`primary-${on}`), path).toHaveAttribute('aria-current', 'page');
 	}

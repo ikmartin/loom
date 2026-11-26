@@ -138,7 +138,7 @@ def plan_fork(
     if again is not None:
         new_id = again
     elif as_id is not None:
-        if not is_id_shaped(as_id, result.assembly.citeslugs):
+        if not is_id_shaped(as_id):
             return ForkPlan(node_id, as_id, doc, refusal=f"{as_id} is not an id")
         parts = split_id(as_id)
         if parts is None or parts[0] != prefix:

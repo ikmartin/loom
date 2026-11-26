@@ -3,7 +3,7 @@
 	//
 	// The page and the zoom are typed into rather than only stepped, which is what every desktop PDF viewer does and what a reader on page 1 of 60 needs: `+` twelve times is not navigation. Each box shows the current value while it is not being edited, takes the typed one on Enter or on leaving, and puts the current one back on Escape or on anything that is not a number.
 	//
-	// Off the paper — a work's digest or its info — the row stays where it was and greys out: a toolbar that vanished and came back would move everything after it, and a greyed control still says what it would act on.
+	// With no paper drawn the row stays where it was and greys out: a toolbar that vanished and came back would move everything after it, and a greyed control still says what it would act on.
 	import Icon from '$lib/components/Icon.svelte';
 	import { MAX_ZOOM, MIN_ZOOM, type PdfView } from './view.svelte';
 
@@ -137,8 +137,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 24px;
-		height: 22px;
+		width: 28px;
+		height: 28px;
 		padding: 0;
 	}
 	.tool.on {
@@ -146,8 +146,8 @@
 		color: var(--ink);
 	}
 	.step {
-		width: 20px;
-		height: 22px;
+		width: 28px;
+		height: 28px;
 		padding: 0;
 		font-size: 1.1em;
 		line-height: 1;

@@ -25,11 +25,6 @@ READS = [
     (f"quilt:{LANDMARK}", ("history", "show", "flows-v1")),
     ("quilt:flows-v1", ("history", "show", "flows-v1")),
     ("quilt:-x", ("source", "--", "-x")),
-    ("cited:doi:10.4171/showcase/19-2", ("library", "read", "doi:10.4171/showcase/19-2")),
-    (
-        "cited:doi:10.4171/showcase/19-2?page=3&quote=The%20defect",
-        ("library", "read", "doi:10.4171/showcase/19-2", "3"),
-    ),
 ]
 
 
@@ -54,8 +49,7 @@ def test_the_research_state_is_the_one_address_read_without_a_command(quilt: Pat
         ("quilt:s-2026-01-01-wygcqp", "loom_session_list"),
         ("https://example.org", "the addresses `loom link` prints"),
         ("quilt:", "names no key"),
-        ("cited:", "names no work"),
-        ("cited:doi:10.1/x?page=0", "a number from 1"),
+        ("cited:doi:10.4171/showcase/19-2", "loom's resources are quilt:KEY"),
         ("quilt:sh-0007?at=accepted", "takes only ?closure"),
         ("quilt:state?closure", "read whole"),
         (f"quilt:{LANDMARK}#sh-0007", "read whole"),
@@ -73,7 +67,7 @@ def test_every_command_a_prompt_or_resource_runs_is_an_agent_command_that_only_r
         return next(p for n in (2, 1) if (p := " ".join(words[:n])) in ACTS)
 
     paths = {path(words) for _, words in READS} | {path(link_argv("sh-0007")), path(mode_argv("quick"))}
-    assert paths == {"source", "history show", "library read", "link", "ai mode"}
+    assert paths == {"source", "history show", "link", "ai mode"}
     assert all(p in AGENT_COMMANDS and ACTS[p] == "read" for p in paths), paths
 
 
@@ -82,14 +76,11 @@ def test_the_list_holds_what_a_person_would_mention_and_the_templates_the_rest(q
     got = {r.uri: r for r in listed(result)}
     assert "quilt:state" in got and "quilt:drafting/main-atomic.tex" in got and f"quilt:{LANDMARK}" in got
     assert got["quilt:sh-0007"].title.startswith("Proposition") and "quilt:sh-0007/proof" not in got
-    assert got["cited:doi:10.4171/showcase/19-2"].name == "Bellamy19"
-    assert not [u for u in got if u.startswith("quilt:Bellamy19-")]  # a digest's results are reached by template
+    assert not [u for u in got if u.startswith("cited:")]  # a work is the Library's, and no command reads one
     assert all(reading(u, result.quilt) for u in got)  # every listed address reads
     assert [t.uri for t in TEMPLATES] == [
         "quilt:{+key}",
         "quilt:{+key}?closure",
-        "cited:{+work}",
-        "cited:{+work}?page={page}",
     ]
 
 

@@ -1,0 +1,12 @@
+{
+ "answer": {
+  "gen": 1789808400002,
+  "ok": true,
+  "result": "2209.01234v2.pdf was taken out again"
+ },
+ "endpoint": "library-undo",
+ "request": {
+  "act": "x-bfsajw",
+  "id": "cfe8c29f7460d429b515b44414e69d565ef9eb84195699d4fd63b82737d318aa"
+ }
+}

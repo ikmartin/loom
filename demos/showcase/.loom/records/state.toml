@@ -2,32 +2,6 @@
 schema = 1
 
 [[accept]]
-key = "Bellamy19-thm-2.3"
-author = "The loom showcase"
-date = 2026-09-16T09:00:00Z
-text = "sha256:98198fa8e2344b6233ddc3e6d3233603b7971c8da57f984b9ad24a5ca4016570"
-preamble = "sha256:c1cff78225798313fef814a82983d6fe0448b44397ce7f9c793deb8a176f7298"
-master = "drafting/main-atomic.tex"
-dependency_version = 1
-basis = "cited-result"
-context = "{\"after\":{\"edge\":1},\"before\":{\"edge\":1},\"copies\":1,\"kind\":\"theorem\",\"twin\":false}"
-[accept.closure]
-[accept.direct]
-
-[[accept]]
-key = "Bellamy19-thm-3.2"
-author = "The loom showcase"
-date = 2026-09-16T09:00:00Z
-text = "sha256:7c88fb798f78dacefc25f7ff1fd82085e36f96c86d6e7309cd6ea5022419c945"
-preamble = "sha256:c1cff78225798313fef814a82983d6fe0448b44397ce7f9c793deb8a176f7298"
-master = "drafting/main-atomic.tex"
-dependency_version = 1
-basis = "cited-result"
-context = "{\"after\":{\"edge\":1},\"before\":{\"gap\":1,\"hash\":\"sha256:9bf706ec541e66d9009adf35b29b06927b109fdee89bbc1bd8081d4897087bab\"},\"copies\":1,\"kind\":\"theorem\",\"twin\":false}"
-[accept.closure]
-[accept.direct]
-
-[[accept]]
 key = "sh-0001"
 author = "The loom showcase"
 date = 2026-09-16T10:00:00Z
@@ -188,9 +162,7 @@ dependency_version = 1
 context = "{\"after\":{\"edge\":1},\"before\":{\"gap\":1,\"hash\":\"sha256:edca669d457c39f55d42fc082494c7d3d0e9fdee30cff7c37372ff94f035ec4c\"},\"copies\":1,\"documents\":[\"drafting/main-atomic.tex\"],\"kind\":\"proof\",\"twin\":false}"
 [accept.closure]
 "sh-0007" = "sha256:8dfa32f01ec0956a335ecdbadd1dbdf162677a0c90d09a1bc957f956452edf16"
-"Arden24-prop-2.1" = "sha256:504d0f21b6bc3f35966e1142f7d206351872bf07ec470b2f237727dcf82eb104"
 "sh-0009" = "sha256:559937032f6db400eae53d77d6073a10f690d9c8e1d23172f444bedd5ef1a150"
 [accept.direct]
 "sh-0007" = "sha256:8dfa32f01ec0956a335ecdbadd1dbdf162677a0c90d09a1bc957f956452edf16"
-"Arden24-prop-2.1" = "sha256:504d0f21b6bc3f35966e1142f7d206351872bf07ec470b2f237727dcf82eb104"
 "sh-0009" = "sha256:559937032f6db400eae53d77d6073a10f690d9c8e1d23172f444bedd5ef1a150"

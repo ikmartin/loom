@@ -86,12 +86,17 @@ def _load(path: Path) -> Look | None:
         return None
 
 
-def watching(config: QuiltConfig) -> Callable[[str], bool]:
-    """Whether the look watches quilt-relative `rel`: a place agents may edit, by the predicate the door's refusal and the agents' permission files read (`agents.denied_by`), and the research state, which agents keep through `loom write state` though they may not edit it directly. A place agents are denied is the person's own, and a change there is never listed."""
+def watching(config: QuiltConfig, root: Path) -> Callable[[str], bool]:
+    """Whether the look watches quilt-relative `rel`: a place agents may edit, by the predicate the door's refusal and the agents' permission files read (`agents.denied_by`), outside a Lake project (`scan.source.lake_project`), and the research state, which agents keep through `loom write state` though they may not edit it directly.
+
+    A place agents are denied is the person's own and a Lake project the agents' own, and a change in either is never listed. Each folder's Lake test is made once per predicate.
+    """
     from loom.agents import denied_by
+    from loom.scan.source import lake_project
 
     state = config.research_state
-    return lambda rel: rel == state or denied_by(config, rel) is None
+    known: dict[str, bool] = {}
+    return lambda rel: rel == state or (denied_by(config, rel) is None and lake_project(root, rel, known) is None)
 
 
 def unwatched(config: QuiltConfig) -> list[str]:
@@ -137,8 +142,8 @@ def _align(root: Path, look: Look) -> Look:
     if look.deny is None or look.deny == deny:
         look.deny = deny
         return look
-    was = watching(dataclasses.replace(quilt.config, agents_deny=look.deny))
-    now = watching(quilt.config)
+    was = watching(dataclasses.replace(quilt.config, agents_deny=look.deny), root)
+    now = watching(quilt.config, root)
     texts = open_texts(quilt)
     for rel, text in texts.items():
         if was(rel) and not now(rel):
@@ -200,7 +205,7 @@ def held(look: Look, rel: str) -> str | None:
 
 def watched_texts(quilt: Quilt) -> dict[str, str]:
     """The open text files the look watches (`watching`), each one's text by its path."""
-    watched = watching(quilt.config)
+    watched = watching(quilt.config, quilt.root)
     return {rel: text for rel, text in open_texts(quilt).items() if watched(rel)}
 
 
@@ -213,7 +218,7 @@ def take(quilt: Quilt, who: str) -> Look:
     old = _load(look_path(quilt.root, who))
     closed: dict[str, str] = {}
     if old is not None:
-        watched = watching(quilt.config)
+        watched = watching(quilt.config, quilt.root)
         files |= {rel: h for rel, h in old.files.items() if not watched(rel)}
         closed = {rel: h for rel, h in old.closed.items() if rel in files and not watched(rel)}
     look = Look(who, stamp(), files, deny=list(quilt.config.agents_deny), closed=closed)
@@ -245,7 +250,7 @@ def changes(quilt: Quilt, who: str) -> list[Change]:
     if look is None:
         return []
     now = watched_texts(quilt)
-    watched = watching(quilt.config)
+    watched = watching(quilt.config, quilt.root)
     out: list[Change] = []
     for rel in sorted(set(now) | {f for f in look.files if not is_latex_aux(f) and watched(f)}):
         before_hash = held(look, rel)
@@ -289,7 +294,7 @@ def take_line(quilt: Quilt, who: str, path: str, before: str, after: str, line: 
     from loom.records.snapshots import read_raw, write_raw
     from loom.tasks import split_lines
 
-    if not watching(quilt.config)(path):
+    if not watching(quilt.config, quilt.root)(path):
         return  # a place agents are denied: nothing there is listed
     look = read_look(quilt.root, who)
     seen = look.files.get(path) if look else None

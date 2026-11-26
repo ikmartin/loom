@@ -1,0 +1,14 @@
++++
+schema = 1
+id = "dm-0013-ref"
+taxon = "reference"
++++
+@article{Man12,
+  author  = {Manolache, Cristina},
+  title   = {Virtual pull-backs},
+  journal = {J. Algebraic Geom.},
+  volume  = {21},
+  year    = {2012},
+  pages   = {201--245},
+  eprint  = {0805.2065v2},
+}

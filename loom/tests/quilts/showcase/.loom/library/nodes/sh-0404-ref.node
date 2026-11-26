@@ -1,0 +1,12 @@
++++
+schema = 1
+id = "sh-0404-ref"
+taxon = "reference"
++++
+@article{Cortez07,
+  author = {Cortez, Hilario},
+  title = {Flows on infinite quivers: a survey},
+  journal = {Bull. Imag. Soc.},
+  year = {2007},
+  pages = {1--44},
+}

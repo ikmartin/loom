@@ -18,6 +18,8 @@ The steps, in order:
     principles the tables in the design's list of principles
     pages      the pages TeX makes of the quilts' documents, which the viewer's served suites read (TeX)
     fixture    the conformance fixture and its two copies (TeX)
+    views      a sample request and answer for each of Review's and the Web's reads and writes, which the viewer's sample data is; after `fixture`, whose manifest they are made from and which makes docs/specs/fixture/ again from nothing, so the copies do not carry them
+    views-library  a sample request and loom's answer for each of the Library's reads and writes, which the viewer's tests hold its client to; last, since `fixture` makes docs/specs/fixture/ again from nothing and so removes its views/ folder
 
 It ends by saying what changed, by path. The viewer's bundle is not regenerated here: it is vendored at a release (`loom/scripts/vendor_arras.py`).
 
@@ -102,6 +104,21 @@ STEPS = [
         ".",
         ("docs/specs/fixture", "loom/tests/fixture", "arras/tests/fixture"),
         tex=True,
+    ),
+    Step(
+        "views",
+        [*PY, "scripts/gen_views.py"],
+        [*PY, "scripts/gen_views.py", "--check"],
+        "loom",
+        ("docs/specs/fixture/views",),
+    ),
+    Step(
+        "views-library",
+        [*PY, "scripts/gen_library_views.py"],
+        [*PY, "scripts/gen_library_views.py", "--check"],
+        "loom",
+        # only its own files: the folder holds the evidence lane's samples too
+        ("docs/specs/fixture/views/library-*.json",),
     ),
 ]
 

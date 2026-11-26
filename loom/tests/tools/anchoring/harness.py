@@ -633,7 +633,7 @@ def rename_label_scn(ws: WS, targets: list[Target], result) -> None:
     renames = {}
     for t in targets:
         for lab in t.labels:
-            if not is_id_shaped(lab, result.assembly.citeslugs):
+            if not is_id_shaped(lab):
                 renames[lab] = lab + "-renamed"
         if t.kind == "eq":
             lab = t.key.rsplit("#", 1)[1]

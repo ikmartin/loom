@@ -7,16 +7,14 @@ const all = manifest.diagnostics as D[];
 const latex = (d: D) => (d.class ?? 'latex') === 'latex';
 const yours = all.filter((d) => latex(d) && (d.owner ?? 'person') === 'person' && d.severity !== 'info');
 
-/** A cited work's problem: a dangling reference in Kre99's digest, which is loom's reading of the paper and so loom's own. */
-const inDigest = {
+/** loom's own difficulty: a write it could neither finish nor undo, which is an agent's to see through, never the person's. */
+const leftHalfDone = {
 	severity: 'warning',
-	code: 'dangling-link',
+	code: 'loom:write-left',
 	class: 'internal',
-	message: '\\ref{nowhere} names no node or region',
-	locations: [{ file: '.loom/library/Kre99.tex', line: 12 }],
-	keys: [],
-	owner: 'work',
-	fixes: [{ label: 'digest Kre99 again', command: 'loom library update Kre99 --only extract --redo', act: { endpoint: 'library-update', body: { works: ['Kre99'], redo: true, steps: ['extract'] } } }]
+	message: 'a write to drafting/main.tex was left half done and could not be undone',
+	locations: [],
+	keys: []
 };
 /** An agent's copy that did not compile: the LaTeX of a document that is the agent's. */
 const copyFailed = {
@@ -41,13 +39,14 @@ const failed = {
 };
 
 test("a person is shown the problems in their own LaTeX alone, and the manifest keeps every agent's code", async ({ page }) => {
-	await serve(page, (m) => void m.diagnostics.push(inDigest as never, copyFailed as never, failed as never));
+	await serve(page, (m) => void m.diagnostics.push(leftHalfDone as never, copyFailed as never, failed as never));
 	await page.goto('/review/problems');
 	const mine = page.getByTestId('problems-yours');
 	// every class but the person's LaTeX is in the manifest the page read, and on the page nowhere
 	const agents = all.filter((d) => !latex(d));
 	expect(agents.map((d) => d.code)).toContain('loom:uses-missing');
-	expect(new Set(all.map((d) => d.class))).toEqual(new Set(['latex', 'model', 'internal']));
+	// the fixture's own hold the person's LaTeX and loom's model; loom's own difficulty is the one added above
+	expect([...new Set(all.map((d) => d.class))]).toEqual(expect.arrayContaining(['latex', 'model']));
 	await expect(mine.getByTestId('problems-yours-count')).toHaveText(String(yours.length + 1));
 	await expect(mine.getByTestId('problem')).toHaveCount(yours.length + 1);
 	await expect(mine.locator('[data-testid="problem-group"][data-codes="loom:compile-failed"] .title')).toHaveText('A document did not compile');
@@ -55,8 +54,8 @@ test("a person is shown the problems in their own LaTeX alone, and the manifest 
 	for (const code of new Set(agents.map((d) => d.code).filter((c) => !all.some((d) => latex(d) && d.code === c)))) await expect(page.locator(`[data-testid="problem-group"][data-codes~="${code}"]`)).toHaveCount(0);
 	const seeNowhere = agents.find((d) => d.code === 'dangling-link') as D & { message: string };
 	await expect(page.getByText(seeNowhere.message)).toHaveCount(0);
-	await expect(page.getByText('names no node or region')).toHaveCount(0);
-	for (const part of ['problems-works', 'problems-remarks']) await expect(page.getByTestId(part)).toHaveCount(0);
+	await expect(page.getByText(leftHalfDone.message)).toHaveCount(0);
+	await expect(page.getByTestId('problems-remarks')).toHaveCount(0);
 	// an agent's copy's LaTeX is the agent's: folded beneath, said whose it is
 	await expect(page.getByTestId('problems-copy')).not.toHaveAttribute('open');
 	await expect(page.getByTestId('problems-copy')).toContainText('Proposed Changes');
@@ -82,6 +81,18 @@ const goneWithNotes = {
 };
 /** A document gone that only acceptance rows name: loom's model, an agent's. */
 const goneRowsOnly = { ...goneWithNotes, class: 'model', message: 'drafting/older.tex is gone and the history does not say where it went; 2 acceptance rows name it', keys: ['sy-0002', 'sy-0003'], fixes: [{ label: 'record where it went, NEW being its path now', command: 'loom mv drafting/older.tex NEW' }] };
+
+test("where Review's reads are served, an agent's copy's problems point to Proposed edits, which the link opens in Review", async ({ page }) => {
+	await serve(page, (m) => void m.diagnostics.push(copyFailed as never));
+	await page.goto('/review/problems?fixture=round6');
+	const copy = page.getByTestId('problems-copy');
+	await expect(copy).toContainText('take the copy back in Proposed edits.');
+	await expect(copy).not.toContainText('Proposed Changes');
+	await copy.locator('summary').first().click();
+	await copy.getByTestId('problems-copy-link').click();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
+	await expect(page.getByTestId('review-kind-edits')).toHaveAttribute('aria-current', 'true');
+});
 
 test('a document gone with annotations on it is one row saying how many, and one with none is not shown', async ({ page }) => {
 	await serve(page, (m) => void m.diagnostics.push(goneWithNotes as never, goneRowsOnly as never));

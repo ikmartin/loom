@@ -1,4 +1,4 @@
-// The side panel: the documents and their contents, the Nodes and Library sections, the write target pinned in a footer, and the session list in a picker it opens. Each test is named for the rule it holds.
+// The side panel: the documents and their contents, the Nodes section, the write target pinned in a footer, and the session list in a picker it opens. Each test is named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, pane, scrollPane, viewMenu } from '../workspace';
 import { openPicker, pickSession } from '../picker';
@@ -54,11 +54,11 @@ test('an annotation needs no session, and the footer says in its own tone when n
 	await expect(page.getByTestId('popup-save')).toBeEnabled();
 	// the footer carries only the state: refused, in its own tone, without the sentence
 	const footer = page.getByTestId('session-footer');
-	await expect(footer).toHaveAttribute('aria-label', /^not writing in a session/);
-	await expect(page.getByTestId('session-footer-lead')).toHaveText('not writing in a session');
+	await expect(footer).toHaveAttribute('aria-label', /^No session chosen/);
+	await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
 	await expect(page.locator('.footer.refused')).toHaveCount(1);
 	await pickSession(page, REFEREE);
-	await expect(footer).toHaveAttribute('aria-label', 'writing in referee');
+	await expect(footer).toHaveAttribute('aria-label', 'Writing in referee');
 	await expect(page.locator('.footer.refused')).toHaveCount(0);
 });
 
@@ -309,7 +309,7 @@ test('accepting needs no session', async ({ page }) => {
 		await route.fulfill({ json: { ok: true, result: 'accepted 1 of 1', accepted, refused: [] } });
 	});
 	await page.goto('/review');
-	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^not writing in a session/);
+	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^No session chosen/);
 	const accept = page.locator('[data-testid="review-row"][data-key="sy-0001"]').getByTestId('review-accept');
 	await expect(accept).toBeEnabled();
 	await accept.click();
@@ -320,16 +320,16 @@ test.describe('sessions', () => {
 	test('the chosen session is still chosen after a load', async ({ page }) => {
 		await page.goto('/master/drafting/main');
 		await pickSession(page, REFEREE);
-		await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^writing in /);
+		await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^Writing in /);
 		await page.reload();
-		await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^writing in /);
+		await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^Writing in /);
 		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
 	});
 
 	test('a stored session the corpus no longer lists is let go', async ({ page }) => {
 		await page.addInitScript(() => localStorage.setItem('arras.session-view', JSON.stringify({ selected: 's-gone', view: 'all', showClosed: false })));
 		await page.goto('/master/drafting/main');
-		await expect(page.getByTestId('session-footer-lead')).toHaveText('not writing in a session');
+		await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
 		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('arras.session-view') ?? '{}').selected)).toBeFalsy();
 	});
 
@@ -366,9 +366,5 @@ test.describe('sections', () => {
 			// the documents stand there instead, with the contents folded under the open one
 			await expect(page.getByTestId('docs-tree')).toBeVisible();
 		}
-		// the Library fills the panel with its own filters, which is the other half of the same rule
-		await page.goto('/review/library');
-		await expect(page.locator('.panel .rail-label', { hasText: /^Views$/ })).toHaveCount(0);
-		await expect(page.getByTestId('show-proposed')).toBeVisible();
 	});
 });

@@ -15,9 +15,12 @@ from tests.unit.render.write_api import (  # noqa: F401  (each fills CASES as it
     cases_annotations,
     cases_changes,
     cases_files,
+    cases_formal,
     cases_library,
+    cases_library_evidence,
     cases_review,
     cases_sync,
+    cases_web,
 )
 from tests.unit.render.write_api._cases import (
     CASES,
@@ -159,14 +162,14 @@ def test_the_write_api_refuses_a_post_from_another_page() -> None:
 
 
 def test_a_page_the_quilt_holds_is_served_with_no_origin_of_the_viewers(session) -> None:  # type: ignore[no-untyped-def]
-    """`/build/` and `/digests/storage/` are served in the viewer's origin, and an agent running as the person can write what they serve. An HTML or SVG page there that ran as the viewer could read the token from `/_api` and post the author's acts naming no author, which is the author's own click (K5). Each is served sandboxed: it runs no script and has an opaque origin. The viewer's own bundle is not."""
-    from loom.paths import SITE, STORAGE, STORE_ADDRESS
+    """`/build/` and the library's stored PDFs are served in the viewer's origin, and an agent running as the person can write what they serve. An HTML or SVG page there that ran as the viewer could read the token from `/_api` and post the author's acts naming no author, which is the author's own click (K5). Each is served sandboxed: it runs no script and has an opaque origin. The viewer's own bundle is not."""
+    from loom.paths import LIBRARY_DOCUMENTS, SITE
 
     s, d = session
     planted = {  # address: (file, text)
         "build/agent/x.html": (f"{SITE}/agent/x.html", "<!doctype html><script>fetch('/_api')</script>"),
-        f"{STORE_ADDRESS}/arxiv/0805.2065v2/src/f.svg": (
-            f"{STORAGE}/arxiv/0805.2065v2/src/f.svg",
+        f"_api/library/pdf/{'a' * 64}": (
+            f"{LIBRARY_DOCUMENTS}/{'a' * 64}.pdf",
             '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/_api")</script></svg>',
         ),
         "build/agent/x.txt": (f"{SITE}/agent/x.txt", "<!doctype html><script>fetch('/_api')</script>"),
@@ -216,7 +219,7 @@ def test_a_request_that_names_another_host_is_answered_nothing(session) -> None:
     s, d = session
     token = read_token(d)
     for host in (f"rebound.example:{s.port}", "rebound.example", f"127.0.0.1:{s.port + 1}", "127.0.0.1"):
-        for path in ("_api", "", "node/dm-0003", "build/manifest.json", "_app/x.js", "_api/stream", "_api/jobs"):
+        for path in ("_api", "", "node/dm-0003", "build/manifest.json", "_app/x.js", "_api/stream"):
             status, _, _ = get(s.url + path, {"Host": host, "X-Loom-Token": token})
             assert status == 403, (host, path)
         for method, data in (("HEAD", None), ("POST", b"{}")):
@@ -300,38 +303,18 @@ def test_an_annotation_on_a_pdf_is_written_and_redrawn_over_the_wire(serve: Serv
         "bad-request",
         "says something",
     )
-    # the person's "ask for an overview" is a whole-work annotation with nothing loom needs to know of it
+    # a note on a whole work, named by the key its entry has, is recorded on its reference
+    from loom.cli._quilt import open_scan
+
     whole = succeeds(s, "annotate", {"target": "Calloway14", "message": "Read this paper through.", "author": WHO})
-    assert (
-        the(log(q), lambda e: e.get("body") == "Read this paper through.", "whole")["target"] == "doi:10.4171/demo/14-1"
-    )
-    assert whole["ok"]
-
-
-def test_a_library_write_on_a_work_a_run_acts_on_is_refused_until_it_finishes(tmp_path: Path) -> None:
-    """A run writes the work's digest, so a verify or a discard on it waits for the run rather than crossing it."""
-    from loom.render.api import ApiError, handle, offer_jobs
-    from loom.render.endpoints.library import _JOBS
-
-    q = demo(tmp_path)
-
-    class Running:
-        def touching(self, citekey: str) -> bool:
-            return citekey == "Calloway14"
-
-    offer_jobs(q, Running())
-    try:
-        with pytest.raises(ApiError) as caught:
-            handle(q, "library-verify", {"node": "Calloway14-def-3.1"})
-        assert caught.value.code == "library-busy" and caught.value.status == 409
-    finally:
-        _JOBS.pop(q.resolve(), None)
+    said = the(log(q), lambda e: e.get("body") == "Read this paper through.", "whole")
+    assert said["target"] == open_scan(str(q)).refs["Calloway14"] and whole["ok"]
 
 
 def test_a_write_larger_than_the_publisher_reads_is_refused_before_it_is_read(session, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     s, _ = session
     monkeypatch.setattr("loom.render.api.MAX_BODY", 64)
-    status, said = post(s.url + "_api/library-recognise", {"text": "x" * 200})
+    status, said = post(s.url + "_api/library-take", {"items": [{"text": "x" * 200}]})
     assert status == 413 and said["error"]["code"] == "too-large"
 
 

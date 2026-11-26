@@ -64,19 +64,38 @@ def identity_group(ident: IdentityResult | None) -> list[Group]:
 
 
 def bibliography_groups(quilt: Quilt) -> tuple[list[Group], dict[str, Any]]:
-    """The bibliography scan a landmark triggers, as groups for the report of the command that made the landmark, and its JSON; no group at all when it found nothing new and nothing for the author, since that housekeeping is not what the command was asked to do (K4)."""
-    from loom.refs.scan import scan_bibliography
+    """Gathering, which a landmark triggers: a reference for each entry the documents and landmarks read that the library lacks (`library.gather`), as groups for the report of the command that made the landmark, and its JSON; no group when it made nothing and found nothing wrong, since that housekeeping is not what the command was asked to do (K4)."""
+    from loom.library.gather import gather
+    from loom.scan.scan import scan
 
-    scanned = scan_bibliography(quilt)
-    bib = scanned.report()
-    if not scanned.added and not scanned.problems():
-        return [], bib.to_json()
-    head = Group("bibliography", [Item(bib.verdict), *(Item(line) for line in bib.lines)], limit=None, counted=False)
-    rest = [
-        Group(f"bibliography, {g.heading}", g.items, count=g.count, limit=g.limit, next=g.next, problem=g.problem)
-        for g in bib.groups
-    ]
-    return [head, *rest], bib.to_json()
+    done = gather(scan(quilt))
+    data = {
+        "made": len(done.made),
+        "followed": len(done.followed),
+        "refused": [{"key": r.key, "why": r.why, "file": r.file, "line": r.line} for r in done.refused],
+        "missing": [{"document": d, "bib": name} for d, name in done.missing],
+    }
+    groups: list[Group] = []
+    if done.made or done.followed:
+        said = f"{counted(len(done.made), 'reference')} made from the bibliographies the documents read"
+        if done.followed:
+            said += f", {counted(len(done.followed), 'reference')} following its entry"
+        groups.append(Group("library", [Item(said)], limit=None, counted=False))
+    if done.refused:
+        groups.append(
+            Group(
+                "library, entries not taken", [Item(f"{r.file}:{r.line}: {r.why}") for r in done.refused], problem=True
+            )
+        )
+    if done.missing:
+        groups.append(
+            Group(
+                "library, bibliographies not found",
+                [Item(f"{d} names {name}") for d, name in done.missing],
+                problem=True,
+            )
+        )
+    return groups, data
 
 
 def check_prefix(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:

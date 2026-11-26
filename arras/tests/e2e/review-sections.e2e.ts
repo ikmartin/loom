@@ -5,7 +5,7 @@ import { manifest, QUICK, REFEREE, serve } from '../manifest';
 test('Review\'s column lists its sections, each counting what waits there, the current one marked', async ({ page }) => {
 	await page.goto('/review');
 	const list = page.getByTestId('review-sections');
-	await expect(list.getByRole('link')).toHaveText([/^Your Changes/, /^Proposed Changes/, /^Problems/, /^Library/, /^The Record/]);
+	await expect(list.getByRole('link')).toHaveText([/^Your Changes/, /^Proposed Changes/, /^Problems/, /^History/]);
 	await expect(page.getByTestId('section-changes')).toHaveAttribute('aria-current', 'page');
 	// what changed since it was accepted, or was taken in, and every pending change; a block never accepted is listed there, not counted
 	const unresolved = (manifest.unresolved ?? []).filter((r: { cause: string }) => r.cause !== 'never-accepted').length;
@@ -18,12 +18,11 @@ test('Review\'s column lists its sections, each counting what waits there, the c
 	// the errors and warnings in the person's own LaTeX: loom's model and its own difficulties are an agent's
 	const problems = manifest.diagnostics.filter((d: { severity: string; owner?: string; class?: string }) => (d.class ?? 'latex') === 'latex' && (d.owner ?? 'person') === 'person' && (d.severity === 'error' || d.severity === 'warning')).length;
 	await expect(page.getByTestId('section-count-problems')).toHaveText(String(problems));
-	// every landmark leads to a live draft, so The Record waits for nothing
+	// every landmark leads to a live draft, so History waits for nothing
 	await expect(page.getByTestId('section-count-record')).toHaveCount(0);
 	// each says what it is for
 	await expect(page.getByTestId('section-changes')).toContainText('mathematics to accept, changes to keep');
 	await expect(page.getByTestId('section-record')).toContainText('versions, sessions, everything done');
-	await expect(page.getByTestId('section-library')).toContainText('the works you read and cite');
 	await expect(page.getByTestId('section-proposed')).toHaveAttribute('title', /1 proposal to decide/);
 	// each section is its own page, and the column marks it
 	for (const id of ['proposed', 'problems', 'record']) {
@@ -33,7 +32,7 @@ test('Review\'s column lists its sections, each counting what waits there, the c
 	}
 });
 
-test('The Record\'s Sessions lists every session with when it was last active, and counts no annotation, each opening its transcript', async ({ page }) => {
+test('History\'s Sessions lists every session with when it was last active, and counts no annotation, each opening its transcript', async ({ page }) => {
 	await page.goto('/review/record/sessions');
 	const table = page.getByTestId('sessions-table');
 	await expect(table.locator('thead')).not.toContainText('Awaiting an answer');
@@ -56,7 +55,7 @@ test('The Record\'s Sessions lists every session with when it was last active, a
 	await expect(page.locator(`[data-testid="sessions-write-here-${QUICK}"]`)).toHaveCount(0);
 });
 
-test('The Record shows a document’s versions oldest first and Now, every act recorded on its own tab, and flags a version no live draft leads to', async ({ page }) => {
+test('History shows a document’s versions oldest first and Now, every act recorded on its own tab, and flags a version no live draft leads to', async ({ page }) => {
 	await serve(page, (m) => {
 		const oldest = m.canon[0];
 		delete oldest.in;
@@ -100,17 +99,4 @@ test("a section's count stands beside its name, on the name's line, not under it
 	const count = (await page.getByTestId('section-count-changes').boundingBox())!;
 	expect(count.x).toBeGreaterThanOrEqual(name.x + name.width);
 	expect(count.y).toBeLessThan(name.y + 16);
-});
-
-test('Review › Library is the ledger, counting the works that want something of the person, and the Docs shelf leads to it', async ({ page }) => {
-	await page.goto('/');
-	await page.getByTestId('library-toggle').click();
-	const wanted = await page.getByTestId('manage-wanted').innerText();
-	await page.getByTestId('manage-link').click();
-	await expect(page).toHaveURL(/\/review\/library$/);
-	await expect(page.getByTestId('primary-review')).toHaveAttribute('aria-current', 'page');
-	await expect(page.getByTestId('section-library')).toHaveAttribute('aria-current', 'page');
-	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
-	await expect(page.getByTestId('library-works')).toBeVisible();
-	await expect(page.getByTestId('section-count-library')).toHaveText(wanted.split(' ')[0]);
 });

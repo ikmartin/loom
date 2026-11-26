@@ -37,7 +37,6 @@ WRITE_FLAGS = {"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND"}
 #: Whole modules that write only loom's own places, by path under `loom/`, with why.
 MODULES = {
     "refs/": "the library's store and records, written under the library's lock (`refs/intake.py`)",
-    "digest/": "the library's digests",
     "records/": "loom's records under `.loom/`",
     "tex/": "TeX's runs, its staging and the machine's own TeX",
     "fence.py": "the fence's canary, two files in temporary folders of its own",
@@ -46,11 +45,9 @@ MODULES = {
     "render/assets.py": "the build's output",
     "render/snippets.py": "the build's output",
     "render/build.py": "the build's output",
-    "render/endpoints/library.py": "the library's store",
     "cli/help.py": "click's help formatter, which writes no file",
     "cli/build_cmds.py": "build reports and closures under `.loom/`",
     "cli/session.py": "an agent's session under `.loom/`",
-    "cli/library/upkeep.py": "the library's store",
     "lifetimes.py": "the sweep of what is derived, under `.loom/`",
     "locks.py": "the lock files loom holds, made empty and never written",
     "layout.py": "`.loom/`'s layout and its format number",
@@ -64,6 +61,17 @@ MODULES = {
     "review_queue.py": "loom's records",
     "mcp/server.py": "an agent's scratch and the server's log",
     "section_drafts.py": "an agent's copies under `.loom/` and temporary trees",
+    "library/intake.py": "the intake's drops waiting in `.loom/local/incoming/`, and the documents it files into the library's store; a person's file it reads, never writes",
+    "library/documents.py": "the library's documents by hash in `.loom/library/documents/`, sources unpacked under `.loom/cache/library/sources/`, and its own temporary spool",
+    "library/store.py": "the node store, `.loom/library/nodes/`, and the record of a batch it is placing, `.loom/local/library-act/`, which a writer cut short rolls back",
+    "library/acts.py": "the node store, and what a delete took, kept for its undo in `.loom/local/library-undo/`",
+    "library/carry.py": "the old library under `.loom/library/` that it removes once carried, and the annotation log it re-keys; the research state, the person's, it writes only through the door",
+    "library/index.py": "the index derived from the nodes, `.loom/cache/library/`",
+    "library/log.py": "the library's log, `.loom/records/library/`",
+    "library/tags.py": "the tag log, `.loom/records/tags/`",
+    "library/thumbs.py": "the stored PDFs' first pages as pictures, `.loom/cache/library/thumbs/`",
+    "evidence/log.py": "the evidence log, `.loom/records/evidence/`",
+    "cli/library/add.py": "a folder's source, packed into a drop in `.loom/local/incoming/`",
 }
 
 #: Functions of mixed modules that write only loom's own places, by `module:qualname`, with why.
@@ -77,6 +85,7 @@ FUNCTIONS = {
     "ai/layout.py:_write": "the layer's own records in `.loom/`; a person's file goes through `writes.put`",
     "ai/layout.py:init_layer": "the layer's records in `.loom/`",
     "ai/layout.py:upgrade_layer": "the layer's records in `.loom/`",
+    "ai/layout.py:_gone_modes": "a mode file of the layer's in `.loom/agents/instructions/modes/`, removed only while its text is the one loom recorded",
     "ai/layout.py:write_versions": "the layer's records in `.loom/`",
     "ai/skills.py:write_skills": "a skill's folder left empty once the door removed its file",
     "cli/history_cmds.py:_draft_ai": "an agent's copy under `.loom/`",
@@ -86,7 +95,6 @@ FUNCTIONS = {
     "cli/quilt.py:write_demo_quilt": "the demo quilt, into a folder that is new or empty (`init --demo` refuses any other)",
     "cli/quilt.py:undo_minimal_quilt": "taking back what `loom init` made",
     "cli/quilt.py:_write_user_config_template": "the machine's own config",
-    "cli/upgrade.py:upgrade": "the annotation types, a record",
     "doctor.py:check_tools": "a temporary file",
     "gitignore.py:write_loom_ignore": "`.loom/.gitignore`",
     "history/ledger.py:append_entry": "the history, outside an act that stages it (`writes.staging`)",
@@ -100,6 +108,7 @@ FUNCTIONS = {
     "reshape/canon.py:plan_draft": "a temporary stage",
     "reshape/importer.py:_mirror_quilt": "a temporary stage",
     "scan/quilt.py:save_author": "the machine's own config",
+    "upgrade.py:upgrade": "the annotation types, `.loom/records/annotation-types.toml`, written only where there are none",
 }
 
 

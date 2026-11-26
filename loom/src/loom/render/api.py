@@ -12,11 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from loom.render.endpoints import agents, changes, files, library, review, sync
+from loom.render.endpoints import agents, changes, files, formal, library, review, sync, web
 from loom.render.endpoints import annotations as annotating  # `annotations` is the name `from __future__` binds here
 from loom.render.endpoints.agents import forget_place, reading_place
 from loom.render.endpoints.base import ApiError, Handler, offer_scan
-from loom.render.endpoints.library import offer_jobs
 
 __all__ = [
     "CAPABILITIES",
@@ -25,22 +24,24 @@ __all__ = [
     "OWN_LOCK",
     "READS",
     "RECORD_WRITES",
+    "UPGRADE",
     "WRITE_API_VERSION",
     "ApiError",
     "discovery",
     "forget_place",
     "handle",
-    "offer_jobs",
     "offer_scan",
     "reading_place",
 ]
 
 #: The families of endpoints, a module each: its `HANDLERS`, and which of them are `READS`, `NO_REBUILD` and `RECORD_WRITES`.
-FAMILIES = (annotating, changes, library, agents, sync, review, files)
+FAMILIES = (annotating, changes, library, agents, sync, review, files, web, formal)
 #: Every endpoint's handler, from its family's table.
 HANDLERS: dict[str, Handler] = {name: serve for family in FAMILIES for name, serve in family.HANDLERS.items()}
 #: What this publisher serves. A viewer reads this rather than assuming the specification's table, so an endpoint that is not here answers 404 and a viewer that hides the affordance is right to. `open` is not here: `discovery` offers it only where loom can open an application.
 CAPABILITIES = [name for name in HANDLERS if name != "open"]
+#: The one write a publisher serves while its quilt is in an earlier layout (`ServeSession.older`): it brings the quilt forward, and every other endpoint answers `format-old` until it has.
+UPGRADE = "library-upgrade"
 
 WRITE_API_VERSION = 1
 

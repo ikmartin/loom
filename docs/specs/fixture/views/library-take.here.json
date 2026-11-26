@@ -1,0 +1,31 @@
+{
+ "answer": {
+  "gen": 1789808400003,
+  "ok": true,
+  "result": "took in 1: 1 here",
+  "rows": [
+   {
+    "authors": [
+     "Bellamy"
+    ],
+    "id": "e16ea0a74da711cddafcb5a49851aeb5e78f16f22ea7ee1a1fa2a0b9acb80d45",
+    "item": 0,
+    "name": "bellamy-median-orders.pdf",
+    "ref": "sh-0403-ref",
+    "short": "Bellamy 2019",
+    "state": "here",
+    "title": "Median orders on weighted digraphs",
+    "why": "loom holds these very bytes as Bellamy 2019's",
+    "year": "2019"
+   }
+  ]
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "incoming": "e16ea0a74da711cddafcb5a49851aeb5e78f16f22ea7ee1a1fa2a0b9acb80d45"
+   }
+  ]
+ }
+}

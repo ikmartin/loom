@@ -1,6 +1,6 @@
 name: docs
 
-# The docs lane of scripts/verify, run as it is at a terminal: `full --only docs` (the work queue and the agreement checks under scripts/checks/). hardwrap.py judges the lines this push or pull request adds, and machine_paths.py whether its PENDING list only shrank, each against HARDWRAP_BASE, since a clean checkout has nothing added since HEAD. It runs on every push and pull request, whatever they touch, since machine_paths.py reads every file in the repository.
+# The docs lane of scripts/verify, run as it is at a terminal: `full --only docs` (the work queue and the agreement checks under scripts/checks/). hardwrap.py judges the lines this push or pull request adds, and words.py and machine_paths.py whether their LEGACY and PENDING lists only shrank, each against HARDWRAP_BASE, since a clean checkout has nothing added since HEAD. It runs on every push and pull request, whatever they touch, since machine_paths.py reads every file in the repository.
 
 on:
   push:
@@ -27,4 +27,10 @@ jobs:
             base="$(git merge-base HEAD "origin/$DEFAULT_BRANCH")"
           fi
           echo "HARDWRAP_BASE=$base" >> "$GITHUB_ENV"
+          # the words check holds its list of older components to the list its base held; a base before scripts/checks/words.py existed holds none, so it is held to where the branch left library-web, where the list began, while that branch exists
+          words="$base"
+          if ! git cat-file -e "$base:scripts/checks/words.py" 2>/dev/null && git rev-parse --verify --quiet origin/library-web >/dev/null; then
+            words="$(git merge-base HEAD origin/library-web)"
+          fi
+          echo "WORDS_BASE=$words" >> "$GITHUB_ENV"
       - run: scripts/verify full --only docs

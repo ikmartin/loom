@@ -1,11 +1,10 @@
-"""A minimal BibTeX reader: entry keys and the handful of fields the manifest and digests use (8.8, specs/manifest.md §13)."""
+"""A minimal BibTeX reader: entry keys and their fields, read from a reference's body or a bibliography."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 
-from loom.paths import BIBLIOGRAPHY as BIBLIOGRAPHY
 from loom.scan.tokenize import match_group
 
 _ENTRY = re.compile(r"@(\w+)\s*[{(]")

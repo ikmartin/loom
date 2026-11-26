@@ -1,0 +1,51 @@
+{
+ "answer": {
+  "gen": 1789808400003,
+  "ok": true,
+  "result": "took in 1: 1 question",
+  "rows": [
+   {
+    "candidates": [
+     {
+      "authors": [
+       "Arden"
+      ],
+      "how": "arxiv:2504.01234v3",
+      "ref": "sh-0402-ref",
+      "short": "Arden 2024",
+      "title": "Cycle spaces of finite quivers",
+      "year": "2024"
+     },
+     {
+      "authors": [],
+      "how": "arxiv:2504.01234v3",
+      "ref": "sh-0405-ref",
+      "short": "arden-cycle-spaces-v2.pdf",
+      "title": "arden-cycle-spaces-v2.pdf",
+      "year": ""
+     }
+    ],
+    "document": {
+     "identifiers": [
+      "arxiv:2504.01234v3"
+     ],
+     "kind": "pdf",
+     "name": "2504.01234v3.pdf"
+    },
+    "id": "83a3d85c2fc5959a792f0e4e4a499158ba90a81d5742f16cfadbe1ff85cd061b",
+    "item": 0,
+    "name": "2504.01234v3.pdf",
+    "question": "q-2f1ndp",
+    "state": "question"
+   }
+  ]
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "incoming": "83a3d85c2fc5959a792f0e4e4a499158ba90a81d5742f16cfadbe1ff85cd061b"
+   }
+  ]
+ }
+}

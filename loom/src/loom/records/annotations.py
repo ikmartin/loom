@@ -13,6 +13,9 @@ from loom.anchors import Anchor
 from loom.records.ids import draw
 from loom.records.selectors import Selector
 
+#: What an annotation may be for, beside a note, which has none: `to-digest`, the person's mark on a work's page asking that a result there be read (`docs/specs/evidence.md` §4.1). A note's lists leave such a mark out.
+PURPOSES = ("to-digest",)
+
 
 @dataclass
 class Annotation:
@@ -20,7 +23,7 @@ class Annotation:
     author_kind: str  # agent | person: who wrote it, which is not where it belongs (plan 0.13 §5)
     author_id: str
     created: str
-    target_key: str  # a key, a cited work's identifier (on one of its pages or the whole work), or a project PDF's path
+    target_key: str  # a key, a work's reference (on one of its PDF's pages or the whole work), or a project PDF's path
     target_hash: str
     selector: Selector | None  # the text triple: what was quoted, and the words either side
     type: str | None  # the id of its type in the quilt's types, or None: a type is only a label
@@ -30,7 +33,7 @@ class Annotation:
     own_look: dict[str, Any] = field(default_factory=dict)
     #: Its whole look when it was written or last restyled: how it is drawn once its type is gone.
     drawn: dict[str, Any] = field(default_factory=dict)
-    anchor: Anchor | None = None  # the page anchor of a note on a cited work's page; None on a key (plan 0.13 item 2)
+    anchor: Anchor | None = None  # the page anchor of a note on a work's page; None on a key (plan 0.13 item 2)
     in_reply_to: str | None = None
     #: The document this is read in, for a claim about a node that holds only there (plan 0.15, decision 9); None means the node wherever it appears.
     in_doc: str | None = None
@@ -49,6 +52,10 @@ class Annotation:
     context: dict[str, Any] | None = None
     #: Carried by a kept change onto its new words (`records/carry.py`): `{quote, change}`, the words it was on and the change that replaced them.
     earlier: dict[str, Any] | None = None
+    #: What it is for, from `PURPOSES`; None for a note.
+    purpose: str | None = None
+    #: On a mark to digest, the stub it locates, by its node's id; None on any other annotation and on a mark that names none.
+    node: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -68,7 +75,7 @@ class Annotation:
             "resolved_why": self.resolved_why,
             **{
                 k: getattr(self, k)
-                for k in ("page", "rects", "strokes", "mark", "artifact", "origin", "gap", "earlier")
+                for k in ("page", "rects", "strokes", "mark", "artifact", "origin", "gap", "earlier", "purpose", "node")
                 if getattr(self, k) is not None
             },
         }
@@ -102,6 +109,8 @@ class Annotation:
             origin=d.get("origin") if isinstance(d.get("origin"), dict) else None,
             gap=d.get("gap") if isinstance(d.get("gap"), list) else None,
             earlier=d.get("earlier") if isinstance(d.get("earlier"), dict) else None,
+            purpose=d.get("purpose") if d.get("purpose") in PURPOSES else None,
+            node=d.get("node") if d.get("purpose") in PURPOSES and isinstance(d.get("node"), str) else None,
         )
 
 

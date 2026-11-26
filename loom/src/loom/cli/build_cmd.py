@@ -39,7 +39,7 @@ def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json:
 
     A whole build then removes what loom keeps for no purpose any more: from .loom/cache/ what this build does not name and nothing has written in the last hour, an agent's scratch fourteen days after its session last wrote, and a saved preview fourteen days after it was written; a build of --keys removes nothing.
 
-    A document is read from the HTML its compile made, and shows as its source until one has. Text no compile makes, a node no document reaches, a digest, a landmark, a comparison, is made by TeX as snippets. Rendering is cached per block by its inputs, which include loom's own version and, in a checkout, loom's code; --force renders everything regardless, and makes again every text TeX refused before. Only errors are listed; `loom lint` lists every diagnostic.
+    A document is read from the HTML its compile made, and shows as its source until one has. Text no compile makes, a node no document reaches, a landmark, a comparison, is made by TeX as snippets. Rendering is cached per block by its inputs, which include loom's own version and, in a checkout, loom's code; --force renders everything regardless, and makes again every text TeX refused before. Only errors are listed; `loom lint` lists every diagnostic.
     """
     quilt = open_quilt(quilt_path)
     with Progress("scanning") as progress:
@@ -58,7 +58,7 @@ def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json:
         done + (f"; {tally(errors, report.result)}" if bad else ""),
         ok=not bad,
         exit=EXIT_CONTENT if bad else 0,
-        groups=diagnostic_groups(errors, report.result, cited_next="loom lint --json"),
+        groups=diagnostic_groups(errors, report.result),
         data={
             "rendered": len(report.rendered),
             "skipped": len(report.skipped),

@@ -96,7 +96,7 @@ def write_acceptance(
 ) -> tuple[list[AcceptRow], int, int]:
     """Record acceptance rows and the snapshots they name; returns (rows, snapshots written, snapshots already present).
 
-    The one writer of the ledger, shared by `loom accept` and `loom library verify`. They make different claims -- the author's own mathematics against a faithful copy of someone else's -- but the record is the same shape, and a second implementation would drift in exactly the way that makes `stale` stop meaning anything. With `dry_run` the rows are computed and nothing is written.
+    The one writer of the ledger, which `loom accept` calls. With `dry_run` the rows are computed and nothing is written.
     """
     root = result.quilt.root
     rows: list[AcceptRow] = []
@@ -293,20 +293,9 @@ def accept(
             raise EnvError(
                 f"{key} is an agent document's node, which is never accepted; acceptance belongs to the node it becomes, {n.derived_of}"
             )
-        # Two claims, two commands. `loom accept` says "I have proved this, or I am satisfied it holds" and is about
-        # the author's own mathematics; a digest node's is "this copy is faithful to the paper it came from", which
-        # settles nothing mathematical and is not the author's to settle. DR-172 relabelled the output where the
-        # command needed splitting, and this finishes it (plan 0.12 §5.6).
+        # `loom accept` says "I have proved this, or I am satisfied it holds", about the author's own mathematics; a block quoting someone else's result settles nothing mathematical and is not the author's to settle
         if n.external:
-            if n.digest:
-                raise EnvError(
-                    f"{key} is a digest node: someone else's theorem, which is not yours to accept.\n"
-                    f"To record that the copy is faithful: loom library verify {key}"
-                )
-            raise EnvError(
-                f"{key} quotes someone else's result, which is not yours to accept. "
-                "To verify its transcription, represent it as a digest result and use loom library verify there."
-            )
+            raise EnvError(f"{key} quotes someone else's result (basis cited-result), which is not yours to accept.")
         targets.append(key)
         contexts[key] = _acceptance_master(result, key)
         if proofs:
@@ -446,11 +435,13 @@ def _one_comment(
     look: dict[str, Any] | None = None,
     strokes: list[list[float]] | None = None,
     mark: str | None = None,
+    purpose: str | None = None,
+    node: str | None = None,
     dry_run: bool = False,
 ) -> str:
     """Append one review event to the log and describe it; the only writer of review records.
 
-    The target is a key; a cited work, whole or with `page` one of its pages; or a project PDF with its `page`. Text or a box on a cited work's page is anchored through the work's store (plan 0.13 item 2); anything drawn with a `mark`, or along `strokes`, and anything on a project PDF, records its page, place and the PDF's hash (`records/marks.py`). Everything else about the event is as it is for a key.
+    The target is a key; a work, whole or with `page` one of its PDF's pages; or a project PDF with its `page`. Text or a box on a work's page is anchored through the page text loom derives from the PDF its reference holds (plan 0.13 item 2); anything drawn with a `mark`, or along `strokes`, and anything on a project PDF, records its page, place and the PDF's hash (`records/marks.py`). Everything else about the event is as it is for a key.
     """
     root = result.quilt.root
     records = Records(root, result.quilt.history_dir).records
@@ -463,6 +454,8 @@ def _one_comment(
 
         refuse_bad_links(result, root, message)
 
+    if (purpose is not None or node is not None) and (reply or resolve):
+        raise EnvError("a purpose is given a new annotation, not a reply or a resolution")
     if reply or resolve:
         refuse_lost(
             "reply" if reply else "resolve",
@@ -492,6 +485,8 @@ def _one_comment(
         if found is None:
             raise NotFoundError("annotation", f"no annotation {reply}")
         _, parent = found
+        if parent.purpose is not None:
+            raise EnvError(f"{reply} is a mark to digest, a request rather than a note, and takes no reply")
         # on the block the note it answers is on now, which its key may no longer name; on none, as the note is
         placed = _placed(result, parent)
         ann_id = _append_new(
@@ -528,12 +523,16 @@ def _one_comment(
 
     pdf_path = project_pdf(result, target)
     work = None if pdf_path else _work_target(result, target)
+    if purpose is not None:
+        styled["purpose"] = _purpose(purpose, akind, work is not None and page is not None)
+    if node is not None:
+        styled["node"] = _located(node, purpose)
     if pdf_path is not None or (work is not None and (mark or strokes)):
         return _on_pdf_page(
             result, base, records, date, target, message, quote, styled, page, rects, strokes, mark, dry_run=dry_run
         )
     if mark or strokes:
-        raise EnvError("--mark and --stroke draw on a page of a PDF: a project PDF's path, or a cited work's citekey")
+        raise EnvError("--mark and --stroke draw on a page of a PDF: a project PDF's path, or a work's reference")
     if work is not None and page is None and not quote and not rects:
         return _on_work(result, base, records, date, work, message, styled, dry_run=dry_run)
     if work is not None or page is not None or rects:
@@ -575,6 +574,33 @@ def _one_comment(
         dry_run,
     )
     return f"{ann_id}  {key}  {type_id or 'untyped'}  ({aid})"
+
+
+def _located(node: str, purpose: str | None) -> str:
+    """The stub a mark to digest locates, by its node's id: given only with the purpose `to-digest`, where the person who found the result on the page says which it is."""
+    from loom.evidence.subjects import is_node
+
+    if purpose != "to-digest":
+        raise EnvError("only a mark to digest names the stub it locates; give the purpose to-digest")
+    if not is_node(node):
+        raise EnvError(f"{node!r} is not a node's id")
+    return node
+
+
+def _purpose(purpose: str, akind: str, on_a_works_page: bool) -> str:
+    """A new annotation's purpose (`records.annotations.PURPOSES`), refused unless loom knows it, the person gives it, and it is on a page of a cited work.
+
+    A mark to digest is the person's request that a result on that page be read, which an agent takes up as a task; an agent asks for nothing by marking.
+    """
+    from loom.records.annotations import PURPOSES
+
+    if purpose not in PURPOSES:
+        raise EnvError(f"{purpose!r} is not a purpose of an annotation; loom knows {', '.join(PURPOSES)}")
+    if akind == "agent":
+        raise EnvError("a mark to digest is the person's request; an agent asks with `loom ask`")
+    if not on_a_works_page:
+        raise EnvError("a mark to digest is on a page of a cited work: give the work and its page")
+    return purpose
 
 
 def _placed(result: ScanResult, ann: Any) -> str | None:
@@ -627,28 +653,19 @@ def _type_and_look(
     return (t.id if t else None), look, drawn_look(t, look, types.plain)
 
 
-def _work_target(result: ScanResult, target: str) -> tuple[str, Any] | None:
-    """(citekey, WorkId) when `target` names a cited work -- by citekey, or by an identifier any entry states -- else None.
+def _work_target(result: ScanResult, target: str) -> str | None:
+    """The reference `target` names -- by its id, or by the key its entry has -- else None.
 
-    A key wins over a work: the assembly is asked first, so a citekey that happens to equal a label is still the label. The identifier form is what an agent reading `cited:` links has, and what the record stores.
+    A key wins over a work: the assembly is asked first, so a citekey that happens to equal a label is still the label. The reference's id is what the record stores.
     """
-    from loom.refs.identity import identify, parse, primary
+    from loom.library.references import named
 
     try:
         resolve_key(result, target)
         return None
     except EnvError:
         pass
-    if target in result.bib:
-        wid = primary(result.bib[target])
-        return (target, wid) if wid is not None else None
-    wid = parse(target)
-    if wid is None:
-        return None
-    for ck, entry in result.bib.items():
-        if any((w.scheme, w.value) == (wid.scheme, wid.value) for w in identify(entry)):
-            return ck, primary(entry) or wid
-    return None
+    return named(result, target)
 
 
 def _not_a_work(result: ScanResult, target: str) -> EnvError:
@@ -657,8 +674,8 @@ def _not_a_work(result: ScanResult, target: str) -> EnvError:
         resolve_key(result, target)
     except EnvError:
         return EnvError(
-            f"--page is for a page of a PDF, and {target} names none: give a citekey from the bibliography, "
-            "an identifier one of its entries states (doi:…, arXiv:…), or a project PDF's path"
+            f"--page is for a page of a PDF, and {target} names none: give a work's reference (its id, or the key its entry has), "
+            "or a project PDF's path"
         )
     return EnvError(f"--page is for a page of a PDF, and {target} is a key in this quilt")
 
@@ -669,7 +686,7 @@ def _note_on_page(
     records: list[Any],
     date: str,
     target: str,
-    work: tuple[str, Any] | None,
+    work: str | None,
     message: str | None,
     quote: str | None,
     styled: dict[str, Any],
@@ -678,32 +695,32 @@ def _note_on_page(
     *,
     dry_run: bool = False,
 ) -> str:
-    """An annotation on a page of a cited work, anchored by its words or a box: the same event as any annotation, with the work as its target and a page anchor."""
+    """An annotation on a page of a work's PDF, anchored by its words or a box: the same event as any annotation, with the work's reference as its target and a page anchor."""
+    from loom.library.store import read
+    from loom.records.marks import reference_pdf
     from loom.refs.anchoring import anchor_on_page
-    from loom.refs.fetch import work_dir
-    from loom.refs.pages import read_map
+    from loom.refs.pages import mapped
     from loom.render.serve import open_url
 
     if work is None:
         raise _not_a_work(result, target)
-    citekey, wid = work
     if page is None:
-        raise EnvError(f"{citekey} is a cited work: say which page with --page N, and what on it with --quote or --box")
+        raise EnvError(f"{work} is a work: say which page with --page N, and what on it with --quote or --box")
     if not quote and not rects:
         raise EnvError(
             "an annotation on a page needs --quote (text on it) or --box (x0,y0,x1,y1 in points, origin top left)"
         )
-    home = work_dir(result.quilt.root, result.bib[citekey])
-    if read_map(home) is None or not (home / "paper.pdf").is_file():
+    root = result.quilt.root
+    node = read(root, work)
+    pdf = reference_pdf(root, work)
+    home = mapped(root, node.pdf) if node is not None and node.pdf and pdf is not None else None
+    if home is None or pdf is None:
         raise ContentError(
-            f"{citekey} has no readable copy on this machine; loom library update {citekey} --online fetches one, "
-            f"or loom library add FILE --for {citekey} files yours"
+            f"{work} holds no readable PDF on this machine; loom library add FILE --for {work} files yours"
         )
-    placed = anchor_on_page(home, page, quote, rects)
+    placed = anchor_on_page(home, pdf, page, quote, rects)
     if not placed.found:
-        raise ContentError(
-            f"that text is not on {citekey} p.{page}: quote from `loom library read {citekey} {page}`, or draw a --box"
-        )
+        raise ContentError(f"that text is not on {work} p.{page}: quote the page's words, or draw a --box")
     # Quads are recorded only for a box, where they are the anchor; for text they are derived at build time from
     # the offsets, as a result's are, so a record never carries two descriptions that could drift apart.
     recorded = placed.anchor.to_dict()
@@ -714,7 +731,7 @@ def _note_on_page(
         {
             **base,
             "event": "created",
-            "target": str(wid),
+            "target": work,
             "against": "sha256:" + placed.anchor.sha256,
             "anchor": {**recorded, **placed.selector.to_dict()},
             **({"gap": placed.gap} if placed.gap is not None else {}),
@@ -725,8 +742,8 @@ def _note_on_page(
         date,
         dry_run,
     )
-    said = f"{ann_id}  {citekey} p.{page} ({placed.said})  {styled['type'] or 'untyped'}  ({base['author']})"
-    where = open_url(result.quilt.root, f"library/{citekey}?page={page}&annot={ann_id}")
+    said = f"{ann_id}  {work} p.{page} ({placed.said})  {styled['type'] or 'untyped'}  ({base['author']})"
+    where = open_url(result.quilt.root, f"library/{work}?page={page}&annot={ann_id}")
     return said + (f"\nopen: {where}" if where else "")
 
 
@@ -735,22 +752,21 @@ def _on_work(
     base: dict[str, Any],
     records: list[Any],
     date: str,
-    work: tuple[str, Any],
+    work: str,
     message: str | None,
     styled: dict[str, Any],
     *,
     dry_run: bool = False,
 ) -> str:
-    """An annotation on a cited work as a whole: the work's identifier as its target, and no anchor."""
-    citekey, wid = work
+    """An annotation on a work as a whole: the work's reference as its target, and no anchor."""
     ann_id = _append_new(
         result.quilt.root,
-        {**base, "event": "created", "target": str(wid), "anchor": None, **styled, "body": message or ""},
+        {**base, "event": "created", "target": work, "anchor": None, **styled, "body": message or ""},
         records,
         date,
         dry_run,
     )
-    return f"{ann_id}  {citekey}  {styled['type'] or 'untyped'}  ({base['author']})"
+    return f"{ann_id}  {work}  {styled['type'] or 'untyped'}  ({base['author']})"
 
 
 def _on_pdf_page(
@@ -783,8 +799,7 @@ def _on_pdf_page(
     on, pdf = pdf_target(result, target)
     if pdf is None:
         raise ContentError(
-            f"{target} has no readable copy on this machine; loom library update {target} --online fetches one, "
-            f"or loom library add FILE --for {target} files yours"
+            f"{target} holds no readable PDF on this machine; loom library add FILE --for {target} files yours"
         )
     try:
         rects = clean_rects(rects)
@@ -1070,7 +1085,7 @@ def _rects(box: str) -> list[list[float]]:
     type=int,
     default=None,
     metavar="N",
-    help="Page N of a PDF: a cited work (TARGET a citekey or a work identifier) or a project PDF by its path; with --quote, --box or --stroke.",
+    help="Page N of a PDF: a work's (TARGET its reference, or the key its entry has) or a project PDF by its path; with --quote, --box or --stroke.",
 )
 @click.option(
     "--box",
@@ -1177,9 +1192,9 @@ def annotate(
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """Write an annotation on TARGET: a key, an equation's qualified key, a master path, a cited work, or a project PDF; a MESSAGE of `-` is read from stdin.
+    """Write an annotation on TARGET: a key, an equation's qualified key, a master path, a work, or a project PDF; a MESSAGE of `-` is read from stdin.
 
-    An annotation carries its author, its time and the version of the text it was written on, and belongs to no session. One on a cited work with no --page is on the whole work. One on a page of a PDF -- a cited work by citekey or identifier, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.
+    An annotation carries its author, its time and the version of the text it was written on, and belongs to no session. A work is named by its reference, or by the key its entry has; one on a work with no --page is on the whole work. One on a page of a PDF -- a work's, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.
     """
     result = open_scan(quilt_path)
     root = result.quilt.root
@@ -1361,12 +1376,14 @@ def status_payload(result: ScanResult, records: Records) -> dict[str, Any]:
     keys: dict[str, Any] = {}
     assert result.graph is not None
     live: dict[str, list[dict[str, Any]]] = {}
-    # Notes on a page of a cited work have no key, so they have no row and count toward nothing (plan 0.13 item 4):
+    # Notes on a work, or on a page of its PDF, have no key, so they have no row and count toward nothing (plan 0.13 item 4):
     # they are additions to the text and open is their resting state. They are listed on their own, by work.
     reading: list[dict[str, Any]] = []
     unplaced: list[dict[str, Any]] = []
     for res in records.resolved(result):
         a = res.annotation
+        if a.purpose is not None:
+            continue  # a mark to digest is a request, listed with the asks, not a note
         if a.anchor is not None or res.work:
             reading.append(
                 {
@@ -1460,18 +1477,6 @@ def status_payload(result: ScanResult, records: Records) -> dict[str, Any]:
             "previous_key_match": None,
             "closure": [key],
         }
-    from loom.refs.scan import other_versions
-
-    digested = set(result.assembly.digest_files.values())
-    # a key whose version is digested is answered through it, as lint counts it
-    digested |= {k for k, vs in other_versions(result.bib).items() if digested & set(vs)}
-    undigested = sorted(
-        {
-            c.citekey
-            for c in result.edges.cites
-            if c.postnote and c.citekey not in digested and c.file not in result.assembly.digest_files
-        }
-    )
     retired = sorted(k for k in records.latest if k not in result.nodes and k not in result.assembly.labels)
     from loom.history.ledger import load_history
 
@@ -1488,7 +1493,6 @@ def status_payload(result: ScanResult, records: Records) -> dict[str, Any]:
             }
             for m, rows in sorted(agent_rows.items())
         },
-        "undigested": undigested,
         "retired": retired,
         # a sort that keeps the log's order on one page, since an id says nothing of when
         "reading": sorted(reading, key=lambda r: (r["work"], r["page"] or 0)),
@@ -1522,7 +1526,7 @@ def agent_line(payload: dict[str, Any]) -> str:
 def summarise(result: ScanResult, rows: dict[str, Any]) -> dict[str, int]:
     """The counting line, over the author's own keys among the rows it is printed under.
 
-    A filtered list is summarised by what it holds, not by the quilt, and external keys are never in the arithmetic: a digest's results are permanently draft, permanently loose, and settled as a dependency, so counting them answers this line's questions about somebody else's paper (DR-172).
+    A filtered list is summarised by what it holds, not by the quilt, and external keys, the blocks quoting a cited result, are never in the arithmetic: they are not the author's mathematics to accept (DR-172).
     """
     rows = {k: e for k, e in rows.items() if not result.nodes[k].external}
     acc = [e for e in rows.values() if e.get("acceptance")]
@@ -1539,34 +1543,6 @@ def summarise(result: ScanResult, rows: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def state_label(result: ScanResult, key: str, state: str) -> str:
-    """What a state is called for this key: accepting an external node claims its transcription is faithful, not that the author settled the theorem (DR-172)."""
-    n = result.nodes.get(key)
-    if n is None or not n.external or not state.startswith("accepted"):
-        return state
-    return state.replace("accepted", "transcription verified", 1)  # keeps a trailing ", stale"
-
-
-def reached_external(result: ScanResult, rows: dict[str, Any]) -> set[str]:
-    """Which external keys the corpus actually leans on: one is reached when something the author wrote depends on it, transitively.
-
-    Mirrors arras's `reached.ts`, which the review panel has used since 0.9. Digesting one paper wholesale brings in a hundred external nodes of which two or three carry weight, and reachedness is the difference; depth is the wrong test, since a cited result you lean on needs checking whoever cited it and one you never use needs nothing.
-    """
-    external = {k for k, n in result.nodes.items() if n.external}
-    out: set[str] = set()
-    for key, e in rows.items():
-        if key in external:
-            continue  # only what the corpus itself wrote reaches
-        for dep in e.get("closure", []):
-            if dep not in external:
-                continue
-            out.add(dep)
-            for inner in rows.get(dep, {}).get("closure", []):
-                if inner in external:
-                    out.add(inner)
-    return out
-
-
 def filter_keys(
     result: ScanResult,
     rows: dict[str, Any],
@@ -1580,7 +1556,6 @@ def filter_keys(
     type_id: str | None = None,
     status: str | None = None,
     detached: bool = False,
-    hide: set[str] | None = None,
 ) -> dict[str, Any]:
     """Every row filter `loom status` offers, in one place, so the text form and `--json` answer the same question.
 
@@ -1588,8 +1563,6 @@ def filter_keys(
     """
     out: dict[str, Any] = {}
     for key, e in rows.items():
-        if hide and key in hide:
-            continue
         n = result.nodes[key]
         anns = e["reviews"]["annotations"]
         if stale and not (e.get("acceptance") and not e["acceptance"]["fresh"]):
@@ -1619,13 +1592,6 @@ def filter_keys(
 @click.option("--draft", "f_draft", is_flag=True, help="Keys never accepted.")
 @click.option("--incomplete", "f_incomplete", is_flag=True, help="Keys marked \\incomplete.")
 @click.option("--loose", "f_loose", is_flag=True, help="Keys no live document reaches.")
-@click.option(
-    "--unmatched-cites",
-    "f_unmatched",
-    is_flag=True,
-    help="Located citations of a digested work that match no digest node.",
-)
-@click.option("--undigested", "f_undigested", is_flag=True, help="Works cited with a locator and not digested.")
 @click.option("--retired", "f_retired", is_flag=True, help="Keys accepted once and defined by no document now.")
 @click.option("--master", "f_master", default=None, metavar="DOC", help="Keys this document reaches.")
 @click.option(
@@ -1647,16 +1613,10 @@ def filter_keys(
 )
 @click.option("--detached", "f_detached", is_flag=True, help="Keys whose annotations no longer find their quoted text.")
 @click.option(
-    "--include-digests",
-    "f_digests",
-    is_flag=True,
-    help="Also list the digest keys nothing in this quilt depends on; they are left out by default.",
-)
-@click.option(
     "--reading",
     "f_reading",
     is_flag=True,
-    help="List the annotations on cited works, by work; they are in no row and count toward nothing otherwise.",
+    help="List the annotations on works, by work; they are in no row and count toward nothing otherwise.",
 )
 @click.option("--explain", default=None, metavar="KEY", help="Why KEY is in its state, with the diff of what moved.")
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
@@ -1667,8 +1627,6 @@ def status(
     f_draft: bool,
     f_incomplete: bool,
     f_loose: bool,
-    f_unmatched: bool,
-    f_undigested: bool,
     f_retired: bool,
     f_master: str | None,
     f_in_order: bool,
@@ -1676,7 +1634,6 @@ def status(
     f_type: str | None,
     f_status: str | None,
     f_detached: bool,
-    f_digests: bool,
     f_reading: bool,
     explain: str | None,
     as_json: bool,
@@ -1685,7 +1642,7 @@ def status(
 ) -> None:
     """List every key with its computed state, cause if stale, and review facts; it exits 0 whatever it finds, and 2 only on an argument it refuses.
 
-    Annotations on cited works are not on keys and appear in no row; `--reading` lists them by work, and `--json` always carries them under `reading`. While `loom serve` runs, a document it last compiled with errors or into no PDF is listed too, and `--json` carries how each of its compiles stands under `compiles`.
+    Annotations on works are not on keys and appear in no row; `--reading` lists them by work, and `--json` always carries them under `reading`. While `loom serve` runs, a document it last compiled with errors or into no PDF is listed too, and `--json` carries how each of its compiles stands under `compiles`.
     """
     if f_in_order and f_master is None:
         raise EnvError("--in-order lists one document's keys; name it with --master DOC")
@@ -1698,20 +1655,9 @@ def status(
     payload = status_payload(result, records)
     # whose states these are, as the manifest says it: a look and an acceptance are kept under the name
     payload["reviewer"] = {"name": records.reviewer, "source": records.reviewer_source}
-    # A digest holds every result of a cited paper; the handful the author's own arguments reach are work, and the
-    # rest are the literature. Reachedness is the line arras's review panel has drawn since 0.9 (DR-172).
-    reached = reached_external(result, payload["keys"])
-    external = {k for k in payload["keys"] if result.nodes[k].external}
-    hidden = set() if f_digests else external - reached
-    payload["digests"] = {
-        "shown": len(external - hidden),
-        "reached": len(external & reached),
-        "not_counted": len(hidden),
-    }
     payload["keys"] = filter_keys(
         result,
         payload["keys"],
-        hide=hidden,
         stale=f_stale,
         draft=f_draft,
         incomplete=f_incomplete,
@@ -1735,7 +1681,6 @@ def status(
         )
         a["summary"] = agent_summary(a["keys"])
     payload["summary"] = summarise(result, payload["keys"])
-    payload["unmatched"] = unmatched_cites(result)
     from loom.render.compiles import served
 
     compiles = served(result.quilt.root)
@@ -1749,13 +1694,6 @@ def status(
         out = _reading_report(payload)
     elif explain:
         out = _explain_report(result, records, payload, explain)
-    elif f_undigested:
-        out = Report(
-            f"{counted(len(payload['undigested']), 'work')} cited with a locator and not digested"
-            if payload["undigested"]
-            else "every work cited with a locator is digested",
-            groups=[Group("", [Item("", key=ck) for ck in payload["undigested"]], limit=None)],
-        )
     elif f_retired:
         out = Report(
             f"{counted(len(payload['retired']), 'retired key')}: accepted once, and defined by no document now"
@@ -1774,18 +1712,8 @@ def status(
                 )
             ],
         )
-    elif f_unmatched:
-        rows: list[tuple[tuple[str, ...], str]] = [
-            ((u["cite"],), f"{u['file']}:{u['line']}") for u in payload["unmatched"]
-        ]
-        out = Report(
-            f"{counted(len(rows), 'citation')} with a locator no digest node matches"
-            if rows
-            else "every located citation of a digested work matches a node",
-            groups=[Group("", keyed(rows), limit=None)],
-        )
     else:
-        out = _status_report(result, payload, filtered, f_digests, hidden)
+        out = _status_report(result, payload, filtered)
     if records.reviewer_source == FROM_GIT:
         out.notes.append(
             f"the states are {records.reviewer}'s, the name git gives, under which a look and an acceptance are kept; "
@@ -1868,37 +1796,11 @@ def _check_filters(
     return type_id, master, tag
 
 
-def unmatched_cites(result: ScanResult) -> list[dict[str, Any]]:
-    """Each `\\cite[locator]{KEY}` of a digested work whose locator matches no node of its digest, for `--unmatched-cites`."""
-    digested = set(result.assembly.digest_files.values())
-    out = []
-    for cite in result.edges.cites:
-        if (
-            cite.postnote
-            and cite.citekey in digested
-            and not any(
-                e.via == "postnote" and e.src == cite.src and e.label == f"{cite.citekey}|{cite.postnote}"
-                for e in result.edges.edges
-            )
-        ):
-            out.append(
-                {
-                    "file": cite.file,
-                    "line": cite.line,
-                    "citekey": cite.citekey,
-                    "postnote": cite.postnote,
-                    "cite": f"\\cite[{cite.postnote}]{{{cite.citekey}}}",
-                }
-            )
-    return out
-
-
 #: The order status groups the author's rows in: what needs action first.
 STATE_GROUPS = (
     ("conflicted", "conflicted"),
     ("stale", "stale"),
     ("incomplete", "incomplete"),
-    ("proposed", "proposed"),
     ("draft", "draft"),
     ("accepted", "accepted"),
     ("", "sections with findings"),
@@ -1965,12 +1867,6 @@ def _numbers(result: ScanResult) -> dict[str, Any]:
     return read_numbers(result.quilt.root, master) if master else {}
 
 
-def _work_of(result: ScanResult, key: str) -> str:
-    """The citekey of the work an external key was read from, or its file when no digest names one."""
-    n = result.nodes[key]
-    return result.assembly.digest_files.get(n.file) or n.file
-
-
 def _compile_problems(compiles: dict[str, Any]) -> list[Group]:
     """The documents `loom serve` last compiled with errors or into no PDF, each with the line TeX stopped at and the command that shows the whole log."""
     from loom.paths import document_name
@@ -1992,13 +1888,9 @@ def _compile_problems(compiles: dict[str, Any]) -> list[Group]:
     return [Group("did not compile cleanly", items, limit=None, problem=True)] if items else []
 
 
-def _status_report(
-    result: ScanResult, payload: dict[str, Any], filtered: bool, include_digests: bool, hidden: set[str]
-) -> Report:
-    """`loom status`'s rows as a report: the author's keys grouped by state, what needs action first, then the cited works' keys summarised by work."""
-    rows = payload["keys"]
-    own = {k: e for k, e in rows.items() if not result.nodes[k].external}
-    cited = {k: e for k, e in rows.items() if result.nodes[k].external}
+def _status_report(result: ScanResult, payload: dict[str, Any], filtered: bool) -> Report:
+    """`loom status`'s rows as a report: the keys grouped by state, what needs action first."""
+    own = payload["keys"]
     by_group: dict[str, list[tuple[tuple[str, ...], str]]] = {g: [] for g, _ in STATE_GROUPS}
     fixes: dict[str, list[str]] = {}
     numbers = _numbers(result)
@@ -2046,46 +1938,6 @@ def _status_report(
             )
         )
     s = payload["summary"]
-    d = payload["digests"]
-    if cited or (d["not_counted"] and not filtered):
-        shown: dict[str, list[str]] = {}
-        unshown: dict[str, int] = {}
-        for k in cited:
-            e = cited[k]
-            mark = ", stale" if e.get("acceptance") and not e["acceptance"]["fresh"] else ""
-            shown.setdefault(_work_of(result, k), []).append(state_label(result, k, e["state"]) + mark)
-        for k in () if filtered else hidden:
-            unshown[_work_of(result, k)] = unshown.get(_work_of(result, k), 0) + 1
-        items = []
-        # a work with nothing you depend on is the same sentence every time: one line names them all (T2)
-        idle = sorted((w for w in unshown if w not in shown), key=natural)
-        for work in sorted(shown, key=natural):
-            states: dict[str, int] = {}
-            for st in shown.get(work, []):
-                states[st] = states.get(st, 0) + 1
-            what = "shown" if include_digests else "you depend on"
-            said = (
-                [
-                    f"{counted(len(shown[work]), 'result')} {what} ("
-                    + ", ".join(f"{n} {st}" for st, n in sorted(states.items()))
-                    + ")"
-                ]
-                if work in shown
-                else []
-            )
-            if unshown.get(work):
-                said.append(f"{unshown[work]} not counted")
-            items.append(Item(", ".join(said), key=work))
-        if idle:
-            items.append(
-                Item(
-                    f"{counted(len(idle), 'work')} with {counted(sum(unshown[w] for w in idle), 'result')}, none you depend on, not counted",
-                    key=", ".join(idle),
-                )
-            )
-        groups.append(
-            Group("in cited works", items, limit=None, next="loom status --include-digests" if unshown else None)
-        )
     parts = []
     for g, heading in STATE_GROUPS:
         n = len(by_group[g])
@@ -2116,7 +1968,7 @@ def _status_report(
 
 
 def _reading_report(payload: dict[str, Any]) -> Report:
-    """`loom status --reading`: the annotations on cited works, a group per work."""
+    """`loom status --reading`: the annotations on works, a group per work."""
     by_work: dict[str, list[dict[str, Any]]] = {}
     for r in payload["reading"]:
         by_work.setdefault(r["work"] or r["target"], []).append(r)
@@ -2135,9 +1987,7 @@ def _reading_report(payload: dict[str, Any]) -> Report:
         groups.append(Group(work, keyed(rows), limit=None))
     n = len(payload["reading"])
     return Report(
-        f"{counted(n, 'annotation')} on {counted(len(by_work), 'cited work')}"
-        if n
-        else "no annotations on any cited work",
+        f"{counted(n, 'annotation')} on {counted(len(by_work), 'work')}" if n else "no annotations on any work",
         groups=groups,
     )
 
@@ -2184,7 +2034,7 @@ def _explain_report(result: ScanResult, records: Records, payload: dict[str, Any
             lines += ["    " + line for line in diff.splitlines()]
     taxon = n.taxon or n.kind
     return Report(
-        f"{key} ({taxon}): {state_label(result, key, ks.label) or 'a section'}",
+        f"{key} ({taxon}): {ks.label or 'a section'}",
         ok=not ks.causes,
         lines=lines,
     )

@@ -1,0 +1,8 @@
++++
+schema = 1
+id = "tq-00A1-macros"
+taxon = "macros"
++++
+\usepackage{amssymb}
+\newcommand{\Wid}{\mathcal{W}}
+\DeclareMathOperator{\diam}{diam}

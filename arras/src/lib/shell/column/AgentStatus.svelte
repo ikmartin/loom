@@ -24,8 +24,9 @@
 		gap: 4px;
 		width: 100%;
 	}
+	/* the strip has no padding at its sides or foot, so the folded footer takes none of the margins that pull it to the open column's edges: it stands inside the strip, its dot whole in the window */
 	.rail-foot :global(.footer) {
-		margin: 0 -4px calc(-1 * var(--gap));
+		margin: 0;
 		align-self: stretch;
 	}
 	.write-target {

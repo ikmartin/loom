@@ -2,9 +2,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
-	import { canonUrl, keyUrl, masterUrl, threadUrl, workUrl } from '$lib/nav';
-	import { shelf } from '$lib/library';
+	import { canonUrl, keyUrl, masterUrl, threadUrl } from '$lib/nav';
 	import { landmarkName } from '$lib/workspace/history';
+	import { frame } from '$lib/words/frame';
+	import { upgrade } from '$lib/shell/upgrade.svelte';
 
 	let el: HTMLElement | undefined = $state();
 
@@ -18,15 +19,7 @@
 	const data = $derived.by((): Item[] => {
 		const m = store.manifest;
 		if (!m) return [];
-		// the cited works too, by key and title, each opening its paper: the palette is the one search, and a work is a thing a reader opens, once however many documents it has
-		const works = shelf(m).map((r) => ({
-			id: `work:${r.citekey}`,
-			title: `${r.citekey} · ${r.title}`,
-			section: 'work',
-			keywords: r.text,
-			handler: () => void goto(workUrl(r.opens))
-		}));
-		const found = m.search.map((s) => {
+		return m.search.map((s) => {
 			const url =
 				s.kind === 'master'
 					? masterUrl(s.key)
@@ -40,12 +33,12 @@
 			return {
 				id: s.key,
 				title: landmark ? landmarkName(m, landmark) : `${s.key} ${s.title && s.title !== s.key ? '· ' + s.title : ''}`,
-				section: s.taxon || s.kind || 'node',
+				// the palette is a person naming where to go, as the four views' names are; each result says the view it opens in, all of them Docs' pages today
+				section: `${frame.views.docs.name} · ${s.taxon || s.kind || 'node'}`,
 				keywords: [...(s.aliases ?? []), ...(s.tags ?? []), s.excerpt ?? ''].join(' '),
 				handler: () => void goto(url)
 			};
 		});
-		return [...found, ...works];
 	});
 
 	$effect(() => {
@@ -53,4 +46,5 @@
 	});
 </script>
 
-<ninja-keys bind:this={el} placeholder="Search ids, titles, aliases, tags… (⌘K)"></ninja-keys>
+<!-- drawn once the publisher has said the quilt is in this loom's layout and there is a manifest to search: the frame drawn before a quilt an earlier loom made is known is taken away before ninja-keys' header gives its field the keyboard, a frame after it is first drawn -->
+{#if upgrade.judged && store.manifest}<ninja-keys bind:this={el} placeholder="Search ids, titles, aliases, tags… (⌘K)"></ninja-keys>{/if}

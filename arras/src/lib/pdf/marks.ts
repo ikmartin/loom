@@ -76,17 +76,17 @@ export function textOf(html: string): string {
  * Parameters
  * ----------
  * a : Annotation
- * rects : number[][], optional
- *     Where it stands when the record does not say: a cited work's sidecar places an annotation anchored by its words or a box.
+ * stands : {page, rects}, optional
+ *     Where the publisher found it (`library-places`), for one whose record holds no `rects`: a note anchored by its words alone.
  *
  * Returns
  * -------
  * PageMark | null
  *     A drawing's kind is its tool, one on words its look's style, and one a box anchors on a work's page a box.
  */
-export function markOf(a: Annotation, rects?: number[][] | null): PageMark | null {
-	const page = a.target.page;
-	const at = a.rects?.length ? a.rects : rects;
+export function markOf(a: Annotation, stands?: { page: number; rects: number[][] } | null): PageMark | null {
+	const page = a.rects?.length ? a.target.page : (stands?.page ?? a.target.page);
+	const at = a.rects?.length ? a.rects : stands?.rects;
 	if (!page || !at?.length || a.detached || a.in_reply_to) return null;
 	const kind = (a.mark ?? (a.basis === 'box' ? 'box' : styleOf(a.look))) as MarkKind;
 	return {

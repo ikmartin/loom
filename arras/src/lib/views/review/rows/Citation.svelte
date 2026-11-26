@@ -1,0 +1,47 @@
+<script lang="ts">
+	// A citation that names no result, open: the draft's sentence with the citation marked, what to add with an example in the person's own key, `ask an agent which result` (its answer comes back as a proposed edit) and `only a mention`, which is remembered.
+	import { said } from '$lib/library/said';
+	import * as api from '$lib/library/api';
+	import { library as gen } from '$lib/library/gen.svelte';
+	import { Read } from '$lib/library/read.svelte';
+	import type { CitedRow, ReviewBody, RowBody } from '$lib/library/types';
+	import { message } from '$lib/shell/message.svelte';
+	import { review as words } from '$lib/words/review';
+	import Statement from '$lib/views/Statement.svelte';
+	import SeeItLink from '../SeeItLink.svelte';
+
+	let { row }: { row: Extract<CitedRow, { citation: string }> } = $props();
+	const body = new Read<ReviewBody & { body: RowBody & { cite?: { where: string; fragment: string; nth: number } } }>();
+	let busy = $state(false);
+
+	$effect(() => {
+		const id = row.row;
+		void gen.gen;
+		void body.load(id, (s) => api.reviewRow(id, s));
+	});
+
+	async function which(): Promise<void> {
+		busy = true;
+		const done = await api.ask('which-result', { key: row.key, ref: row.ref }, '', row.docs);
+		busy = false;
+		message.post(done.ok ? words.citation.askedWhich : said(done.error));
+	}
+	async function mention(): Promise<void> {
+		busy = true;
+		const done = await api.mention(row.citation);
+		busy = false;
+		message.post(done.ok ? words.citation.mentioned : said(done.error));
+	}
+</script>
+
+{#if body.value?.body.cite}
+	<div class="crop-cap">{body.value.body.cite.where}</div>
+	<div class="citebox"><Statement fragment={body.value.body.cite.fragment} hot={body.value.body.cite.nth} /></div>
+{/if}
+<p class="ask">{words.citation.explain(row.short, row.doc)} <code>{words.citation.example(row.citekey)}</code>.</p>
+<div class="answers">
+	<button type="button" class="btn" disabled={busy} onclick={which}>{words.citation.which}</button>
+	<button type="button" class="btn" disabled={busy} onclick={mention}>{words.citation.mention}</button>
+	<SeeItLink doc={row.doc} key={row.key} name={row.where} />
+</div>
+<p class="note after">{words.citation.comesBack(row.doc)}</p>

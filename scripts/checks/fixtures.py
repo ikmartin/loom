@@ -6,7 +6,7 @@ Usage:
 
 Compared byte for byte, over the files git would commit (tracked, or untracked and not ignored):
 
-- `docs/specs/fixture/` and its vendored copies `loom/tests/fixture/` and `arras/tests/fixture/`;
+- `docs/specs/fixture/` and its vendored copies `loom/tests/fixture/` and `arras/tests/fixture/`, less `views/`: the samples of the views' reads and writes, which `scripts/regen views` and `views-library` write into the source alone and the viewer's tests read from there, so no copy carries them;
 - `demos/demo/`, `demos/synthetic/` and `demos/showcase/` and the quilts under `loom/tests/quilts/` that `demos/build.py` copies them from, less the `EXPECTED-LINT.txt` it drops from demo and showcase, and less `.loom/records/review-observations.json`, which loom rewrites whenever it scans a quilt, so serving a demo would change it under the check.
 
 Exit 0 when every copy agrees, 1 otherwise.
@@ -23,11 +23,13 @@ REFRESH = "sh docs/specs/tools/refresh-fixture.sh"
 DEMOS = "python demos/build.py --skip-papers"
 #: runtime state loom rewrites on every scan; a served demo changes it without anyone editing anything
 STATE = (".loom/records/review-observations.json",)
+#: the views' samples, generated into the fixture's source alone (`scripts/regen views`, `views-library`) and read from there by the viewer's tests; no copy carries them
+VIEWS = ("views/",)
 
-# (source, copy, files the copy leaves out, the command that makes the copy again)
+# (source, copy, files the copy leaves out (a name ending in `/` a folder), the command that makes the copy again)
 PAIRS = [
-    ("docs/specs/fixture", "loom/tests/fixture", (), REFRESH),
-    ("docs/specs/fixture", "arras/tests/fixture", (), REFRESH),
+    ("docs/specs/fixture", "loom/tests/fixture", VIEWS, REFRESH),
+    ("docs/specs/fixture", "arras/tests/fixture", VIEWS, REFRESH),
     ("loom/tests/quilts/demo", "demos/demo", ("EXPECTED-LINT.txt", *STATE), DEMOS),
     ("loom/tests/quilts/synthetic", "demos/synthetic", STATE, DEMOS),
     ("loom/tests/quilts/showcase", "demos/showcase", ("EXPECTED-LINT.txt", *STATE), DEMOS),
@@ -51,9 +53,14 @@ def committable(rel: str) -> set[str]:
         return {p.relative_to(base).as_posix() for p in base.rglob("*") if p.is_file()}
 
 
+def kept(names: set[str], left_out: tuple[str, ...]) -> set[str]:
+    """`names` less those `left_out` names, a name ending in `/` leaving out the folder."""
+    return {n for n in names if n not in left_out and not any(n.startswith(o) for o in left_out if o.endswith("/"))}
+
+
 def compare(source: str, copy: str, left_out: tuple[str, ...]) -> list[str]:
-    want = committable(source) - set(left_out)
-    have = committable(copy) - set(left_out)
+    want = kept(committable(source), left_out)
+    have = kept(committable(copy), left_out)
     out = [f"{copy}/{n} is missing (it is in {source}/)" for n in sorted(want - have)]
     out += [f"{copy}/{n} is extra (it is not in {source}/)" for n in sorted(have - want)]
     out += [

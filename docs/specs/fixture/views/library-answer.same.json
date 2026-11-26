@@ -1,0 +1,29 @@
+{
+ "answer": {
+  "gen": 1789808400005,
+  "ok": true,
+  "result": "2504.01234v3.pdf: added",
+  "row": {
+   "act": "x-sh3qzg",
+   "authors": [],
+   "found_by": "entry",
+   "id": "83a3d85c2fc5959a792f0e4e4a499158ba90a81d5742f16cfadbe1ff85cd061b",
+   "identifier": "arxiv:2504.01234v2",
+   "item": 0,
+   "name": "2504.01234v3.pdf",
+   "ref": "sh-0405-ref",
+   "short": "arden-cycle-spaces-v2.pdf",
+   "state": "added",
+   "tex": true,
+   "title": "arden-cycle-spaces-v2.pdf",
+   "unconfirmed": false,
+   "under": true,
+   "year": ""
+  }
+ },
+ "endpoint": "library-answer",
+ "request": {
+  "question": "q-2f1ndp",
+  "same": "sh-0405-ref"
+ }
+}

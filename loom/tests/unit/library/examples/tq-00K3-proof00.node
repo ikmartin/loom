@@ -1,0 +1,9 @@
++++
+schema = 1
+id = "tq-00K3-proof00"
+taxon = "proof"
+source = "tq-00A1-ref"
+pages = "12-13"
+uses = ["tq-00A4"]
++++
+A widget is compact (Definition~\ref{tq-00A4}), so finitely many unit balls cover it, which bounds its diameter. The second claim is the triangle inequality.

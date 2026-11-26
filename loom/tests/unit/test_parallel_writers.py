@@ -118,7 +118,7 @@ def test_a_new_node_never_overwrites_a_file_that_arrived_after_the_scan(
     from tests.helpers import refused
 
     q = opened(demo(tmp_path))  # agents may write beside the demo's paper here
-    arrived = q / "drafting" / "nodes" / "dm-0012.tex"
+    arrived = q / "drafting" / "nodes" / f"{ok('id', '--next', cwd=q).stdout.strip()}.tex"
     real = Path.exists
 
     def appears(self: Path) -> bool:
@@ -172,21 +172,6 @@ def test_annotating_with_nothing_active_opens_no_session(tmp_path: Path) -> None
     wrote = [e for e in events(q / ANNOTATION_LOG) if "race " in str(e.get("body"))]
     assert len(wrote) == N and not [e for e in wrote if "session" in e]
     assert events(q / INDEX) == before
-
-
-def test_parallel_links_each_get_an_id_and_none_is_lost(tmp_path: Path) -> None:
-    """A link is the one record rewritten whole, so a writer that read before another wrote would drop that link outright."""
-    from loom.refs.links import read_links
-
-    q = demo(tmp_path)
-    code = (
-        "from loom.refs.links import add_link",
-        "add_link(pathlib.Path(sys.argv[3]), sys.argv[4], 'b', 'depends-on', 'because', 'X Agent')",
-    )
-    all_ok(racing(q, ([str(q), f"a{i}"] for i in range(N)), code))
-    links = read_links(q)
-    assert sorted(x.frm for x in links) == [f"a{i}" for i in range(N)]
-    assert len({x.id for x in links}) == N, [x.id for x in links]
 
 
 def test_parallel_steps_each_draw_a_number_of_their_own(tmp_path: Path) -> None:

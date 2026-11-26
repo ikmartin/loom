@@ -1,16 +1,18 @@
-// What a reader does with the annotations on one PDF's pages: which are drawn and how, which are listed because they have no place on a page, the writes Annotate and the drawing tools make in the look in hand, a mark moved, and the copy and the taking-in. The surfaces that show a PDF (a cited work's pages, a project PDF) each make one and hand it to `MarkedDoc`; the page components stay dumb and report what the reader did.
+// What a reader does with the annotations on one PDF's pages: which are drawn and how, which are listed because they have no place on a page, the writes Annotate and the drawing tools make in the look in hand, a mark moved, and the copy and the taking-in. The surfaces that show a PDF (a work's pages, a project PDF) each make one and hand it to `MarkedDoc`; the page components stay dumb and report what the reader did.
 //
-// **Every annotation on the pages is drawn here**, on words or drawn with a tool, in its own look: a project PDF's record says where each stands now, and a cited work's sidecar places one its words or a box anchor. Every write goes through the history (`review/history.svelte.ts`), so the toolbar's Undo takes it back.
+// **Every annotation on the pages is drawn here**, on words or drawn with a tool, in its own look, where its record says it stands now. Every write goes through the history (`review/history.svelte.ts`), so the toolbar's Undo takes it back.
 //
 // **A mark shows at once.** A write publishes a new manifest only after a moment, and a mark that appeared a second after the press would read as a press that failed. So what has been written but not yet published is held here and drawn with the rest, and each is let go once the manifest says the same.
 
 import { store } from '$lib/manifest/client.svelte';
 import type { Annotation } from '$lib/manifest/types';
 import { can, write, type WriteResult } from '$lib/write';
-import { hand, handPayload, lookOf, passes, type Annotating } from '$lib/review/annotating.svelte';
+import { hand, handPayload, lookOf, passes, type Annotating, type Nowhere } from '$lib/review/annotating.svelte';
 import { annotate, edit } from '$lib/review/history.svelte';
 import { say } from '$lib/review/toasts.svelte';
 import { ui } from '$lib/ui.svelte';
+import { said } from '$lib/library/said';
+import { frame } from '$lib/words/frame';
 import { document_, pdfjs, sourceOf } from './document';
 import { boundOfStrokes, copyColor, markOf, mergeLines, ON_WORDS, type MarkKind, type PageMark } from './marks';
 import { annotatedCopy, notTheSamePaper, readAnnotations, type Incoming, type Outgoing, type Replaced } from './portable';
@@ -19,12 +21,10 @@ type Place = Pick<PageMark, 'rects' | 'strokes'>;
 
 /** What a desk works on. A function, since it follows a component's props. */
 export interface Surface {
-	/** What a write names: a project PDF's path or a citekey. */
+	/** What a write names: a project PDF's path or a work's reference. */
 	on: string;
 	/** Whether an annotation is on this PDF's pages. */
 	owns: (a: Annotation) => boolean;
-	/** Where an annotation stands when its record does not say: a cited work's sidecar places one by its words or a box. */
-	rectsOf?: (a: Annotation) => number[][] | undefined;
 	/** Where the PDF is served. */
 	url: string;
 	/** Its name, for a saved copy. */
@@ -33,9 +33,19 @@ export interface Surface {
 	notes?: Annotating;
 	/** Whether the pane hides every annotation. */
 	hidden?: boolean;
+	/** Where the publisher found an annotation the record holds no place for, by id (`library-places`): null where it stands nowhere, undefined while not yet known. Absent where nothing finds places. */
+	stands?: (id: string) => { page: number; rects: number[][] } | null | undefined;
+	/** Whether where the notes anchored by their words stand could not be learned: nothing finds places, or the places could not be read. */
+	unread?: boolean;
 }
 
 const INK_PAUSE = 900;
+
+/** A refused write on the pages in the viewer's words (`said`); one refused while loom knows no name to write it under says where to give it one. */
+function refusal(e?: { code: string; message: string }): string {
+	if (e?.code === 'refused' && !store.manifest?.reviewer?.name) return frame.errors.noName;
+	return said(e ?? { code: 'failed', message: '' });
+}
 
 export class MarkDesk {
 	/** The mark whose popup is open, which can be moved. */
@@ -69,7 +79,13 @@ export class MarkDesk {
 	/** The top-level annotations on this PDF's pages, as published. */
 	rows = $derived<Annotation[]>(Object.values(store.manifest?.annotations ?? {}).filter((a) => !a.in_reply_to && (a.target.page ?? 0) > 0 && this.#surface().owns(a)));
 	/** Each annotation on the pages with where it is drawn, or null for one with no place on a page now. */
-	placed = $derived<{ a: Annotation; m: PageMark | null }[]>(this.rows.map((a) => ({ a, m: markOf(a, this.#surface().rectsOf?.(a)) })));
+	placed = $derived<{ a: Annotation; m: PageMark | null }[]>(this.rows.map((a) => ({ a, m: markOf(a, this.#surface().stands?.(a.id)) })));
+
+	/** Whether where `a` stands is known: drawn, detached, or answered for by the places asked since the manifest changed. One not yet known is neither drawn nor listed, and what is on its way to it stays drawn. */
+	#known(a: Annotation): boolean {
+		const s = this.#surface();
+		return !s.stands || a.detached || !!markOf(a, s.stands(a.id)) || s.stands(a.id) !== undefined;
+	}
 
 	/** What is drawn: every annotation with a place, under the item's filter and the pane's hiding, with what is on its way laid over them. A resolved one is drawn while settled annotations are shown. */
 	marks = $derived.by<PageMark[]>(() => {
@@ -85,20 +101,28 @@ export class MarkDesk {
 		return [...out, ...this.#pending.filter((m) => !have.has(m.id)), ...(this.lit ? [this.lit] : [])];
 	});
 
-	/** The annotations on the pages with no place on one now: detached on a changed file, or a box whose words the sidecar has not placed. Listed, never drawn. */
-	detached = $derived<Annotation[]>(this.placed.filter((p) => !p.m).map((p) => p.a));
+	/** The annotations on the pages with no place on one now: detached on a changed file, or one whose record says no place. Listed, never drawn. */
+	detached = $derived<Annotation[]>(this.placed.filter((p) => !p.m && this.#known(p.a)).map((p) => p.a));
+
+	/** The notes anchored by their words alone that are listed and drawn on no page though the manifest does not call them detached, by why: `unread` while where they stand could not be learned, `unfound` where loom found their words on no page. */
+	nowhere = $derived.by<Nowhere>(() => {
+		const ids = this.detached.filter((a) => !a.detached && !a.rects?.length).map((a) => a.id);
+		return this.#surface().unread ? { unread: ids, unfound: [] } : { unread: [], unfound: ids };
+	});
 
 	/** The annotations in the file that one of loom's stands for, by reference; the pages leave them undrawn. */
 	hides = $derived<string[]>(this.rows.flatMap((a) => (a.hides ? [a.hides] : [])));
 
-	/** Let go of what the manifest now says; called whenever it changes. */
+	/** Let go of what the manifest and the places now say; called whenever either changes. */
 	settle(): void {
 		const live = new Map(this.rows.map((a) => [a.id, a]));
-		if (this.#pending.some((m) => live.has(m.id))) this.#pending = this.#pending.filter((m) => !live.has(m.id));
+		// one on words is let go only once where it stands is known, so it is not undrawn between the manifest and the places
+		const arrived = (m: PageMark) => live.has(m.id) && this.#known(live.get(m.id)!);
+		if (this.#pending.some(arrived)) this.#pending = this.#pending.filter((m) => !arrived(m));
 		const changed: Record<string, Partial<PageMark>> = {};
 		for (const [id, over] of Object.entries(this.#changed)) {
 			const row = live.get(id);
-			const now = row ? markOf(row, this.#surface().rectsOf?.(row)) : null;
+			const now = row ? markOf(row, this.#surface().stands?.(id)) : null;
 			const same = now && (over.rects === undefined || JSON.stringify(now.rects) === JSON.stringify(over.rects)) && (over.strokes === undefined || JSON.stringify(now.strokes) === JSON.stringify(over.strokes));
 			if (row && !same) changed[id] = over;
 		}
@@ -130,7 +154,7 @@ export class MarkDesk {
 		const res = await annotate({ ...this.body(kind, page, place), ...(extra.quote ? { quote: extra.quote } : {}), ...(extra.message ? { message: extra.message } : {}) });
 		if (!res.ok) {
 			this.#pending = this.#pending.filter((p) => p.id !== fresh);
-			say({ title: 'Not written', lines: [res.error?.message ?? 'the publisher refused it'] });
+			say({ title: 'Not written', lines: [refusal(res.error)] });
 			return '';
 		}
 		const id = (res.result ?? '').split(/\s+/)[0];
@@ -211,7 +235,7 @@ export class MarkDesk {
 			if (res.ok) return;
 			const { [e.id]: _, ...rest } = this.#changed;
 			this.#changed = rest;
-			say({ title: 'Not moved', lines: [res.error?.message ?? 'the publisher refused it'] });
+			say({ title: 'Not moved', lines: [refusal(res.error)] });
 		});
 	}
 
@@ -280,7 +304,7 @@ export class MarkDesk {
 		}
 		const res = (await write('annotations-take', { target: this.#surface().on, items })) as WriteResult & { taken?: number; already?: number; skipped?: number };
 		if (!res.ok) {
-			say({ title: 'Not taken in', lines: [res.error?.message ?? 'the publisher refused it'] });
+			say({ title: 'Not taken in', lines: [refusal(res.error)] });
 			return;
 		}
 		void store.refresh();

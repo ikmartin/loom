@@ -1208,12 +1208,14 @@ def _look_untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
             for line in (json.loads(r["line"]) for r in entry.get("records") or [] if r["log"] == ledger)
             if line.get("action") == KEEP and line.get("who") == who
         }
-        watched = watching(load_quilt(root).config)
+        watched = watching(load_quilt(root).config, root)
         for rel, h in looked.items():
             if not _in_quilt(root, rel):
                 return f"its look names {rel!r}, which is not a file in the quilt"
             if not watched(rel):
-                return f"its look names {rel}, in a place agents are denied, which your look leaves alone"
+                return (
+                    f"its look names {rel}, which your look leaves alone: a place agents are denied, or a Lake project"
+                )
             if rel not in named:
                 return f"its look takes in {rel}, which no keep line of the act names"
             if h is None:
@@ -1462,7 +1464,7 @@ def _judge(
         if made:
             settles += f" For {_named(made)}, which the act made, removing it does that."
         if replaced:
-            settles += " Putting back the version The Record kept just before the act, where it kept one, does that for a file it changed, and keeps your text as it is now first."
+            settles += " Putting back the version History kept just before the act, where it kept one, does that for a file it changed, and keeps your text as it is now first."
         return _Verdict(
             "left",
             f"a file of it has changed since, so recovery changed nothing: {_where(holds, kept=kept)}",
@@ -1698,7 +1700,7 @@ def _look_follows(root: Path, history: Path, files: dict[str, tuple[bytes | None
         if look is None:
             return
         quilt = load_quilt(root)
-        watched = watching(quilt.config)
+        watched = watching(quilt.config, root)
         shown: Any = None
         moved = False
         for rel, (before, after) in files.items():

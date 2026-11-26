@@ -110,22 +110,30 @@ def test_setting_up_an_app_leaves_a_skill_of_the_persons_at_one_of_its_paths(tmp
     assert "loom-review/SKILL.md alone" in got["result"]
 
 
-def test_loom_removes_its_own_skill_of_a_mode_that_is_gone_and_keeps_an_edited_one(
+def test_loom_removes_its_own_skill_and_mode_file_of_a_mode_that_is_gone_and_keeps_edited_ones(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     q = bare(tmp_path)
     ok("ai", "init", cwd=q)
     edited = q / ".claude/skills/loom-flow/SKILL.md"
     edited.write_text(edited.read_text() + "\nMine now.\n")
+    mode = q / ".loom/agents/instructions/modes/flow.md"
+    mode.write_text(mode.read_text() + "\nMine too.\n")
     monkeypatch.setattr(layout, "modes", lambda root=None: [m for m in layout.MODES if m not in ("flow", "draft")])
     rep = upgrade_layer(q)
     assert sorted(rep.removed) == [
         ".agents/skills/loom-draft/SKILL.md",
         ".agents/skills/loom-flow/SKILL.md",
         ".claude/skills/loom-draft/SKILL.md",
+        ".loom/agents/instructions/modes/draft.md",
     ]
-    assert rep.theirs == [".claude/skills/loom-flow/SKILL.md"] and edited.read_text().endswith("Mine now.\n")
-    assert not (q / ".claude/skills/loom-draft").exists()
+    assert sorted(rep.theirs) == [".claude/skills/loom-flow/SKILL.md", ".loom/agents/instructions/modes/flow.md"]
+    assert edited.read_text().endswith("Mine now.\n") and mode.read_text().endswith("Mine too.\n")
+    assert (
+        not (q / ".claude/skills/loom-draft").exists() and not (q / ".loom/agents/instructions/modes/draft.md").exists()
+    )
+    assert "draft.md" not in (q / ".loom/agents/instructions/.loom-modes-version").read_text()
+    assert upgrade_layer(q).removed == []  # said once
 
 
 def test_the_skills_follow_the_quilts_modes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Settings, a window over the page (plan 0.23): a left panel of sections in two groups, Loom and Quilt, and the open section's page, which says where its settings are kept. This browser's preferences apply at once; your name is saved through the publisher; the quilt's settings are a draft until Save, since config.toml is committed and shared. A viewer with no publisher shows the quilt's settings as published, and changes none. The development shelf (threads, tags, taxa, what is in no document) is at the panel's foot: scaffolding kept while building, not part of the interface a reader is meant to learn.
+	import Icon from '$lib/components/Icon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { can, capabilities } from '$lib/write';
@@ -79,7 +80,7 @@
 	const readOnly = $derived(SECTION[shown].group === 'quilt' && shown !== 'overleaf' && !(shown === 'annotations' ? canTypes : canSave));
 </script>
 
-<button class="toggle" aria-label="Settings" aria-haspopup="dialog" aria-expanded={open} title="Settings" onclick={() => (open = !open)} data-testid="settings-toggle">⚙</button>
+<button class="toggle" aria-label="Settings" aria-haspopup="dialog" aria-expanded={open} title="Settings" onclick={() => (open = !open)} data-testid="settings-toggle"><Icon name="gear" size={18} /></button>
 
 <Popover modal bind:open label="Settings" testid="settings-window">
 	<div class="win">

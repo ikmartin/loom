@@ -35,11 +35,12 @@ test.describe('the graph page', () => {
 		await expect(page.locator('g.node.selected')).toHaveAttribute('data-testid', 'gnode-sy-0003');
 	});
 
-	test('Whole quilt includes the corpus and external nodes', async ({ page }) => {
+	test('Whole quilt includes every result of the corpus, those outside the default document too', async ({ page }) => {
 		await page.goto('/graph');
-		await expect(page.getByTestId('gnode-sy-0003')).toHaveCount(1); // the corpus's own results are unchanged
-		await expect(page.getByTestId('gnode-Kre99-thm-2.1')).toHaveCount(1);
-		await expect(page.locator('[data-testid^="gnode-paper:"]')).toHaveCount(0);
+		await expect(page.getByTestId('gnode-sy-0003')).toHaveCount(1);
+		// one the talk alone reads, and one no document reads
+		await expect(page.getByTestId('gnode-sy-999D')).toHaveCount(1);
+		await expect(page.getByTestId('gnode-sy-0009')).toHaveCount(1);
 	});
 
 	test('scope lists only documents and the legend highlights without changing scope', async ({ page }) => {
@@ -61,7 +62,7 @@ test.describe('the graph page', () => {
 		await expect.poll(() => page.locator('g.node.dim').count()).toBeGreaterThan(0);
 		await expect.poll(() => page.locator('.membership [data-document]').count()).toBeGreaterThan(0);
 		await scope.selectOption({ label: documents[0].trim() });
-		await expect(page.getByTestId('gnode-Kre99-thm-2.1')).toHaveCount(0);
+		await expect(page.getByTestId('gnode-sy-999D')).toHaveCount(0);
 	});
 
 	test('shared membership survives modular source paths in every drawing', async ({ page }) => {

@@ -1,0 +1,26 @@
+{
+ "answer": {
+  "gen": 1789808400003,
+  "ok": true,
+  "result": "took in 1: 1 cannot",
+  "rows": [
+   {
+    "code": "has-document",
+    "id": "cac0f04222e6db68948deb227e6a9e10032f893ae4aa98744549aa7cb09ab398",
+    "item": 0,
+    "name": "bellamy-reprint.pdf",
+    "state": "cannot",
+    "why": "Bellamy 2019 holds a PDF already; take it off first"
+   }
+  ]
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "for": "sh-0403-ref",
+    "incoming": "cac0f04222e6db68948deb227e6a9e10032f893ae4aa98744549aa7cb09ab398"
+   }
+  ]
+ }
+}

@@ -28,7 +28,7 @@ function decorate(m: Manifest, f: Filters, input: Input, out: ForceOutput): Layo
 			const [x, y] = out.at[n.id] ?? [0, 0];
 			return {
 				id: n.id,
-				label: n.kind === 'work' ? (n.title ?? n.id) : displayNode(m, n.id, f.master).name,
+				label: displayNode(m, n.id, f.master).name,
 				taxon: n.taxon,
 				state: n.state,
 				color: colorOf(m, n.state),
@@ -45,7 +45,7 @@ function decorate(m: Manifest, f: Filters, input: Input, out: ForceOutput): Layo
 		edges: input.edges.map((e) => {
 			const [ax, ay] = out.at[e.from] ?? [0, 0];
 			const [bx, by] = out.at[e.to] ?? [0, 0];
-			return { from: e.from, to: e.to, kind: e.kind, points: [{ x: ax, y: ay }, { x: bx, y: by }], count: e.count };
+			return { from: e.from, to: e.to, kind: e.kind, points: [{ x: ax, y: ay }, { x: bx, y: by }] };
 		}),
 		width: out.width,
 		height: out.height

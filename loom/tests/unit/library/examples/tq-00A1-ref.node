@@ -1,0 +1,14 @@
++++
+schema = 1
+id = "tq-00A1-ref"
+taxon = "reference"
+pdf = "sha256:41b7c0a9e3f2d5681c94ab07e6d3f81290ce5b47a8d1036f2e9c7b54a0d8e163"
+tex = "sha256:9e02f7d4b1a865c3097e4f2ab8d6c1e5730f9a24b6d8c0e1f3a57b92d4c6e801"
++++
+@article{Smi24,
+  author        = {Smith, Jane},
+  title         = {Widgets and their bounds},
+  year          = {2024},
+  eprint        = {2401.01234v2},
+  archivePrefix = {arXiv},
+}

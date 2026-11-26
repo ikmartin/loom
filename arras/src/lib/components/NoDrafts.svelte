@@ -13,7 +13,7 @@
 	// no documents is not a corpus between drafts, and telling its reader that nothing is being worked on describes a
 	// state it will never leave.
 	const never = $derived(m?.publishes.documents === false);
-	// the problems in the person's own LaTeX; an agent's copy's, a cited work's and loom's own say nothing about why none is open
+	// the problems in the person's own LaTeX; an agent's copy's and loom's own say nothing about why none is open
 	const problems = $derived(forPerson(m?.diagnostics ?? []).filter((d) => ownerOf(d) === 'person').length);
 </script>
 

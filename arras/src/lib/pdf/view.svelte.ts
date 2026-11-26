@@ -1,4 +1,4 @@
-// The reader's view of a document: which of the PDF's own tools is in hand, how large the page is drawn, and where in it they are.
+// The reader's view of a document: which of the PDF's own tools is in hand, how large the page is drawn, and where in it they are. Each open paper has its own, so its zoom is its own: zooming one paper zooms no other.
 //
 // It is a separate object because the controls and the renderer need not be in the same place. `PdfDoc` draws its own toolbar when nothing else claims one, and a page with a rail of its own creates a view, hands it to both, and puts the controls on one line with everything else it offers.
 
@@ -8,6 +8,9 @@ import type { PagePlace, PaperFile } from './position';
 
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 5;
+
+/** A zoom as the view keeps it: within the bounds, to the percent. */
+export const clampZoom = (v: number): number => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(v * 100) / 100));
 
 export class PdfView {
 	/** The drawing tool in hand; `select` reads, and Annotate and Comment are the item's (`Annotating.tool`). */
@@ -21,6 +24,27 @@ export class PdfView {
 	count = $state(0);
 	/** The scale actually drawn, which is the fitted one while `fitWidth` holds; the renderer writes it. */
 	scale = $state(1);
+	/** This paper's own zoom: it starts at the zoom last given any PDF (`prefs.zoom.pdf`), which is then the start of the next paper opened, and changes only by `zoomTo`. */
+	zoom = $state(prefs.zoom.pdf ?? 1.4);
+	#kept: ((zoom: number) => void) | undefined;
+
+	/**
+	 * A paper's view.
+	 *
+	 * Parameters
+	 * ----------
+	 * zoom : number, optional
+	 *     A zoom the reader gave this paper before, which the open item kept; it holds over fitting the text, as a zoom given does.
+	 * kept : (zoom: number) => void, optional
+	 *     Told each zoom the reader gives, to keep it with the open item.
+	 */
+	constructor(zoom?: number, kept?: (zoom: number) => void) {
+		if (zoom !== undefined && Number.isFinite(zoom) && zoom > 0) {
+			this.zoom = clampZoom(zoom);
+			this.fitText = false;
+		}
+		this.#kept = kept;
+	}
 
 	/** The file open here, once it is known; the renderer writes it in the same step that lays out its pages, so what opens the paper can say where. */
 	file = $state.raw<PaperFile | null>(null);
@@ -37,10 +61,13 @@ export class PdfView {
 		this.jump = { page: Math.max(1, this.count ? Math.min(page, this.count) : page) };
 	}
 
-	/** Set the zoom. An instruction about size leaves the fitted mode rather than fighting it. */
+	/** Set this paper's zoom, which becomes the start of the next paper opened. An instruction about size leaves the fitted mode rather than fighting it. */
 	zoomTo(v: number): void {
 		this.fitWidth = false;
 		this.fitText = false;
-		prefs.zoom = { ...prefs.zoom, pdf: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(v * 100) / 100)) };
+		const z = clampZoom(v);
+		this.zoom = z;
+		prefs.zoom = { ...prefs.zoom, pdf: z };
+		this.#kept?.(z);
 	}
 }

@@ -3,11 +3,11 @@ import type { Diagnostic, Fix, Manifest } from './manifest/types';
 import { keyTarget, placeUrl } from './nav';
 import { pathFor } from './workspace/item';
 
-/** Whose a diagnostic is to fix: the person's, an agent's copy's, or a cited work's, whose digest loom wrote. A publisher that does not say makes every one the person's. */
-export type Owner = 'person' | 'copy' | 'work';
+/** Whose a diagnostic is to fix: the person's, or an agent's copy's. A publisher that does not say makes every one the person's. */
+export type Owner = 'person' | 'copy';
 
 export function ownerOf(d: Diagnostic): Owner {
-	return d.owner === 'copy' ? 'copy' : d.owner === 'work' ? 'work' : 'person';
+	return d.owner === 'copy' ? 'copy' : 'person';
 }
 
 /** What kind of problem a diagnostic is: in a document's LaTeX, in loom's model of the quilt, or loom's own difficulty. A publisher that does not say, or says what this viewer does not know, makes it the person's LaTeX, so nothing it reports goes unseen. */
@@ -41,7 +41,6 @@ const TITLES: Record<string, string> = {
 	'macro-shadowed': "The preamble redefines one of loom's macros",
 	'macros-missing': 'loom.sty is missing',
 	'taxon-conflict': 'Documents disagree on what an environment is',
-	'prefix-is-citekey': 'The id prefix is also a citation key',
 	'unknown-directive': 'An unknown % !LOOM line',
 	'invalid-name': 'A name that cannot be used',
 	'unlabelled-node': 'A result has no id',
@@ -55,14 +54,12 @@ const TITLES: Record<string, string> = {
 	'uses-unused': 'A \\uses entry the proof never mentions',
 	'see-redundant': 'A see line repeats itself',
 	'dependency-cycle': 'Results depend on each other in a circle',
-	'cites-proposed-node': 'A citation of a block not yet verified',
 	'snippet-failed': 'TeX could not make a text, shown as its source',
 	'closure-failed': 'A block does not compile on its own',
 	'import-outside-tree': 'An imported file lies outside the paper',
 	'non-utf8-source': 'A file is not UTF-8',
 	'unknown-theoremstyle': 'An unknown theorem style',
 	'taxon-name-macro': 'An environment named by an undefined macro',
-	'citekey-slug-collision': 'Two citation keys share a digest prefix',
 	'main-not-found': 'The default document is not a document',
 	'main-unset': 'No default document',
 	'unknown-config-key': 'An unknown setting',
@@ -70,15 +67,8 @@ const TITLES: Record<string, string> = {
 	'detached-annotation': 'Annotations lost their place',
 	'previous-key-match': 'An acceptance matches a renamed proof',
 	'foreign-annotations': 'An unreadable line in the annotation log',
-	'unmatched-postnote': 'A citation names a result its digest lacks',
-	'undigested-citekey': 'A cited work has no digest',
-	'postnote-from-another-version': 'A citation answered by another version of the work',
-	'unresolved-work': 'A cited work has no identifier',
-	'unverified-locators': "A digest's numbers may not be the published ones",
-	'version-mismatch': 'A digest of another version',
-	'missing-package': 'A digest needs a package the preamble lacks',
-	'digest-without-bib': 'A digest of a work the bibliography lacks',
-	'no-readable-copy': 'No copy of the work to read',
+	'foreign-evidence': 'An unreadable line in the evidence log',
+	'foreign-asks': 'An unreadable line in the log of asks',
 	'superseded-file': 'A document a conversion replaced',
 	'history-missing': 'Part of the history is gone',
 	'history-edited': 'The history was edited by hand',
@@ -96,6 +86,7 @@ const TITLES: Record<string, string> = {
 	'link-target-missing': 'A link to something that is not there',
 	'link-place-missing': 'A link to a heading or place that is not there',
 	'link-work-unknown': 'A link to a work the library does not hold',
+	'bib-entry-refused': 'A bibliography entry the library cannot take',
 	'write-left': 'A write loom could neither finish nor undo',
 	'document-gone': 'A document is gone',
 	'compile-failed': 'A document did not compile',
@@ -132,20 +123,18 @@ export function groupProblems(items: Diagnostic[]): Group[] {
 	return [...map.values()].sort((a, b) => (ORDER[a.severity] ?? 3) - (ORDER[b.severity] ?? 3) || b.items.length - a.items.length || a.title.localeCompare(b.title));
 }
 
-/** The four parts of Problems: the person's errors and warnings, an agent's copy's, the cited works', and every remark. */
+/** The three parts of Problems: the person's errors and warnings, an agent's copy's, and every remark. */
 export interface Parts {
 	yours: Diagnostic[];
 	copy: Diagnostic[];
-	works: Diagnostic[];
 	remarks: Diagnostic[];
 }
 
 export function partsOf(items: Diagnostic[]): Parts {
-	const out: Parts = { yours: [], copy: [], works: [], remarks: [] };
+	const out: Parts = { yours: [], copy: [], remarks: [] };
 	for (const d of items) {
 		if (d.severity === 'info') out.remarks.push(d);
 		else if (ownerOf(d) === 'copy') out.copy.push(d);
-		else if (ownerOf(d) === 'work') out.works.push(d);
 		else out.yours.push(d);
 	}
 	return out;
@@ -154,30 +143,6 @@ export function partsOf(items: Diagnostic[]): Parts {
 /** The errors and warnings in the person's own LaTeX: what Problems counts. */
 export function yoursCount(m: Pick<Manifest, 'diagnostics'>): number {
 	return partsOf(forPerson(m.diagnostics)).yours.length;
-}
-
-/** The work a cited work's diagnostic is about: the work its fix digests again, else its results' digest, else the digest its location is in, else '' when it says none. */
-export function workOf(m: Pick<Manifest, 'nodes'>, d: Diagnostic): string {
-	const act = d.fixes?.find((f) => f.act?.endpoint === 'library-update')?.act;
-	const named = (act?.body as { works?: unknown } | undefined)?.works;
-	if (Array.isArray(named) && typeof named[0] === 'string') return named[0];
-	for (const k of d.keys) if (m.nodes[k]?.digest) return m.nodes[k].digest!;
-	for (const l of d.locations) {
-		const n = Object.values(m.nodes).find((x) => x.file === l.file && x.digest);
-		if (n) return n.digest!;
-	}
-	return '';
-}
-
-/** The cited works' diagnostics by work, in their order; a diagnostic naming no work is under ''. */
-export function byWork(m: Pick<Manifest, 'nodes'>, items: Diagnostic[]): { work: string; items: Diagnostic[] }[] {
-	const map = new Map<string, Diagnostic[]>();
-	for (const d of items) {
-		const w = workOf(m, d);
-		if (!map.has(w)) map.set(w, []);
-		map.get(w)!.push(d);
-	}
-	return [...map.entries()].map(([work, xs]) => ({ work, items: xs })).sort((a, b) => b.items.length - a.items.length || a.work.localeCompare(b.work));
 }
 
 /** Where `d` is read: its first key's place, else its first location's file at the line, else nothing. A file the viewer does not show (loom's own) has no place. */

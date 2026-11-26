@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from loom.cli._quilt import open_scan, quilt_option
@@ -16,13 +18,13 @@ from loom.errors import EnvError
     default=None,
     help="A place in THING: a key inside the document or node, a heading's id in a Markdown file or notebook, page=N in a PDF, L and a line number in a text file.",
 )
-@click.option("--page", type=int, default=None, help="A page of a cited work, from 1.")
+@click.option("--page", type=int, default=None, help="A page of a work's PDF, from 1.")
 @click.option("--quote", default=None, help="Text on that page to find.")
 @quilt_option
 def link_command(thing: str, at: str | None, page: int | None, quote: str | None, quilt_path: str | None) -> None:
     """Print a markdown link to THING that the viewer can follow.
 
-    THING is a node or any key in it, a document's path, an annotation id, a session id, a cited work's citekey or identifier, or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
+    THING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
     """
     from loom.cli.review import _work_target
     from loom.links import LinkError, cited_link, quilt_link, resolve
@@ -32,11 +34,17 @@ def link_command(thing: str, at: str | None, page: int | None, quote: str | None
     work = _work_target(result, thing)
     if work is not None or page is not None or quote is not None:
         if work is None:
-            raise EnvError(f"--page and --quote are for a cited work, and {thing} names none: give its citekey")
+            raise EnvError(f"--page and --quote are for a work, and {thing} names none: give its reference")
         if at is not None:
             raise EnvError("--at is for a place in a document or a node; a work takes --page and --quote")
-        _citekey, wid = work
-        link = cited_link(wid.scheme, wid.value, page, quote)
+        stated = _identifiers(root, work)
+        if stated:
+            scheme, _, value = stated[0].partition(":")
+            link = cited_link(scheme, value, page, quote)
+        elif page is not None or quote is not None:
+            raise EnvError(f"{work} states no identifier, so it is linked whole: loom link {work}")
+        else:
+            link = quilt_link(work)
     else:
         link = quilt_link(thing, at or "")
     href = link[len("[](") : -1]
@@ -48,3 +56,13 @@ def link_command(thing: str, at: str | None, page: int | None, quote: str | None
     if target.kind in ("node", "document") and target.key != thing:
         link = quilt_link(target.key, at or "")
     click.echo(link)
+
+
+def _identifiers(root: Path, ref: str) -> list[str]:
+    """The identifiers the reference's entry states, most trusted first, as `scheme:value`; a `cited:` link names a work by the first."""
+    from loom.library.entries import identifiers, read_entry
+    from loom.library.store import read
+
+    node = read(root, ref)
+    entry = read_entry(node.body) if node is not None else None
+    return identifiers(entry.fields) if entry is not None else []

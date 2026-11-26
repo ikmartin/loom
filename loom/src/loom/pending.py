@@ -400,7 +400,7 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
         return None
     # only the places agents may edit: one they are denied is the person's own, and a change there is never listed
     current = watched_texts(quilt)
-    watched = watching(quilt.config)
+    watched = watching(quilt.config, quilt.root)
     # a file the scan read is as the scan read it: one saved since is the next build's, so a change is never cut from one reading of a file and drawn against another
     for rel, src in result.files.items():
         text = current.get(rel)
@@ -870,13 +870,13 @@ def called(edit: Edit) -> str:
 
 
 def _not_written(edit: Edit) -> str:
-    return f"loom has no write of {called(edit)} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from The Record takes them out"
+    return f"loom has no write of {called(edit)} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from History takes them out"
 
 
 def _changed_since(edit: Edit, how: str = "changed") -> str:
     if how == "too-much":
-        return f"the file has changed too much around {called(edit)} since it was kept to be sure where it was written, so its Keep is not undone; restore a version from The Record instead"
-    return f"{called(edit)} has changed where it was written since it was kept, so its Keep is not undone; restore a version from The Record instead"
+        return f"the file has changed too much around {called(edit)} since it was kept to be sure where it was written, so its Keep is not undone; restore a version from History instead"
+    return f"{called(edit)} has changed where it was written since it was kept, so its Keep is not undone; restore a version from History instead"
 
 
 def _ending_at(raw: str, a: int, b: int) -> str:
@@ -1027,7 +1027,7 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
             out.refused.append(
                 {
                     "id": i,
-                    "why": f"loom will not undo the Keep of {called(e)} from its record: {said_why}; restore a version from The Record instead",
+                    "why": f"loom will not undo the Keep of {called(e)} from its record: {said_why}; restore a version from History instead",
                     "code": "not-written",
                 }
             )
@@ -1359,7 +1359,7 @@ def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: l
     from loom.scan.hashing import sha256
 
     look = read_look(quilt.root, who)
-    if look is None or not watching(quilt.config)(path):
+    if look is None or not watching(quilt.config, quilt.root)(path):
         return True  # no look yet, or a place agents are denied, where nothing is listed
     held = look.files.get(path) or None
     if held is None:

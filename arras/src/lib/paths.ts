@@ -37,9 +37,9 @@ export function compiledUrl(d: { pdf?: string; compiled?: string }): string {
 	return d.pdf ? `${dataUrl(d.pdf)}?v=${encodeURIComponent(d.compiled ?? '')}` : '';
 }
 
-/** A file the publisher serves beside the build directory, such as a fetched paper under `refs/`. */
-export function artifactUrl(dir: string): string {
-	return dataRoot().replace(/build\/$/, '') + dir.replace(/^\/+|\/+$/g, '') + '/paper.pdf';
+/** A work's stored PDF as the publisher serves it, sandboxed, beside the app, by its hash: `sha256:<hex>` as the library gives it, or the bare hex. */
+export function libraryPdfUrl(hash: string): string {
+	return base + '/_api/library/pdf/' + hash.replace(/^sha256:/, '');
 }
 
 /** A project file as the publisher serves it, sandboxed, beside the app: an image, a PDF, text, an HTML page with no script. */

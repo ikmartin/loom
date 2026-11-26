@@ -112,7 +112,7 @@ export interface CanonDoc {
 	cannot_restore?: string;
 }
 
-/** One line of the history, as Review › The Record lists it: what was done, when, by whom, and to what. */
+/** One line of the history, as Review › History lists it: what was done, when, by whom, and to what. */
 export interface HistoryAct {
 	action: string;
 	when: string;
@@ -220,8 +220,8 @@ export interface Node {
   inline_proof?: boolean;
   /** The files that each define this id, when two do. The id is then `conflicted`: it has no text, and loom reports both rather than choosing. */
   conflict?: string[];
-  digest: string | null;
-  locator?: string;
+  /** On a block of basis `cited-result`, the postnote its title cites the result with; null when it cites none. */
+  locator?: string | null;
   incomplete: string[];
   state: string;
   derived: Record<string, boolean>;
@@ -309,8 +309,12 @@ export interface UnresolvedReview {
   changed_text: boolean;
   /** Null means an older sync record has no post-pull baseline. */
   local_changed?: boolean | null;
-  /** Why loom cannot accept it, in the person's words; '' when it can. */
+  /** Why loom cannot accept it, as an agent reads it, naming a directive and keys; '' when it can. The viewer words `refusal_code` instead. */
   refusal: string;
+  /** The same reason as a code, '' when it can be accepted; absent from an older publisher. */
+  refusal_code?: '' | 'not-yours' | 'incomplete' | 'open-claim' | 'unclassified' | 'unidentified';
+  /** The person's own notes on a block marked incomplete, in their TeX; absent from an older publisher. */
+  incomplete?: string[];
 }
 
 export interface Acceptance {
@@ -416,7 +420,7 @@ export interface Annotation {
   id: string;
   author: Author;
   created: string;
-  /** What it is about: a key in the corpus; a cited work's identifier, with `work` the citekey the viewer knows it by and `page` the page it is on, none for the whole work (plan 0.13 item 2); or a project PDF, with `file` its path and `page`. */
+  /** What it is about: a key in the corpus; a work, by its reference, which `work` repeats, with `page` the page of its PDF, none for the whole work; or a project PDF, with `file` its path and `page`. */
   target: { key: string; hash: string; work?: string | null; page?: number | null; file?: string | null };
   /** The document a claim about a node is read in, as a master path; null for the node wherever it appears. Drawn in that document, listed on the node's page, absent elsewhere. */
   in?: string | null;
@@ -428,6 +432,10 @@ export interface Annotation {
   strokes?: number[][] | null;
   /** The tool it was drawn with: `pin`, `ink`, `text`, `box`, `oval` or `arrow`; null for one on words, which its look's style draws. */
   mark?: string | null;
+  /** What it is for beside a note: `to-digest`, the person's mark asking that a result on a work's page be read, which no list of notes holds; null on a note. */
+  purpose?: 'to-digest' | null;
+  /** On a mark to digest, the stub it locates, by its node's id; null where it names none. */
+  node?: string | null;
   /** Where one taken in from a PDF's own annotations came from. */
   origin?: { by?: string; subtype?: string; color?: number[]; ref?: string; sha?: string } | null;
   /** The reference of the PDF's own annotation it stands for, while the file is the one it was taken from: the viewer leaves that one undrawn. */
@@ -553,8 +561,8 @@ export interface Diagnostic {
   fixes?: Fix[];
   /** What the diagnostic is about: the source, or loom's own record of it. Absent means `source`. */
   subject?: "source" | "record" | (string & {});
-  /** Whose it is to fix: the person's, an agent's copy's, or a cited work's, whose digest loom wrote. Absent means the person's. */
-  owner?: "person" | "copy" | "work" | (string & {});
+  /** Whose it is to fix: the person's, or an agent's copy's. Absent means the person's. */
+  owner?: "person" | "copy" | (string & {});
   /** What kind of problem it is: in a document's LaTeX, a failed compile among them; in loom's model of the quilt, an agent's to keep; or loom's own difficulty. Absent means a document's LaTeX. */
   class?: "latex" | "model" | "internal" | (string & {});
 }
@@ -565,37 +573,7 @@ export interface Taxon {
   count: number;
 }
 
-export interface ResultRecord {
-  /** `proposed` (written, not yet vouched for), `extracted` (loom's own reading of the paper's source, which nobody has vouched for), `verified` (a person compared the rendering to the source text and accepted it) or `discarded`. */
-  state: 'proposed' | 'extracted' | 'verified' | 'discarded' | (string & {});
-  level: number;
-  /** `mechanical` (parsed from a source), `anchored` (read from a page, re-checkable) or `declared` (no check available). */
-  class: string;
-  /** The page the statement was read from; 0 for a result parsed out of LaTeX. */
-  page: number;
-  /** The first twelve characters of the artifact's sha256, which is what the anchor names. */
-  artifact: string;
-  /** Every party who made or changed this result, in order. A record that credits an agent with a sentence a person wrote cannot be audited. */
-  origin: { act: string; by: string; when: string }[];
-  /** The page's own words, verbatim. Present for every result read off a page, verified or not: it is what a link's two endpoints are judged against by eye. Absent for a mechanically extracted result, whose source is its own LaTeX. */
-  source_text?: string;
-  /** The same result rendered as LaTeX, which is never claimed to be verbatim. Present for a proposal. */
-  statement?: string;
-  /** The page around the quoted span, for a proposal: what the rendering is judged against. The quote alone is not enough -- an agent quotes only as much as the anchor check needs. */
-  page_text?: string;
-  /** Words of `statement`'s prose that the quoted source text does not contain: an agent's gloss, or a word the page spells differently. */
-  not_on_page?: string[];
-  /** For a result quoted from the paper's LaTeX rather than a page: the file, relative to the corpus root. `page` is then 0. */
-  source_file?: string;
-  /** A proposal's local name (`thm-4.1`) and environment, which the author may correct when verifying. */
-  local?: string;
-  taxon?: string;
-  supersedes?: string;
-  /** On an extracted result whose digest was read off another version than the bibliography cites: the artifact extracted ('' when the digest does not say) and what the bibliography cites, a `work:` identifier when the entry states none. Its numbers and pages are the other version's. */
-  version?: { extracted_from: string; cited: string };
-}
-
-/** A page loom keeps for one thing, the research state or a work's overview (plan 0.21.3): a reading, never a source. */
+/** A page loom keeps, the research state (plan 0.21.3): a reading, never a source. */
 export interface Page {
   path: string;
   hash: string;
@@ -606,50 +584,6 @@ export interface Page {
   /** Changed by hand since the last write through loom, or never written through it. */
   edited_since: boolean;
   links: { broken: { href: string; why: string }[]; moved: { href: string; key: string }[] };
-}
-
-export interface Reference {
-  citekey: string;
-  slug?: string;
-  bib: Record<string, string | number>;
-  /** The work's global identifier, and every identifier it states. Local names are for authoring; these are what name the same work on another machine. */
-  work?: string;
-  works?: string[];
-  /** What has been fetched for the work. `dir` is servable under the viewer's origin; both flags are false until someone fetches or adds a copy, and the fetched material is not in version control, so another reader's copy of the corpus may have neither. */
-  artifacts?: { dir: string; pdf: boolean; source: boolean };
-  /** The author's standing claim that no document can be held for this work: the Stacks Project is a living work with no fixed version. Nothing in a bibliography entry says so, so it is declared and never inferred, and the reading view says it rather than showing an empty pane. */
-  unreadable?: { why: string; who: string; when: string };
-  /** When and by whom the person added this work to the library by hand (plan 0.24.2); absent for a work a document's bibliography brought. */
-  added?: { when: string; who: string };
-  /** The entry as a person pastes it into a `.bib`: its type and its bibliographic fields, never the publisher's own. */
-  bibtex?: string;
-  /** The work's overview, a reading an agent or the person wrote (plan 0.21.3); absent until one is. */
-  overview?: Page;
-  /** Where the work's anchor geometry is published, and its hash. Beside the manifest rather than in it: the manifest is loaded whole on every poll, and rectangles are wanted for the one paper being read. Absent when no copy of the paper is on the publishing machine, which is the honest state — the viewer then has nothing to draw. */
-  spans?: { path: string; sha256: string };
-  /** The notes on this work's pages: how many, and how many still await an answer. They are in no key's row and count toward no total, so this is where a list says a paper has been read. */
-  reading?: { total: number; open: number };
-  digest: {
-    file: string;
-    fragment: string;
-    source: string;
-    extracted_from?: string;
-    published_as?: string;
-    method: string;
-    nodes: string[];
-  } | null;
-  /** Proposals: results read off a page and rendered by an agent, which nobody has vouched for yet. They live in a file no bundle inputs, so nothing here can be cited or compiled until it is verified. */
-  proposed?: { file: string; fragment: string; nodes: string[] } | null;
-  /** What is recorded for each of the work's results (digest contract §9). Both texts travel only for a proposal, because that is the one claim a person is being asked to make. */
-  results?: Record<string, ResultRecord>;
-  version_mismatch: boolean;
-  cited_by: string[];
-  /** On a work with several documents, its other versions: each a bibliography entry of its own, filed beside the first document, with its identifier and what the store holds for it. Absent on a work with one document. */
-  versions?: { citekey: string; work: string; artifacts: { dir: string; pdf: boolean; source: boolean } }[];
-  /** On a version, the citekey of the work it is another document of; that work's reference lists it under `versions`. */
-  version_of?: string;
-  /** Identifiers a lookup proposed for a work whose entry states none. Unconfirmed: never the work's identity, which changes only when the bibliography states it. */
-  candidates?: { id: string; source: string; confidence: number; strength: 'strong' | 'possible' | (string & {}); title: string }[];
 }
 
 export interface Macro {
@@ -668,18 +602,6 @@ export interface SearchEntry {
   excerpt?: string;
 }
 
-export interface AssertedLink {
-  id: string;
-  from: string;
-  to: string;
-  /** `same-notion`, `generalises`, `specialises`, `depends-on` or `contradicts`. A closed vocabulary: a viewer can only draw what it can name. */
-  kind: string;
-  /** Why, in a sentence or two. Never optional: an unexplained edge is noise. */
-  why: string;
-  by?: string;
-  when?: string;
-}
-
 /** An agent app with a file in the quilt that starts loom's server, and whether it does. */
 export interface AgentClient {
   key: string;
@@ -696,7 +618,7 @@ export interface QuiltSettings {
   editable: string[];
   read_only: string[];
   quilt: { name: string; main: string; home: string; prefix: string; engine: string; history: string; research_state: string };
-  library: { online: boolean; contact: string };
+  library: { online: boolean };
   /** `codes`: every diagnostic code that can be silenced. */
   lint: { disable: string[]; codes: string[] };
   agents: {
@@ -739,6 +661,8 @@ export interface Manifest {
   annotations: Record<string, Annotation>;
   /** The annotations placed on no block, each by id with the key it was written on, why, and the document it is listed in and opened from; each stays in `annotations`, detached, with `target.key` '', and is counted on no key (specs/manifest.md §9). */
   unplaced?: { id: string; key: string; why: string; document: string }[];
+  /** The library's drops that wait on the person, as the intake's rows: each a `question` or a file `received` and not yet taken; empty or absent when none does (manifest.md §1). */
+  arriving?: import('$lib/library/api').TakeRow[];
   /** Every suggested edit, by id (specs/manifest.md §9.2). */
   suggested_edits?: Record<string, SuggestedEdit>;
   /** The quilt's annotation types, in its file's order (specs/manifest.md §1). */
@@ -751,7 +675,6 @@ export interface Manifest {
   diagnostics: Diagnostic[];
   tags: Record<string, string[]>;
   taxa: Record<string, Taxon>;
-  references: Record<string, Reference>;
   /** The quilt's research state (plan 0.21.3); absent until one is written. */
   research_state?: Page;
   /** Every file of the project the viewer shows, hidden ones left out (plan 0.22.7); absent from an older publisher. */
@@ -762,8 +685,6 @@ export interface Manifest {
   changes_since?: { who: string; when: string; carried?: string; unwatched?: string[]; holds?: string };
   /** The quilt's configuration, for Settings; absent from an older publisher. */
   config?: QuiltSettings;
-  /** Asserted relations between two results, each with a reason. Nobody verifies these and every surface that shows one says so: they are navigation, not mathematics, and are never citable and never in a closure. */
-  links?: AssertedLink[];
   macros: { default: Macro[]; sets: Record<string, Macro[]> };
   search: SearchEntry[];
   /** Reserved for work not built yet, which will give each its shape (docs/specs/reserved.md); loom writes none of them. */

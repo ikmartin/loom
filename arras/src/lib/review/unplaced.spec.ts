@@ -27,17 +27,16 @@ function note(id: string, over: Partial<Annotation> = {}): Annotation {
 	};
 }
 
-/** The fixture with a note on no block written on sy-0003 (read in `drafting/main.tex`), and a reference with no identifier, whose `work` is ''. */
+/** The fixture with a note on no block written on sy-0003 (read in `drafting/main.tex`). */
 function withUnplaced(): Manifest {
 	const m = structuredClone(fixture);
 	m.annotations = { ...m.annotations, u: note('u') };
 	m.unplaced = [{ id: 'u', key: 'sy-0003', why: 'its block was deleted', document: 'drafting/main.tex' }];
-	m.references = { ...m.references, NoId: { ...Object.values(m.references)[0], citekey: 'NoId', work: '', works: [] } };
 	return m;
 }
 
 describe('a note on no block', () => {
-	it('is named by no key, and never by a reference with no identifier', () => {
+	it('is named by no key', () => {
 		const m = withUnplaced();
 		expect(keyName(m, '')).toBe('');
 		expect(linkName(m, 'quilt:u')).toBe('Note on no block');

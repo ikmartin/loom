@@ -7,15 +7,19 @@ Two people appending in parallel keep both lines when they merge, which is why t
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
+from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from loom.anchors import Anchor, is_page_anchor
 from loom.locks import locked
 from loom.paths import ANNOTATION_LOG, BEFORE_DELETE
-from loom.records.annotations import Annotation, Record, next_id
+from loom.records.annotations import PURPOSES, Annotation, Record, next_id
 from loom.records.ids import ANNOTATION
 from loom.records.selectors import Selector
 
@@ -35,7 +39,9 @@ def append(root: Path, event: dict[str, Any]) -> None:
             fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
 
 
-def delete(root: Path, ann_ids: list[str]) -> list[dict[str, Any]]:
+def delete(
+    root: Path, ann_ids: list[str], *, keep: Callable[[dict[str, Any]], None] | None = None
+) -> list[dict[str, Any]]:
     """Delete annotations from the log: each one's every event, and its replies', all the way down.
 
     The log is rewritten in place under its lock, so its lock keeps holding and no append lands between the read and the write; a copy of the log as it was goes to `.loom/local/` first, in case the write is cut short.
@@ -46,11 +52,17 @@ def delete(root: Path, ann_ids: list[str]) -> list[dict[str, Any]]:
         The quilt.
     ann_ids : list of str
         The annotations to delete; their replies go with them.
+    keep : callable, optional
+        Called under the log's lock, before the log is rewritten and even when nothing goes, with what goes as `put_back` takes it: `{"lines": [[place, line], …], "count": n, "sha": h}`, each line as written with its place in the log as it stood, and the number and hash of the lines left. A caller's undo written here holds the lines before they are gone.
 
     Returns
     -------
     list of dict
         The events removed, in the log's order: what `restore` puts back.
+
+    See Also
+    --------
+    put_back : puts back what `keep` was given, each line where it stood.
     """
     p = log_path(root)
     with locked(p):
@@ -77,15 +89,88 @@ def delete(root: Path, ann_ids: list[str]) -> list[dict[str, Any]]:
                     grew = True
         kept = [line for line, e in parsed if not (e and str(e.get("id")) in gone)]
         removed = [e for _line, e in parsed if e and str(e.get("id")) in gone]
+        if keep is not None:
+            taken = [[i, line] for i, (line, e) in enumerate(parsed) if e and str(e.get("id")) in gone]
+            keep({"lines": taken, "count": len(kept), "sha": _sha(kept)})
         if removed:
             backup = root / BEFORE_DELETE
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            with p.open("r+", encoding="utf-8") as fh:
-                fh.seek(0)
-                fh.write("".join(f"{line}\n" for line in kept))
-                fh.truncate()
+            _rewrite(p, kept)
     return removed
+
+
+def take_out(root: Path, lines: list[str]) -> int:
+    """Take `lines` out of the log as written, each once, under its lock: what `delete` gave its `keep`, taken out again by a caller finishing an act that was cut short. A line the log no longer holds is passed over, and a line added since, a reply among them, stays. Returns how many went."""
+    p = log_path(root)
+    with locked(p):
+        held = p.read_text(encoding="utf-8").splitlines() if p.is_file() else []
+        going = Counter(lines)
+        kept = []
+        for line in held:
+            if going[line]:
+                going[line] -= 1
+            else:
+                kept.append(line)
+        if len(kept) == len(held):
+            return 0
+        backup = root / BEFORE_DELETE
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_text("\n".join(held) + "\n", encoding="utf-8")
+        _rewrite(p, kept)
+    return len(held) - len(kept)
+
+
+def put_back(root: Path, taken: dict[str, Any]) -> list[str]:
+    """Put back what `delete` gave its `keep`, under the log's lock: each line where it stood when the log holds the lines `delete` left followed only by lines appended since, else at the log's end. A line the log holds already is not written again, so a second put-back, or one after a put-back cut short, adds nothing twice.
+
+    Returns the ids of the annotations whose events it put back.
+    """
+    p = log_path(root)
+    with locked(p):
+        lines = p.read_text(encoding="utf-8").splitlines() if p.is_file() else []
+        have = Counter(lines)
+        missing: list[tuple[int, str]] = []
+        for place, line in sorted((int(i), str(text)) for i, text in taken.get("lines", [])):
+            if have[line]:
+                have[line] -= 1
+            else:
+                missing.append((place, line))
+        if not missing:
+            return []
+        count = int(taken.get("count", -1))
+        if 0 <= count <= len(lines) and _sha(lines[:count]) == taken.get("sha"):
+            merged = lines[:count]
+            for place, line in missing:  # in the order of their places, so each lands where it stood
+                merged.insert(place, line)
+            lines = merged + lines[count:]
+        else:
+            lines = lines + [line for _place, line in missing]
+        _rewrite(p, lines)
+    made = []
+    for _place, line in missing:
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(e, dict) and e.get("event") in ("created", "replied"):
+            made.append(str(e.get("id")))
+    return made
+
+
+def _sha(lines: list[str]) -> str:
+    """The hash of `lines` as the log holds them, one a line."""
+    return hashlib.sha256("".join(f"{line}\n" for line in lines).encode("utf-8")).hexdigest()
+
+
+def _rewrite(p: Path, lines: list[str]) -> None:
+    """Write the log as `lines`, in place, so the lock held on it keeps holding, and flushed to the disk."""
+    with p.open("r+" if p.is_file() else "w", encoding="utf-8") as fh:
+        fh.seek(0)
+        fh.write("".join(f"{line}\n" for line in lines))
+        fh.truncate()
+        fh.flush()
+        os.fsync(fh.fileno())
 
 
 def restore(root: Path, events: list[dict[str, Any]]) -> list[str]:
@@ -151,7 +236,7 @@ def _look(given: Any) -> dict[str, Any]:
 def _annotation(event: dict[str, Any]) -> Annotation:
     """One `created` or `replied` event as an annotation.
 
-    `anchor` is one of two shapes under one name: the text triple every annotation carries, or -- on a note against a page of a cited work -- a page anchor carrying `kind` beside that triple (plan 0.13 item 2). The triple is read in both cases; the page anchor only when `kind` says so, since `Selector.from_dict` would otherwise swallow the page fields without a word.
+    `anchor` is one of two shapes under one name: the text triple every annotation carries, or -- on a note against a page of a work's PDF -- a page anchor carrying `kind` beside that triple (plan 0.13 item 2). The triple is read in both cases; the page anchor only when `kind` says so, since `Selector.from_dict` would otherwise swallow the page fields without a word.
     """
     anchor = event.get("anchor")
     return Annotation(
@@ -178,7 +263,17 @@ def _annotation(event: dict[str, Any]) -> Annotation:
         origin=dict(event["origin"]) if isinstance(event.get("origin"), dict) else None,
         gap=_gap(event.get("gap")),
         context=dict(event["context"]) if isinstance(event.get("context"), dict) else None,
+        purpose=str(event["purpose"]) if event.get("purpose") in PURPOSES else None,
+        node=str(event["node"]) if _names_a_node(event) else None,
     )
+
+
+def _names_a_node(event: dict[str, Any]) -> bool:
+    """Whether a created event is a mark to digest naming the stub it locates by a node's id."""
+    from loom.evidence.subjects import is_node
+
+    node = event.get("node")
+    return event.get("purpose") in PURPOSES and is_node(node)
 
 
 def _gap(given: Any) -> list[float] | None:
@@ -218,6 +313,13 @@ def replay(root: Path) -> tuple[list[Record], list[str]]:
             # a type the quilt no longer lists is not a problem: the annotation keeps its look and reads as untyped
             if event.get("type") is not None and not isinstance(event.get("type"), str):
                 problems.append(f"{LOG}:{n}: its type is not a type's id")
+            # a purpose this loom does not know reads as a note, and is said, so nothing waits on it unseen
+            if event.get("purpose") is not None and event.get("purpose") not in PURPOSES:
+                problems.append(
+                    f"{LOG}:{n}: {event.get('purpose')!r} is not a purpose loom knows, so it reads as a note"
+                )
+            if event.get("node") is not None and not _names_a_node(event):
+                problems.append(f"{LOG}:{n}: only a mark to digest names a node, by its id, so it names none")
             if not ID.match(ann.id):
                 problems.append(f"{LOG}:{n}: {ann.id!r} is not an annotation id")
             if kind == "replied" and str(event.get("reply_to") or "") not in index:

@@ -1,20 +1,22 @@
 // Reading mode as items in two panes: what a pane opens on, its tabs and its views, the divider between the panes, focus, the arrangement the URL keeps, and what gives way in a narrow window. Grouped by the principle each rule serves, and each test named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
-import { beside, openHere, pane, prefs, scrollPane, viewMenu } from '../workspace';
-import { serve, servePapers } from '../manifest';
+import { beside, openHere, pane, prefs, scrollPane, settings, viewMenu } from '../workspace';
+import { serveWork } from '../works';
+import { PDF, serve } from '../manifest';
 
 /** Advertise a write API that annotates, so a document's and a node's bar carries the tools. */
 async function writes(page: Page) {
 	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: ['annotate'], token: 't' } }));
 }
 
-/** Serve the fixture with Kre99 and Har77 filed, so both are works with pages. */
-async function withPapers(page: Page) {
-	await serve(page, (m) => {
-		m.references.Kre99.artifacts.pdf = true;
-		m.references.Har77.artifacts.pdf = true;
-	});
-	await servePapers(page);
+/** The fixture's project PDF, and a second one this file serves beside it, by their addresses in the viewer. */
+const FIG = '/file/drafting/figures/fig.pdf';
+const OTHER = '/file/notes/other.pdf';
+
+/** Serve the fixture with a second project PDF, and both PDFs' bytes, so each is an item with pages. */
+async function withPdfs(page: Page) {
+	await serve(page, (m) => m.files.push({ path: 'notes/other.pdf', kind: 'pdf', bytes: PDF.length, denied: null }));
+	await page.route(/\/_files\/(drafting\/figures\/fig|notes\/other)\.pdf$/, (route) => route.fulfill({ body: PDF, contentType: 'application/pdf' }));
 }
 
 const tabs = (page: Page, index: number) => pane(page, index).getByTestId('item-tab');
@@ -38,9 +40,9 @@ test.describe('V1 · open on the thing itself', () => {
 	});
 
 	test('a work opens on the paper', async ({ page }) => {
-		await withPapers(page);
 		await page.setViewportSize({ width: 1440, height: 900 });
-		await page.goto('/library/Kre99');
+		await serveWork(page, 'sy-0099-ref');
+		await page.goto('/library/sy-0099-ref');
 		const paper = pane(page, 0).getByTestId('pdf-doc');
 		await expect(paper).toBeVisible();
 		const box = (await paper.boundingBox())!;
@@ -48,8 +50,7 @@ test.describe('V1 · open on the thing itself', () => {
 	});
 
 	test("a pane head carries its tabs and nothing else, and its toolbar leads with its item's views", async ({ page }) => {
-		await withPapers(page);
-		await page.goto('/master/drafting/main' + beside('/library/Kre99'));
+		await page.goto('/master/drafting/main' + beside('/session/s-2026-09-16-p9z37z'));
 		for (const [i, views] of [
 			[0, false],
 			[1, true]
@@ -61,14 +62,14 @@ test.describe('V1 · open on the thing itself', () => {
 			expect(kinds).toEqual(kinds.map(() => 'item-tab'));
 			// the row that reads, the toolbar's first
 			const first = await controls(page, i).evaluate((t) => t.firstElementChild?.firstElementChild?.getAttribute('aria-label') ?? '');
-			if (views) expect(first).toBe('views of Kre99');
+			if (views) expect(first).toMatch(/^views of /);
 			else expect(first).not.toMatch(/^views of /);
 		}
 	});
 
 	test('every pane draws its own toolbar, for every kind, and no rail spans the panes', async ({ page }) => {
-		await withPapers(page);
-		for (const at of ['/master/drafting/main' + beside('/node/sy-0003'), '/library/Kre99' + beside('/context/sy-0003'), '/canon/widgets-v1' + beside('/session/s-2026-09-16-p9z37z')]) {
+		await withPdfs(page);
+		for (const at of ['/master/drafting/main' + beside('/node/sy-0003'), FIG + beside('/context/sy-0003'), '/canon/widgets-v1' + beside('/session/s-2026-09-16-p9z37z')]) {
 			await page.goto(at);
 			await expect(pane(page, 1)).toBeVisible();
 			await expect(pane(page, 0)).toHaveClass(/focused/);
@@ -96,13 +97,13 @@ test.describe('V2 · say it once, in the place that governs it', () => {
 	});
 
 	test("a pane's controls are drawn once in it, and act on it alone", async ({ page }) => {
-		await withPapers(page);
-		await page.goto('/library/Kre99' + beside('/library/Har77'));
+		await withPdfs(page);
+		await page.goto(FIG + beside(OTHER));
 		await expect(pane(page, 0).getByTestId('pdf-doc')).toBeVisible();
 		await expect(pane(page, 1).getByTestId('pdf-doc')).toBeVisible();
 		for (const i of [0, 1]) await expect(pane(page, i).getByRole('textbox', { name: /^Zoom/ })).toHaveCount(1);
-		await expect(pane(page, 0).getByRole('textbox', { name: /^Zoom/ })).toHaveAccessibleName(/Kre99/);
-		await expect(pane(page, 1).getByRole('textbox', { name: /^Zoom/ })).toHaveAccessibleName(/Har77/);
+		await expect(pane(page, 0).getByRole('textbox', { name: /^Zoom/ })).toHaveAccessibleName(/fig\.pdf/);
+		await expect(pane(page, 1).getByRole('textbox', { name: /^Zoom/ })).toHaveAccessibleName(/other\.pdf/);
 	});
 });
 
@@ -118,8 +119,8 @@ test.describe('V3 · claim only what is known', () => {
 
 test.describe('V4 · name the question', () => {
 	test("compare is asked of a draft's history, not of the two panes", async ({ page }) => {
-		await withPapers(page);
-		await page.goto('/library/Kre99' + beside('/master/drafting/main'));
+		await withPdfs(page);
+		await page.goto(FIG + beside('/master/drafting/main'));
 		await expect(controls(page, 0)).toBeVisible();
 		// no control compares whatever two panes hold; a draft's history says what it compares with
 		await expect(page.getByTestId('pane-compare')).toHaveCount(0);
@@ -128,12 +129,12 @@ test.describe('V4 · name the question', () => {
 	});
 
 	test('every control names its target', async ({ page }) => {
-		await withPapers(page);
+		await withPdfs(page);
 		await writes(page);
 		for (const [at, name] of [
 			['/master/drafting/main', 'main.tex'],
 			['/node/sy-0003', 'Theorem'],
-			['/library/Kre99', 'Kre99']
+			[FIG, 'fig.pdf']
 		]) {
 			await page.goto(at);
 			await expect(controls(page, 0)).toHaveAttribute('aria-label', `controls for ${name === 'Theorem' ? 'Theorem 2.1' : name}`);
@@ -156,11 +157,12 @@ test.describe('V4 · name the question', () => {
 
 test.describe('V5 · following a connection must not cost the thing you followed it from', () => {
 	test('a link opens beside and leaves its source rendered', async ({ page }) => {
-		await page.goto('/master/drafting/main');
+		// a node's reference to another, which no open document holds
+		await page.goto('/node/sy-0002');
 		await page.waitForSelector('[data-pane="0"] .fragment mjx-container');
-		await pane(page, 0).locator('span.cite[data-target="Kre99-thm-2.1"] a').first().click();
+		await pane(page, 0).locator('a.ref[data-target="sy-0001"]').first().click();
 		await expect(pane(page, 1)).toBeVisible();
-		await expect(tabs(page, 1)).toContainText(['Kre99 · Thm 2.1']);
+		await expect.poll(() => new URL(page.url()).searchParams.get('beside')).toBe('/node/sy-0001');
 		await expect(pane(page, 0).locator('.fragment').first()).toBeVisible();
 		await expect(tabs(page, 0)).toHaveCount(1);
 	});
@@ -175,7 +177,7 @@ test.describe('V5 · following a connection must not cost the thing you followed
 	test('the preview is not clipped', async ({ page }) => {
 		await page.goto('/master/drafting/main' + beside('/node/sy-0003'));
 		await page.waitForSelector('[data-pane="0"] .fragment mjx-container');
-		await pane(page, 0).locator('span.cite[data-target="Kre99-thm-2.1"] a').first().hover();
+		await pane(page, 0).locator('a.ref[data-target="sy-0001"]').first().hover();
 		const card = page.getByTestId('link-preview');
 		await expect(card).toBeVisible();
 		// it stands against the window, in no pane, so no pane's edge or divider can cut it
@@ -183,19 +185,19 @@ test.describe('V5 · following a connection must not cost the thing you followed
 	});
 
 	test('open here and a click differ only in pane', async ({ page }) => {
-		await page.goto('/master/drafting/main');
+		await page.goto('/node/sy-0002');
 		await page.waitForSelector('[data-pane="0"] .fragment mjx-container');
-		const link = pane(page, 0).locator('span.cite[data-target="Kre99-thm-2.1"] a').first();
+		const link = pane(page, 0).locator('a.ref[data-target="sy-0001"]').first();
 		await link.hover();
 		await page.getByTestId('preview-open-here').click();
 		await expect(pane(page, 1)).toHaveCount(0);
 		await expect(tabs(page, 0)).toHaveCount(2);
 		const here = new URL(page.url()).pathname;
-		expect(here).toBe('/node/Kre99-thm-2.1');
+		expect(here).toBe('/node/sy-0001');
 
-		await page.goto('/master/drafting/main');
+		await page.goto('/node/sy-0002');
 		await page.waitForSelector('[data-pane="0"] .fragment mjx-container');
-		await pane(page, 0).locator('span.cite[data-target="Kre99-thm-2.1"] a').first().click();
+		await pane(page, 0).locator('a.ref[data-target="sy-0001"]').first().click();
 		await expect(pane(page, 1)).toBeVisible();
 		await expect.poll(() => new URL(page.url()).searchParams.get('beside')).toBe(here);
 	});
@@ -348,43 +350,33 @@ test.describe('the tab strip', () => {
 	const open = (page: Page, id: string) => openHere(page, `/node/${id}`);
 
 	test("each pane's toolbar begins with its own item's views", async ({ page }) => {
-		await withPapers(page);
-		// a document beside a paper: the paper's pane carries Text · Info though the document's pane is focused, and the document's carries none
-		await page.goto('/master/drafting/main' + beside('/library/Kre99'));
+		// a document beside a session: the session's pane carries Transcript · What it did though the document's pane is focused, and the document's carries none
+		await page.goto('/master/drafting/main' + beside('/session/s-2026-09-16-p9z37z'));
 		await expect(pane(page, 0)).toHaveClass(/focused/);
 		await expect(pane(page, 0).getByRole('group', { name: /^views of / })).toHaveCount(0);
-		const views = pane(page, 1).getByRole('group', { name: 'views of Kre99' });
-		await expect(views.getByRole('button')).toHaveText(['Text', 'Info']);
+		const views = pane(page, 1).getByRole('group', { name: /^views of / });
+		await expect(views.getByRole('button')).toHaveText(['Transcript', 'What it did']);
 		const bar = (await controls(page, 1).boundingBox())!;
 		const box = (await views.boundingBox())!;
 		expect(Math.abs(box.x - bar.x), "the views start at the toolbar's left edge, px").toBeLessThanOrEqual(1);
 		// the current view is underlined in the accent, the others are links
-		const paper = pane(page, 1).getByTestId('tab-paper');
-		await expect(paper).toHaveAttribute('aria-pressed', 'true');
-		expect(await paper.evaluate((b) => getComputedStyle(b).boxShadow)).toContain('inset');
-		await expect(pane(page, 1).getByTestId('tab-info')).toHaveCSS('box-shadow', 'none');
+		const chat = pane(page, 1).getByTestId('tab-chat');
+		await expect(chat).toHaveAttribute('aria-pressed', 'true');
+		expect(await chat.evaluate((b) => getComputedStyle(b).boxShadow)).toContain('inset');
+		await expect(pane(page, 1).getByTestId('tab-did')).toHaveCSS('box-shadow', 'none');
 		// a click switches the view in its own pane, which takes focus, and the address follows
-		await pane(page, 1).getByTestId('tab-info').click();
-		await expect(pane(page, 1).getByTestId('tab-info')).toHaveAttribute('aria-pressed', 'true');
+		await pane(page, 1).getByTestId('tab-did').click();
+		await expect(pane(page, 1).getByTestId('tab-did')).toHaveAttribute('aria-pressed', 'true');
 		await expect(pane(page, 1)).toHaveClass(/focused/);
-		await expect.poll(() => new URL(page.url()).searchParams.get('beside')).toContain('view=info');
+		await expect.poll(() => new URL(page.url()).searchParams.get('beside')).toContain('view=did');
 
-		// two papers: each toolbar its own item's views, switched apart
-		await page.goto('/library/Kre99' + beside('/library/Har77'));
-		await expect(pane(page, 0).getByRole('group', { name: 'views of Kre99' })).toBeVisible();
-		await expect(pane(page, 1).getByRole('group', { name: 'views of Har77' })).toBeVisible();
-		await pane(page, 1).getByTestId('tab-info').click();
-		await expect(pane(page, 1).getByTestId('tab-info')).toHaveAttribute('aria-pressed', 'true');
-		await expect(pane(page, 0).getByTestId('tab-paper')).toHaveAttribute('aria-pressed', 'true');
-
-		// a session beside a document: Transcript · What it did, in the unfocused pane
-		await page.goto('/master/drafting/main' + beside('/session/s-2026-09-16-p9z37z'));
-		await expect(pane(page, 0)).toHaveClass(/focused/);
-		await expect(pane(page, 1).getByRole('group', { name: /^views of / }).getByRole('button')).toHaveText(['Transcript', 'What it did']);
-		await expect(pane(page, 1).getByTestId('tab-chat')).toHaveAttribute('aria-pressed', 'true');
+		// a PDF has one reading, and no views
+		await withPdfs(page);
+		await page.goto(FIG);
+		await expect(pane(page, 0).getByRole('group', { name: /^views of / })).toHaveCount(0);
 	});
 
-	test('tabs are 148px, narrow evenly, then scroll with the active tab in view', async ({ page }) => {
+	test('tabs are 180px whatever their names, narrow evenly, then scroll with the active tab in view', async ({ page }) => {
 		// the right pane is two fifths of the workspace, about 450px, so ten tabs pass the floor
 		await prefs(page, { divider: 0.6 });
 		await page.setViewportSize({ width: 1440, height: 900 });
@@ -394,23 +386,23 @@ test.describe('the tab strip', () => {
 		const row = pane(page, 1).getByRole('tablist');
 		const floor = 45; // 1.5 times the strip's 30px
 
-		// two tabs have room, and are 148px
+		// two tabs have room, and are 180px, their names of different lengths
 		await open(page, 'sy-0003');
 		await expect(tabs(page, 1)).toHaveCount(2);
-		expect(await widths(page, 1)).toEqual([148, 148]);
+		expect(await widths(page, 1)).toEqual([180, 180]);
 
 		// four do not: each narrows by the same amount, and together they fill the strip
 		for (const id of ['sy-0006', 'sy-0007']) await open(page, id);
 		await expect(tabs(page, 1)).toHaveCount(4);
 		const four = await widths(page, 1);
 		expect(Math.max(...four) - Math.min(...four), 'the spread of the widths, px').toBeLessThanOrEqual(1);
-		expect(four[0]).toBeLessThan(148);
+		expect(four[0]).toBeLessThan(180);
 		expect(four[0]).toBeGreaterThan(floor);
 		const room = await row.evaluate((r) => ({ scroll: r.scrollWidth, client: r.clientWidth }));
 		expect(room.scroll).toBeLessThanOrEqual(room.client);
 
 		// twelve are at the floor, and the row scrolls with the newest, the active tab, in view
-		for (const id of ['sy-0008', 'sy-0009', 'sy-000A', 'sy-000B', 'sy-000C', 'sy-000D', 'sy-000E', 'sy-999A']) await open(page, id);
+		for (const id of ['sy-0008', 'sy-0009', 'sy-000A', 'sy-000B', 'sy-000C', 'sy-000D', 'sy-000E', 'sy-999D']) await open(page, id);
 		await expect(tabs(page, 1)).toHaveCount(12);
 		for (const w of await widths(page, 1)) expect(w).toBeCloseTo(floor, 0);
 		const inView = () =>
@@ -439,17 +431,32 @@ test.describe('the tab strip', () => {
 		await expect(active.getByRole('tab')).toHaveAttribute('title', /Lemma/);
 	});
 
+	test("the Library's tabs are the same width as a pane's, Works and each work's alike, the title cut with an ellipsis and whole on hover", async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/library?fixture=round6');
+		const works = page.getByTestId('library-tab-works');
+		await expect(works).toBeVisible();
+		await page.getByTestId('work-row').filter({ hasText: 'Widgets and their bounds' }).first().click();
+		const work = page.getByTestId('library-tab');
+		await expect(work).toHaveCount(1);
+		for (const tab of [works, work]) expect((await tab.boundingBox())!.width).toBe(180);
+		await expect(work).toHaveAttribute('title', 'Widgets and their bounds');
+		const name = work.locator('.name');
+		await expect(name).toHaveCSS('text-overflow', 'ellipsis');
+		await expect(name).toHaveCSS('white-space', 'nowrap');
+	});
+
 	test('past the floor the tabs scroll, and the views beneath them keep their place', async ({ page }) => {
-		await withPapers(page);
-		// the right pane as narrow as a work lets it be, 420px, so ten tabs pass the floor
+		await withPdfs(page);
+		// the right pane as narrow as a PDF beside it lets it be, 420px, so ten tabs pass the floor
 		await prefs(page, { divider: 0.8 });
 		await page.setViewportSize({ width: 1440, height: 900 });
-		await page.goto('/node/sy-0001' + beside('/library/Kre99'));
+		await page.goto(FIG + beside('/session/s-2026-09-16-p9z37z'));
 		await tabs(page, 1).first().getByRole('tab').click();
 		for (const id of ['sy-0003', 'sy-0006', 'sy-0007', 'sy-0008', 'sy-0009', 'sy-000A', 'sy-000B', 'sy-000C', 'sy-000D']) await open(page, id);
-		// the paper brought forward as a link does it, which reveals its tab; a click on a tab still scrolling never settles on the runner
-		await openHere(page, '/library/Kre99');
-		const views = pane(page, 1).getByRole('group', { name: 'views of Kre99' });
+		// the session brought forward as a link does it, which reveals its tab; a click on a tab still scrolling never settles on the runner
+		await openHere(page, '/session/s-2026-09-16-p9z37z');
+		const views = pane(page, 1).getByRole('group', { name: /^views of / });
 		await expect(views).toBeVisible();
 		const tablist = pane(page, 1).getByRole('tablist');
 		const box = (await views.boundingBox())!;
@@ -552,40 +559,37 @@ test.describe('the divider', () => {
 });
 
 test.describe('a narrow window', () => {
-	test('the column goes first, folded to its rail, and the stored choice is not rewritten', async ({ page }) => {
-		await serve(page, (m) => (m.references.Kre99.artifacts.pdf = true));
+	test('the column goes first, folded to its strip of the four views, and the stored choice is not rewritten', async ({ page }) => {
+		await withPdfs(page);
 		await page.setViewportSize({ width: 1100, height: 800 });
-		await page.goto('/library/Kre99');
+		await page.goto(FIG);
 		await expect(page.locator('.panel.away')).toHaveCount(1);
-		expect((await page.getByTestId('column').boundingBox())!.width).toBeLessThanOrEqual(45);
-		// what must stay in reach stays: unfold and the session's dot
+		expect((await page.getByTestId('column').boundingBox())!.width).toBeLessThanOrEqual(61);
+		// what must stay in reach stays: unfold, the four views and the session's dot
+		for (const v of ['docs', 'library', 'web', 'review']) await expect(page.getByTestId(`strip-${v}`)).toBeVisible();
 		await expect(page.getByTestId('panel-fold')).toBeVisible();
 		await expect(page.getByTestId('session-footer')).toBeVisible();
 		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('arras.prefs') ?? '{}').panel)).not.toBe(false);
 	});
 
-	test("a narrow pane's toolbar keeps its views and view whole, its bar giving way first", async ({ page }) => {
-		await serve(page, (m) => (m.references.Kre99.artifacts.pdf = true));
+	test("a narrow pane's toolbar keeps its view whole, its bar giving way first", async ({ page }) => {
+		await withPdfs(page);
 		await page.setViewportSize({ width: 760, height: 800 });
-		await page.goto('/library/Kre99');
-		const bar = (await controls(page, 0).boundingBox())!;
-		const views = (await pane(page, 0).getByRole('group', { name: 'views of Kre99' }).boundingBox())!;
-		expect(Math.abs(views.x - bar.x), "the views start at the toolbar's left edge, px").toBeLessThanOrEqual(1);
+		await page.goto(FIG);
 		await expect(pane(page, 0).getByTestId('toolbar-view')).toBeInViewport({ ratio: 1 });
 		await expect(page.getByTestId('zoom-at')).toBeVisible();
 	});
 
 	test("below the two-pane width one strip holds both panes' tabs, and the shown pane's toolbar leads with its views", async ({ page }) => {
-		await withPapers(page);
 		await page.setViewportSize({ width: 640, height: 800 });
-		await page.goto('/master/drafting/main' + beside('/library/Kre99'));
+		await page.goto('/master/drafting/main' + beside('/session/s-2026-09-16-p9z37z'));
 		const strip = page.getByTestId('narrow-strip');
 		await expect(strip).toBeVisible();
 		await expect(strip.getByTestId('item-tab')).toHaveCount(2);
 		await expect(strip.getByRole('group', { name: /^views of / })).toHaveCount(0);
 		await strip.getByTestId('pane-head-1').getByRole('tab').click();
-		const views = controls(page, 1).getByRole('group', { name: 'views of Kre99' });
-		await expect(views.getByRole('button')).toHaveText(['Text', 'Info']);
+		const views = controls(page, 1).getByRole('group', { name: /^views of / });
+		await expect(views.getByRole('button')).toHaveText(['Transcript', 'What it did']);
 		const bar = (await controls(page, 1).boundingBox())!;
 		expect(Math.abs((await views.boundingBox())!.x - bar.x)).toBeLessThanOrEqual(1);
 	});
@@ -651,7 +655,7 @@ test.describe('the toolbar', () => {
 		// the stepper once the document has said what it holds: its annotations and its pending changes
 		await expect(bar.getByTestId('step-prev')).toBeVisible();
 		const order = await bar.locator('button').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.testid));
-		expect(order).toEqual(['toggle-annotation-row', 'changes-toggle', 'step-prev', 'step-next', 'open-comments', 'open-notes', 'toolbar-history', 'toolbar-view', 'tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo']);
+		expect(order).toEqual(['toggle-annotation-row', 'changes-toggle', 'step-prev', 'step-next', 'open-comments', 'open-notes', 'text-smaller', 'text-larger', 'toolbar-history', 'toolbar-view', 'tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo']);
 		await expect(bar.getByTestId('annotation-row').getByTestId('tool-annotate')).toBeVisible();
 		await expect(page.getByTestId('toolbar-view')).toHaveCSS('border-left-style', 'solid');
 		await expect(page.getByTestId('toolbar-view')).toHaveAttribute('aria-label', 'view menu for main.tex');
@@ -689,7 +693,7 @@ test.describe('the toolbar', () => {
 		expect(reading).not.toContain('tool-annotate');
 		expect(reading).not.toContain('toggle-annotation-row');
 		await expect(controls(page, 0).getByTestId('annotation-row')).toHaveCount(0);
-		expect(reading.slice(-3)).toEqual(['open-comments', 'open-notes', 'toolbar-view']);
+		expect(reading.slice(-5)).toEqual(['open-comments', 'open-notes', 'text-smaller', 'text-larger', 'toolbar-view']);
 		await expect(page.getByTestId('toolbar-view')).toHaveCSS('border-left-style', 'solid');
 	});
 
@@ -726,37 +730,38 @@ test.describe('the toolbar', () => {
 		await expect(pane(page, 1).getByTestId('context')).toBeVisible();
 	});
 
-	test('a paper shows settled annotations from its toolbar, and greys its page tools and its PDF off the Text view', async ({ page }) => {
-		await withPapers(page);
-		await page.goto('/library/Kre99');
+	test('a paper shows settled annotations from its toolbar', async ({ page }) => {
+		await serveWork(page, 'sy-0099-ref');
+		await page.goto('/library/sy-0099-ref');
 		await expect(page.getByTestId('pdf-doc')).toBeVisible();
 		await viewMenu(page);
 		await expect(page.getByTestId('toolbar-menu').locator('[role^="menuitem"]')).toHaveText(['show settled annotations', 'open the PDF', 'turn annotations off']);
-		await expect(page.getByTestId('open-pdf')).toHaveAttribute('href', /paper\.pdf$/);
+		await expect(page.getByTestId('open-pdf')).toHaveAttribute('href', /\/_api\/library\/pdf\/[0-9a-f]{64}$/);
 		await page.getByTestId('toggle-settled').click();
 		await expect(page.getByTestId('marked-doc')).toHaveClass(/show-settled/);
 		await expect(page.getByTestId('toolbar-view-on')).toBeVisible();
-		// off the paper: drawn and greyed, the PDF with its reason
-		await page.getByTestId('tab-info').click();
-		await expect(page.getByTestId('zoom-fit')).toBeDisabled();
-		await viewMenu(page);
-		await expect(page.getByTestId('open-pdf')).toHaveAttribute('aria-disabled', 'true');
-		await expect(page.getByTestId('open-pdf')).toHaveAttribute('title', /Text view/);
 	});
 
-	test('a paper with no readable copy greys its Text view and opens on Info, which reads its digest', async ({ page }) => {
-		await page.goto('/library/Kre99');
-		const paper = pane(page, 0).getByTestId('tab-paper');
-		await expect(paper).toBeDisabled();
-		await expect(paper).toHaveAttribute('title', 'No copy of this work is on file');
-		await expect(pane(page, 0).getByTestId('tab-info')).toHaveAttribute('aria-pressed', 'true');
-		// with no copy to read, the digest is read here as one text, folded beneath the results' cards
-		await pane(page, 0).getByTestId('digest-text').locator('summary').click();
-		await expect(pane(page, 0).getByTestId('work-digest').locator('.env').first()).toBeVisible();
+	test('a work where no library is served says so, and greys its page tools and its PDF', async ({ page }) => {
+		await page.goto('/library/sy-0099-ref');
+		await expect(pane(page, 0).getByTestId('work-unread')).toHaveText('This loom does not serve that yet.');
 		await expect.poll(() => new URL(page.url()).search).toBe('');
 		await expect(page.getByTestId('zoom-fit')).toBeDisabled();
 		await viewMenu(page);
-		await expect(page.getByTestId('open-pdf')).toHaveAttribute('title', 'No copy of this work is on file');
+		await expect(page.getByTestId('open-pdf')).toHaveAttribute('title', 'No PDF of this work is open');
+	});
+
+	test("a work the library no longer holds says so, its tab naming it a deleted work and its toolbar holding view and the pane's own line alone", async ({ page }) => {
+		await serveWork(page, 'sy-0098-ref');
+		await page.goto('/library/sy-0099-ref');
+		await expect(pane(page, 0).getByTestId('work-unread')).toHaveText('This work is no longer in the library.');
+		// its tab says what it is, where the library no longer gives it a name
+		await expect(pane(page, 0).getByTestId('item-tab').getByRole('tab')).toHaveText('a deleted work');
+		const bar = pane(page, 0).getByTestId('item-controls');
+		await expect(bar.getByTestId('zoom-fit')).toHaveCount(0);
+		await expect(bar.getByRole('button')).toHaveText(['view']);
+		await viewMenu(page);
+		await expect(page.getByTestId('toolbar-menu').locator('[role^="menuitem"]')).toHaveText(['turn annotations off']);
 	});
 
 	test("a landmark, a context and a session draw a toolbar too: their views, and view with the pane's own line", async ({ page }) => {
@@ -787,5 +792,52 @@ test.describe('the toolbar', () => {
 		await expect(page.getByTestId('toggle-hide-notes')).toHaveText('turn annotations on');
 		await page.getByTestId('toggle-hide-notes').click();
 		await expect(mark(0)).not.toHaveClass(/hidden/);
+	});
+});
+
+test.describe('each open document sizes on its own', () => {
+	/** A pane's zoom, as its box says it. */
+	const zoom = (page: Page, index: number) => pane(page, index).getByTestId('zoom-at');
+	/** The text size a pane's draft is drawn at, px. */
+	const text = (page: Page, index: number) => pane(page, index).locator('.fragment').first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+
+	test("zooming one PDF zooms no other, and its address keeps its zoom through a reload", async ({ page }) => {
+		await withPdfs(page);
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto(FIG + beside(OTHER));
+		await expect(zoom(page, 1)).toHaveValue(/%$/);
+		const right = await zoom(page, 1).inputValue();
+		await pane(page, 0).locator('canvas').first().waitFor();
+		await zoom(page, 0).fill('180');
+		await zoom(page, 0).press('Enter');
+		await expect(zoom(page, 0)).toHaveValue('180%');
+		await expect(zoom(page, 1)).toHaveValue(right);
+		await expect.poll(() => new URL(page.url()).searchParams.get('size')).toBe('1.8');
+		await page.reload();
+		await expect(zoom(page, 0)).toHaveValue('180%');
+	});
+
+	test("an HTML draft's text is sized from its toolbar, apart from the draft beside it, and Settings' size moves no draft open but starts the next", async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/master/drafting/main' + beside('/master/drafting/talk'));
+		await expect.poll(() => text(page, 1)).toBe(16);
+		await pane(page, 0).locator('.fragment').first().click();
+		const size = controls(page, 0).getByTestId('text-size');
+		await expect(size.getByTestId('text-size-at')).toHaveValue('16 px');
+		await size.getByTestId('text-larger').click();
+		await expect(size.getByTestId('text-size-at')).toHaveValue('17 px');
+		await expect.poll(() => text(page, 0)).toBe(17);
+		expect(await text(page, 1)).toBe(16);
+		await expect.poll(() => new URL(page.url()).searchParams.get('size')).toBe('17');
+		// Settings' size is where a draft opened next starts, and resizes neither open draft
+		await settings(page, 'appearance');
+		await page.getByTestId('size-l').click();
+		await page.keyboard.press('Escape');
+		expect(await text(page, 0)).toBe(17);
+		expect(await text(page, 1)).toBe(16);
+		// a reload keeps the size the address carries; the draft beside it, which carries none, opens at the start Settings set
+		await page.reload();
+		await expect.poll(() => text(page, 0)).toBe(17);
+		await expect.poll(() => text(page, 1)).toBe(19);
 	});
 });

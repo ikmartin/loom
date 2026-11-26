@@ -8,16 +8,16 @@ import { anchorId, canonStem, canonUrl, keyFromParam, masterName, masterUrl, nod
 import { route } from '$lib/paths';
 import { placeParams, readKeys, type WorkLink } from '$lib/worklink';
 
-export type ItemKind = 'document' | 'work' | 'node' | 'context' | 'session' | 'page' | 'file' | 'pdf';
+export type ItemKind = 'document' | 'work' | 'node' | 'context' | 'session' | 'page' | 'file' | 'pdf' | 'notes';
 
 /** A place on a work's page: the work-link keys without the work's identifier, which the item already names. */
 export type Place = Omit<WorkLink, 'id'>;
 
 export interface Item {
 	kind: ItemKind;
-	/** A document's path, a work's citekey, a node's key, a session's id, a project file's path; a compiled PDF's is its document's. */
+	/** A document's path, a work's reference, a node's key, a session's id, a project file's path; a compiled PDF's is its document's. */
 	id: string;
-	/** An internal view: a work's `info`; absent means the first. */
+	/** An internal view: a session's `did`; absent means the first. */
 	view?: string;
 	/** An element to scroll to, by its published id: a document's section or result, a node's proof, a file's heading; a PDF file's `page=N`. */
 	anchor?: string;
@@ -27,6 +27,8 @@ export interface Item {
 	note?: string;
 	/** A document's review and incoming comparisons, which the review page opens by URL (`review`, `cause`, `incoming`). */
 	params?: Record<string, string>;
+	/** The size the reader gave this open item, kept with it in its address: a PDF's zoom (a document's compiled PDF, a project PDF, a work's paper), an HTML draft's text size in px. Absent until one is given, and the item is read at the starting size for its kind. */
+	size?: number;
 	/** Stamped by the workspace each time the item is opened or revealed, so its renderer goes to the place again even when the place is unchanged. */
 	seq?: number;
 }
@@ -79,6 +81,8 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 	const anchor = url.hash ? safe(url.hash.slice(1)) : undefined;
 	const query = url.searchParams;
 	const note = query.get('note') || undefined;
+	const n = Number(query.get('size') ?? '');
+	const size = query.has('size') && Number.isFinite(n) && n > 0 ? { size: n } : {};
 	switch (head) {
 		case 'master':
 		case 'canon': {
@@ -93,13 +97,12 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 				const v = query.get(k);
 				if (v) params[k] = v;
 			}
-			return { kind: 'document', id, ...(anchor ? { anchor } : {}), ...(note ? { note } : {}), ...(Object.keys(params).length ? { params } : {}) };
+			return { kind: 'document', id, ...(anchor ? { anchor } : {}), ...(note ? { note } : {}), ...(Object.keys(params).length ? { params } : {}), ...size };
 		}
 		case 'library': {
 			const place = readKeys({ id: '' }, url.search.slice(1)) as WorkLink;
 			const { id: _drop, ...keys } = place;
-			const view = query.get('view') || undefined;
-			return { kind: 'work', id: safe(tail), ...(view ? { view } : {}), ...(Object.keys(keys).length ? { place: keys } : {}) };
+			return { kind: 'work', id: safe(tail), ...(Object.keys(keys).length ? { place: keys } : {}), ...size };
 		}
 		case 'node':
 			return { kind: 'node', id: keyFromParam(tail), ...(anchor ? { anchor } : {}), ...(note ? { note } : {}) };
@@ -110,10 +113,12 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 		case 'page':
 			return { kind: 'page', id: safe(tail) };
 		case 'file':
-			return { kind: 'file', id: tail.split('/').map(safe).join('/'), ...(anchor ? { anchor } : {}) };
+			return { kind: 'file', id: tail.split('/').map(safe).join('/'), ...(anchor ? { anchor } : {}), ...size };
+		case 'notes':
+			return { kind: 'notes', id: 'all' };
 		case 'pdf': {
 			const at = tail.split('/').map(safe).join('/');
-			return { kind: 'pdf', id: (m?.masters ?? []).find((d) => masterName(d.path) === at)?.path ?? at, ...(anchor ? { anchor } : {}) };
+			return { kind: 'pdf', id: (m?.masters ?? []).find((d) => masterName(d.path) === at)?.path ?? at, ...(anchor ? { anchor } : {}), ...size };
 		}
 		default:
 			return null;
@@ -137,17 +142,19 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
  */
 export function pathFor(m: Documents | null, item: Item): string {
 	const hash = item.anchor ? '#' + item.anchor : '';
+	const sized = item.size ? '?size=' + item.size : '';
 	switch (item.kind) {
 		case 'document': {
 			const at = isLandmark(m, item.id) ? canonUrl(item.id) : masterUrl(item.id);
 			const q = new URLSearchParams();
 			for (const k of DOC_PARAMS) if (item.params?.[k]) q.set(k, item.params[k]);
 			if (item.note) q.set('note', item.note);
+			if (item.size) q.set('size', String(item.size));
 			return at + (q.size ? '?' + q : '') + hash;
 		}
 		case 'work': {
 			const q = placeParams(item.place ?? {});
-			if (item.view) q.set('view', item.view);
+			if (item.size) q.set('size', String(item.size));
 			return workUrl(item.id) + (q.size ? '?' + q : '');
 		}
 		case 'node':
@@ -159,9 +166,11 @@ export function pathFor(m: Documents | null, item: Item): string {
 		case 'page':
 			return route('/page/' + encodeURIComponent(item.id));
 		case 'file':
-			return fileRoute(item.id) + hash;
+			return fileRoute(item.id) + sized + hash;
 		case 'pdf':
-			return pdfRoute(item.id) + hash;
+			return pdfRoute(item.id) + sized + hash;
+		case 'notes':
+			return route('/notes');
 	}
 }
 

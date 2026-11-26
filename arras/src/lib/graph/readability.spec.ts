@@ -47,7 +47,7 @@ it('reveals labels as dots separate, with stable priorities and viewport clippin
 
 it('box arrow endpoints retain dependent-to-dependency direction after layered placement', async () => {
 	const m = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
-	const drawing = await layout(m, { allNodes: true, external: 'all' });
+	const drawing = await layout(m, { allNodes: true });
 	const boxes = new Map(drawing.nodes.map((n) => [n.id, n]));
 	const inside = (p: { x: number; y: number }, id: string) => {
 		const n = boxes.get(id)!;
@@ -62,11 +62,11 @@ it('box arrow endpoints retain dependent-to-dependency direction after layered p
 
 it('relationship context uses scope before a visual taxon filter', () => {
 	const m = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
-	const scoped = graphInput(m, { allNodes: true, external: 'all' });
+	const scoped = graphInput(m, { allNodes: true });
 	const relation = relationships(scoped.edges, 'sy-0003', 'closure');
-	const visible = graphInput(m, { allNodes: true, external: 'all', taxon: 'Theorem' });
+	const visible = graphInput(m, { allNodes: true, taxon: 'Theorem' });
 	expect(relation.direct.has('sy-0001')).toBe(true);
 	expect(visible.nodes.some((n) => n.id === 'sy-0001')).toBe(false);
-	const document = graphInput(m, { allNodes: true, external: 'all', master: 'drafting/talk.tex' });
+	const document = graphInput(m, { allNodes: true, master: 'drafting/talk.tex' });
 	expect(relationships(document.edges, 'sy-0003', 'closure').reached.size).toBe(0);
 });

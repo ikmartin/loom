@@ -1,0 +1,51 @@
+{
+ "answer": {
+  "gen": 1789808400003,
+  "ok": true,
+  "result": "took in 2: 2 added",
+  "rows": [
+   {
+    "act": "x-zc6vb0",
+    "authors": [],
+    "found_by": "arxiv",
+    "id": "t-3548c0d6cf799ebf",
+    "identifier": "arxiv:2311.04567",
+    "item": 0,
+    "name": "2311.04567",
+    "ref": "sh-0409-ref",
+    "short": "2311.04567",
+    "state": "added",
+    "tex": false,
+    "title": "2311.04567",
+    "unconfirmed": true,
+    "under": false,
+    "year": ""
+   },
+   {
+    "act": "x-v2k3tk",
+    "authors": [],
+    "found_by": "doi",
+    "id": "t-b27a9898e8b1c747",
+    "identifier": "doi:10.1000/example.2020.7",
+    "item": 0,
+    "name": "10.1000/example.2020.7",
+    "ref": "sh-040A-ref",
+    "short": "10.1000/example.2020.7",
+    "state": "added",
+    "tex": false,
+    "title": "10.1000/example.2020.7",
+    "unconfirmed": true,
+    "under": false,
+    "year": ""
+   }
+  ]
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "text": "2311.04567\n10.1000/example.2020.7"
+   }
+  ]
+ }
+}

@@ -114,6 +114,7 @@ STEPS = [
             ("fixtures", "fixtures.py", ("full",)),
             ("bundle", "bundle.py", ("full",)),
             ("hard wrap", "hardwrap.py", ("fast", "full")),
+            ("words", "words.py", ("fast", "full")),
             ("machine paths", "machine_paths.py", ("fast", "full")),
         )
     ),

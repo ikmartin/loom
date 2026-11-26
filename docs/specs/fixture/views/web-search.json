@@ -1,0 +1,60 @@
+{
+ "answer": {
+  "count": 2,
+  "gen": 1789516800000,
+  "hits": [
+   {
+    "row": {
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Definition 1.1",
+     "paper": null,
+     "reading": null,
+     "result": "sy-0001",
+     "source": {
+      "doc": "drafting/main.tex"
+     },
+     "taxon": "definition",
+     "title": "Widget"
+    },
+    "snippet": {
+     "after": " of it, so that \\eqref{eq:prose} holds. Its fixed locus,…",
+     "before": "A \\emph{widget} is a pair of a set and an ",
+     "match": "involution"
+    }
+   },
+   {
+    "row": {
+     "lean": {
+      "lean": "none",
+      "role": null,
+      "waiting_on": []
+     },
+     "name": "Definition 2.4",
+     "paper": null,
+     "reading": null,
+     "result": "sy-0008",
+     "source": {
+      "doc": "drafting/main.tex"
+     },
+     "taxon": "definition",
+     "title": "Gadget"
+    },
+    "snippet": {
+     "after": " has no fixed point.",
+     "before": "A \\emph{gadget} is a widget whose ",
+     "match": "involution"
+    }
+   }
+  ],
+  "ok": true
+ },
+ "endpoint": "web-search",
+ "request": {
+  "q": "involution",
+  "scope": "all"
+ }
+}

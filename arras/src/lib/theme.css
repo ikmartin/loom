@@ -12,6 +12,13 @@
 	box-sizing: border-box;
 }
 
+/* Every document tab in every tab bar (a pane's, the Library's) is one width whatever its title, and a crowded bar narrows them all by the same amount, as a browser's tabs do, down to 1.5 times a pane's strip; the title is cut with an ellipsis by the bar and given whole as the tab's hover text. */
+.arras .doc-tab {
+	flex: 0 1 var(--tab-w);
+	width: var(--tab-w);
+	min-width: calc(var(--tab-h) * 1.5);
+}
+
 .arras {
 	/* surfaces */
 	--paper: #fbfaf8;
@@ -36,6 +43,12 @@
 	--agent: #b5532e;
 	/* what floats over the text — the focused pane's toolbar and the popups it opens — casts this one shadow */
 	--float-shadow: 0 6px 24px rgb(0 0 0 / 12%);
+
+	/* the library's marks (`marks/Mark.svelte`), one vocabulary on every surface: a person's yes, what waits on a person, nothing yet, and a place the person marked; drawn from the states so the dark theme follows */
+	--mark-yes: var(--state-accepted);
+	--mark-wait: var(--state-stale);
+	--mark-none: var(--ink-faint);
+	--mark-person: var(--link);
 
 	/* states: text and wash, named for the state rather than for a severity role */
 	--state-accepted: #0f6e56;
@@ -92,8 +105,9 @@
 	--rad-card: 12px;
 	--rail-left: 252px;
 	--rail-right: 236px;
-	--rail-folded: 44px; /* the column folded to its rail */
+	--rail-folded: 60px; /* the column folded to its strip of the four view names */
 	--tab-h: 30px; /* a pane's tab strip; a tab narrows to 1.5 times this before the strip scrolls */
+	--tab-w: 180px; /* every document tab in every tab bar (`.doc-tab`), whatever its title */
 	--env-accent: 3px; /* the per-taxon rule down an environment's left edge, and the boundary the left gutter ends at */
 	--rail-a: 267px;
 
@@ -443,7 +457,7 @@ main.page > h2,
 .rail-scroll {
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	/* the bar's width is kept before there is anything to scroll, so a list growing long enough to need one (Library opened) narrows nothing above it */
+	/* the bar's width is kept before there is anything to scroll, so a list growing long enough to need one (a shelf opened) narrows nothing above it */
 	scrollbar-gutter: stable;
 }
 
@@ -801,9 +815,6 @@ a.heading-link:focus {
 	border-bottom: 1px dotted var(--state-incomplete);
 }
 .fragment a.ref-dangling { color: var(--state-incomplete); cursor: not-allowed; }
-/* A citation of a result loom's reading of the paper lacks (`data-unmatched`): the person's words kept, marked as a problem is, and said on hover (`LinkPreview`). */
-.fragment span.cite[data-unmatched] { border-bottom: 1px dotted var(--state-incomplete); }
-.fragment span.cite[data-unmatched] a:hover { text-decoration: none; }
 
 .fragment div.include {
 	margin: var(--gap-tight) 0;

@@ -38,11 +38,15 @@ test("one document's blocks are grouped by why they wait, and those accepted are
 	for (const name of ['Mark OK', 'Requires attention', /Finish review/]) await expect(page.getByRole('button', { name })).toHaveCount(0);
 });
 
-test('a block loom cannot accept says why in its row, and offers no Accept', async ({ page }) => {
+test('a block loom cannot accept says why in its row, in the person\'s words, and offers no Accept', async ({ page }) => {
 	await accepting(page, () => ({}));
 	await page.goto('/review');
 	const unclassified = page.locator('[data-testid="review-row"][data-key="sy-000B"]');
-	await expect(unclassified.getByTestId('review-refusal')).toHaveText("Can't be accepted yet: its basis is not said; a % !LOOM basis: line inside it says it.");
+	await expect(unclassified.getByTestId('review-refusal')).toHaveText("Can't be accepted yet: loom cannot tell whether it is proved here, cited, or assumed.");
+	// one marked incomplete says the person's note, its reference as the document prints it, and no key or directive anywhere
+	const incomplete = page.locator('[data-testid="review-row"][data-key="sy-000C/proof"]');
+	await expect(incomplete.getByTestId('review-refusal')).toHaveText("Can't be accepted yet: it is marked incomplete: Show that there are no fixed points using Definition\u00a02.4.");
+	for (const said of await page.getByTestId('review-refusal').allInnerTexts()) expect(said).not.toMatch(/!LOOM|\\ref|sy-\d/);
 	await expect(unclassified.getByTestId('review-accept')).toHaveCount(0);
 	await expect(unclassified.getByTestId('review-pick')).toBeDisabled();
 	await expect(page.locator('[data-testid="review-row"][data-key="sy-0001"]').getByTestId('review-accept')).toBeVisible();
@@ -85,7 +89,7 @@ test('Read opens the block in its document, with why it waits and the way back b
 	await expect(panel.getByTestId('review-panel-back')).toHaveAttribute('href', '/review?document=drafting%2Fmain.tex#review-sy-0001');
 	await page.goto('/master/drafting/main?review=sy-000B#sy-000b');
 	await expect(page.getByTestId('review-panel-status')).toHaveText('Never accepted.');
-	await expect(page.getByTestId('review-panel-refusal')).toContainText('its basis is not said');
+	await expect(page.getByTestId('review-panel-refusal')).toHaveText("Can't be accepted yet: loom cannot tell whether it is proved here, cited, or assumed.");
 });
 
 test('a block taken in is grouped by where it came from', async ({ page }) => {
@@ -187,7 +191,7 @@ test('a pull\'s review accepts only explicitly chosen mathematics while incorpor
 	await expect(checked).not.toBeChecked();
 	await expect(page.getByTestId('contribution-bar')).toContainText('1 marked as checked');
 	await page.getByTestId('apply').click();
-	await expect(page.getByTestId('contribution-bar-said')).toContainText('Took the pull: 1 accepted, 1 wait in Your Changes.');
+	await expect(page.getByTestId('contribution-bar-said')).toContainText('Took the pull: 1 accepted, 1 wait to be accepted.');
 	expect(submitted!.accept).toEqual(['sy-0001']);
 	expect(submitted!.incoming).toBe('b'.repeat(40));
 	expect(submitted!.review_token).toBe('preview');

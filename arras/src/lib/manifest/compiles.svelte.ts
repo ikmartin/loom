@@ -1,5 +1,7 @@
 // How each document's compile stands (plan 0.29.1), as the publisher's stream says it, keyed by document path. Empty where no stream runs, as on a static host: nothing there compiles.
 
+import { docs } from '$lib/words/docs';
+
 /** How a document's last compile ended: `ok`; `errors`, a PDF made though LaTeX reported errors; `failed`, no PDF, so the one before stays. */
 export interface CompileLast {
 	result: 'ok' | 'errors' | 'failed';
@@ -57,9 +59,12 @@ export function pdfLine(pdf: boolean, c: Compile | undefined): { word: string; o
 	return { word: pdfWord(pdf, c), ...(pdf ? { about: why } : { off: why ?? 'There is no compiled PDF to open yet' }) };
 }
 
-/** The last run's error and where TeX stopped, for a title or a line under the paper. */
+/** The line of its file TeX stopped at, from the log's `l.12 \hlind`; '' where unknown. */
+export const stoppedAt = (c: Compile | undefined): string => /^l\.(\d+)/.exec(c?.last?.at ?? '')?.[1] ?? '';
+
+/** The last run's error in the person's words (`docs.texError`) and the line TeX stopped at, never the log's command, for a title or a line under the paper. */
 export function compileError(c: Compile | undefined): string {
 	const l = c?.last;
 	if (!l || l.result === 'ok') return '';
-	return [l.error, l.at].filter(Boolean).join(' at ');
+	return docs.compileError(docs.texError(l.error ?? ''), stoppedAt(c));
 }

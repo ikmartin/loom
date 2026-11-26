@@ -58,12 +58,10 @@ def codes(q: Path, code: int = 0) -> list[dict]:  # type: ignore[type-arg]
     return diagnostics
 
 
-def test_a_derived_id_names_its_counterpart_and_never_takes_a_citekey_prefix() -> None:
+def test_a_derived_id_names_its_counterpart() -> None:
     assert is_id_shaped("zk-0001-ai") and derived_of("zk-0001-ai") == "zk-0001"
     assert plain_key("zk-0001-ai/proof/2") == "zk-0001/proof/2" and plain_key("zk-0001/proof") == "zk-0001/proof"
     assert derived_of("zk-0001") is None and not is_id_shaped("zk-001-ai")
-    # under a citekey slug the local is paper-local, so `0001-ai` is an ordinary paper id and never derived
-    assert is_id_shaped("arden24-0001-ai", {"arden24"})
     assert derived_of("zk-01-ai") is None
 
 
@@ -352,7 +350,7 @@ def test_the_fixtures_agent_copy_carries_every_field_the_interface_names() -> No
     nodes = fixture["nodes"]
     assert nodes["sy-0002-ai"]["derived_of"] == "sy-0002" and nodes["sy-0002-ai"]["base"]["key"] == "sy-0002"
     # one of each kind a copy differs from its source by
-    assert "sy-999C-ai" in nodes and "base" not in nodes["sy-999C-ai"]  # written new by the agent
+    assert [k for k, n in nodes.items() if k.endswith("-ai") and "base" not in n]  # written new by the agent
     assert "sy-0202" in nodes and "sy-0202-ai" not in nodes  # deleted from the copy
     assert "sy-000A-ai" in nodes  # moved, unchanged
 

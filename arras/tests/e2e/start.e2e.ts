@@ -29,6 +29,32 @@ test('a reload, or a visit another day, reopens both panes as they were left', a
 	expect(Object.keys(kept)).toEqual([manifest.corpus.name]);
 });
 
+test("where the publisher says which quilt it serves, what is remembered is kept under that, so two quilts of one name on one port keep apart", async ({ page }) => {
+	let digest = 'quilt-a';
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: [], token: 't', quilt: digest } }));
+	await page.goto('/master/drafting/main' + beside('/node/sy-0003'));
+	await expect(pane(page, 1).locator('.fragment').first()).toBeVisible();
+	await expect.poll(() => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('arras.workspace') ?? '{}')))).toEqual(['quilt-a']);
+	// a folder turned in the tree is kept under the same
+	const notes = page.locator('[data-testid="docs-dir"][data-path="notes"] > .fold');
+	const was = await notes.getAttribute('aria-expanded');
+	await notes.click();
+	await expect(notes).not.toHaveAttribute('aria-expanded', was!);
+	await expect.poll(() => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('arras.tree') ?? '{}')))).toEqual(['quilt-a']);
+	// another quilt of the same name on the same port remembers nothing of the first, and opens at its front door
+	digest = 'quilt-b';
+	await page.goto('/');
+	await expect(page).toHaveURL(/\/file\/README\.md$/);
+	const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('arras.workspace') ?? '{}'));
+	expect(kept['quilt-a']).toMatch(/beside=/);
+	expect(kept['quilt-b']).toMatch(/README/);
+	await expect(notes).toHaveAttribute('aria-expanded', was!);
+	// and the first, served again, comes back as it was left
+	digest = 'quilt-a';
+	await page.goto('/');
+	await expect(page).toHaveURL(/\/master\/drafting\/main\?beside=%2Fnode%2Fsy-0003/);
+});
+
 test('a remembered document no longer in the corpus gives way to the front door', async ({ page }) => {
 	await page.addInitScript((name) => localStorage.setItem('arras.workspace', JSON.stringify({ [name]: '/master/gone' })), manifest.corpus.name);
 	await page.goto('/');

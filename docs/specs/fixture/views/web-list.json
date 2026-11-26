@@ -1,0 +1,260 @@
+{
+ "answer": {
+  "count": 16,
+  "gen": 1789516800000,
+  "ok": true,
+  "sections": [
+   {
+    "groups": [
+     {
+      "group": "drafting/main.tex",
+      "n": 14,
+      "rows": [
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Definition 1.1",
+        "paper": null,
+        "reading": null,
+        "result": "sy-0001",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "definition",
+        "title": "Widget"
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Lemma 1.2",
+        "paper": null,
+        "reading": null,
+        "result": "sy-0002",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "lemma",
+        "title": "Orbits"
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Theorem 2.1",
+        "paper": null,
+        "reading": null,
+        "result": "sy-0003",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "theorem",
+        "title": "Parity"
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Proposition 2.2",
+        "paper": null,
+        "reading": null,
+        "result": "sy-0006",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "proposition",
+        "title": "Two arguments"
+       },
+       {
+        "lean": {
+         "lean": "changed",
+         "role": "proved",
+         "waiting_on": []
+        },
+        "name": "Lemma 2.3",
+        "paper": null,
+        "reading": null,
+        "result": "sy-0007",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "lemma",
+        "title": "Deferred"
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Definition 2.4",
+        "paper": null,
+        "reading": null,
+        "result": "sy-0008",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "definition",
+        "title": "Gadget"
+       },
+       {
+        "lean": {
+         "lean": "unattested",
+         "role": "proved",
+         "waiting_on": []
+        },
+        "name": "Lemma 2.5",
+        "paper": null,
+        "reading": null,
+        "result": "sy-0202",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "lemma",
+        "title": null
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Lemma 2.6",
+        "paper": null,
+        "reading": null,
+        "result": "sy-000C",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "lemma",
+        "title": "Incomplete"
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Lemma 2.7",
+        "paper": null,
+        "reading": null,
+        "result": "sy-000D",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "lemma",
+        "title": "No proof yet"
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Remark",
+        "paper": null,
+        "reading": null,
+        "result": "drafting/sections/appendix.tex#remark:1",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "remark",
+        "title": null
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Definition 2.9",
+        "paper": null,
+        "reading": null,
+        "result": "sy-000E",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "definition",
+        "title": "Half-gadget"
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Remark 2.10",
+        "paper": null,
+        "reading": null,
+        "result": "sy-000A",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "remark",
+        "title": null
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Main Theorem 2.1",
+        "paper": null,
+        "reading": null,
+        "result": "sy-000B",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "main theorem",
+        "title": null
+       },
+       {
+        "lean": {
+         "lean": "none",
+         "role": null,
+         "waiting_on": []
+        },
+        "name": "Lemma",
+        "paper": null,
+        "reading": null,
+        "result": "drafting/nodes/sy-999E.tex#lemma:1",
+        "source": {
+         "doc": "drafting/main.tex"
+        },
+        "taxon": "lemma",
+        "title": "Doubly defined"
+       }
+      ]
+     },
+     {
+      "group": "drafting/talk.tex",
+      "n": 4
+     }
+    ],
+    "head": "drafts"
+   },
+   {
+    "groups": [],
+    "head": "library"
+   }
+  ],
+  "undigested": 3
+ },
+ "endpoint": "web-list",
+ "request": {
+  "open": [
+   "drafting/main.tex"
+  ],
+  "scope": "all"
+ }
+}

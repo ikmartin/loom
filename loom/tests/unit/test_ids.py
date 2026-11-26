@@ -13,12 +13,12 @@ def test_new_allocates_and_print(tmp_path: Path) -> None:
     p = ok("new", "lemma", "Printed", "--print", cwd=q)
     assert "\\begin{lemma}[Printed]" in p.output and "\\label{" not in p.output and "\\begin{proof}" in p.output
     r = ok("new", "Lemma", "A new lemma", cwd=q)
-    assert r.output.startswith("dm-0012 ")
-    text = (q / "drafting" / "nodes" / "dm-0012.tex").read_text()
-    assert "\\begin{lemma}[A new lemma]\\label{dm-0012}" in text and "% !LOOM created:" in text
+    assert r.output.startswith("dm-0015 ")
+    text = (q / "drafting" / "nodes" / "dm-0015.tex").read_text()
+    assert "\\begin{lemma}[A new lemma]\\label{dm-0015}" in text and "% !LOOM created:" in text
     r2 = ok("new", "definition", cwd=q)
-    assert r2.output.startswith("dm-0013 ")
-    assert "\\begin{proof}" not in (q / "drafting" / "nodes" / "dm-0013.tex").read_text()
+    assert r2.output.startswith("dm-0016 ")
+    assert "\\begin{proof}" not in (q / "drafting" / "nodes" / "dm-0016.tex").read_text()
     refused("new", "nonsense", cwd=q, code=2, match="unknown taxon 'nonsense'")
 
 
@@ -27,6 +27,44 @@ def test_alloc_sees_references_and_never_reuses(tmp_path: Path) -> None:
     (q / "drafting" / "nodes" / "scratch.tex").write_text("% dangling reference\nSee \\ref{dm-0020}.\n")
     r = ok("new", "lemma", cwd=q)
     assert r.output.startswith("dm-0021 "), r.output
+
+
+def test_alloc_sees_the_library_s_nodes_and_their_tags(tmp_path: Path) -> None:
+    """The library's stems share the quilt's prefix, so `loom new` passes a node's file and an id only the tag log still names."""
+    from loom.paths import LIBRARY_NODES, TAG_LOG
+
+    q = demo(tmp_path)
+    (q / LIBRARY_NODES).mkdir(parents=True, exist_ok=True)
+    (q / LIBRARY_NODES / "dm-0030-ref.node").write_text("+++\n")
+    assert ok("new", "lemma", cwd=q).output.startswith("dm-0031 ")
+    (q / TAG_LOG).parent.mkdir(parents=True)
+    (q / TAG_LOG).write_text('{"event": "tag", "node": "dm-0040-proof00", "tag": "x"}\n')
+    assert ok("new", "lemma", cwd=q).output.startswith("dm-0041 ")
+
+
+def test_alloc_sees_an_id_only_git_history_holds(tmp_path: Path) -> None:
+    """An id committed and then removed is not given again: on Apple's git too, which reads no `\\b` in a pattern."""
+    import subprocess
+
+    import pytest
+
+    from loom.gitprog import usable
+
+    if not usable():
+        pytest.skip("no git")
+    q = demo(tmp_path)
+    (q / "drafting" / "nodes" / "gone.tex").write_text("\\begin{lemma}\\label{dm-0060}\nx\n\\end{lemma}\n")
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=q, check=True, capture_output=True
+        )
+
+    git("init", "-q")
+    git("add", ".")
+    git("commit", "-qm", "with dm-0060")
+    (q / "drafting" / "nodes" / "gone.tex").unlink()
+    assert ok("new", "lemma", cwd=q).output.startswith("dm-0061 ")
 
 
 def test_a_labelling_run_carries_its_patch_in_json_and_says_how_to_apply_it(tmp_path: Path) -> None:
@@ -44,11 +82,11 @@ def test_new_names_its_writer_and_says_where_to_place_the_node(tmp_path: Path) -
     """The re-grade: under an agent marker `new` wrote the author's name into the node, and said nothing of the node being reached by no document or of the line that would place it."""
     q = opened(demo(tmp_path))  # agents may write beside the demo's paper here
     r = ok("new", "lemma", "Placed", "--as", "Referee Agent", cwd=q)
-    assert "% !LOOM author: Referee Agent" in (q / "drafting" / "nodes" / "dm-0012.tex").read_text()
+    assert "% !LOOM author: Referee Agent" in (q / "drafting" / "nodes" / "dm-0015.tex").read_text()
     assert "no document reaches it yet" in r.stdout
-    assert "\\input{nodes/dm-0012}" in r.stdout and "drafting/main.tex" in r.stdout
+    assert "\\input{nodes/dm-0015}" in r.stdout and "drafting/main.tex" in r.stdout
     refused("new", "lemma", cwd=q, env={"AI_AGENT": "1"}, code=2, match="has not said who it is")
-    assert not (q / "drafting" / "nodes" / "dm-0013.tex").exists()
+    assert not (q / "drafting" / "nodes" / "dm-0016.tex").exists()
 
 
 def test_an_unknown_taxon_lists_what_each_document_declares(tmp_path: Path) -> None:

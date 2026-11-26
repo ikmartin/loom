@@ -8,9 +8,9 @@ const routes: [string, string][] = [
 	['/master/drafting/main', 'Widgets, gadgets'],
 	['/review', 'Your Changes'],
 	['/review/proposed', 'Proposed Changes'],
-	['/review/record', 'The Record'],
-	['/review/record/sessions', 'The Record'],
-	['/review/record/acts', 'The Record'],
+	['/review/record', 'History'],
+	['/review/record/sessions', 'History'],
+	['/review/record/acts', 'History'],
 	['/review/problems', 'Problems'],
 	['/graph', 'Graph'],
 	['/threads', 'Threads'],
@@ -18,7 +18,6 @@ const routes: [string, string][] = [
 	['/tag/orbits', '#orbits'],
 	['/taxa', 'Taxa'],
 	['/taxon/lemma', 'Lemma'],
-	['/review/library', 'Library'],
 	['/loose', 'Not in any document']
 ];
 
