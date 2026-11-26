@@ -276,3 +276,167 @@ def test_a_forged_settling_line_gains_nothing_a_forged_aborted_line_does_not(
         k: v for k, v in before.items() if not k.startswith(".loom/records")
     }
     assert _edit(root, edit).status == "open"
+
+
+def _guard_dies(mp: pytest.MonkeyPatch) -> None:
+    """Every file of the next act is written and it dies before its records and `done`."""
+
+    def guarded(*args: Any, **kwargs: Any) -> None:
+        raise Died
+
+    mp.setattr(writes, "_append_guarded", guarded)
+
+
+@pytest.mark.parametrize("kind", sorted(k for k in writes.KINDS if k != "settle"))
+def test_a_left_act_of_every_kind_is_settled_as_it_stands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """An act of each kind, cut short with its files written, then a line of the person's own in one of them, so recovery leaves it: settling it names the kind as a person does, writes none of their files, keeps the file it made, and ends that act alone."""
+    root, hist, _ = _quilt(tmp_path)
+    _guard_dies(monkeypatch)
+    with pytest.raises(Died), writes.act(root, hist, kind, "Tester") as w:
+        w.replace(DOC, (root / DOC).read_bytes() + b"% the act's line\n")
+        w.replace("extra/made.md", b"made by the act\n")
+    monkeypatch.undo()
+    doc = root / DOC
+    doc.write_bytes(doc.read_bytes() + b"% the person's own line\n")
+    writes.recover(root, hist)
+    ((act, named, *_),) = writes.left_acts(root, hist)
+    assert named == writes.KINDS[kind]
+    before = _person_s(root)
+    plan = settling.preview(root, hist, act)
+    assert plan.kind == writes.KINDS[kind] and plan.files == [DOC, "extra/made.md"]
+    said = " ".join(plan.said())
+    assert f"Settling {writes.KINDS[kind]} as it stands" in said and act not in said
+    settling.settle(root, hist, act, "Tester")
+    assert _person_s(root) == before and writes.left_acts(root, hist) == []
+    assert writes.recover(root, hist) == [] and _person_s(root) == before
+
+
+def test_an_undo_of_a_keep_is_settled_by_the_words_it_put_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An undo of a Keep cut short with the old words back in the file: the suggestion is open again, its kept record answered, and no file of the person's written."""
+    root, hist, edit = _quilt(tmp_path)
+    ok("changes", "--keep", edit, cwd=root)
+    assert _edit(root, edit).status == "kept"
+    _guard_dies(monkeypatch)
+    from loom.machine import quilt_id
+    from loom.render.api import handle
+
+    with pytest.raises(Died):
+        handle(root, "change-undo", {"changes": [edit], "quilt": quilt_id(root)})
+    monkeypatch.undo()
+    doc = root / DOC
+    assert NEW not in doc.read_text()
+    doc.write_bytes(doc.read_bytes() + b"% the person's own line\n")
+    writes.recover(root, hist)
+    ((act, named, *_),) = writes.left_acts(root, hist)
+    assert named == "an undo of a Keep"
+    before = _person_s(root)
+    plan = settling.settle(root, hist, act, "Tester")
+    assert [d.outcome for d in plan.edits] == ["open"] and _person_s(root) == before
+    assert _edit(root, edit).status == "open" and writes.left_acts(root, hist) == []
+
+
+def _forge_left(root: Path, hist: Path, edit: str, new: str) -> str:
+    """A Keep's `begin` line that no Keep wrote, naming the open `edit` with a splice of `new` for its quoted words, its texts in the store and neither of them what the file holds, so recovery leaves it. Returns its id."""
+    from loom.paths import JOURNAL, JOURNAL_INDEX
+    from loom.records.edits import generation
+
+    doc = (root / DOC).read_text()
+    was = doc + "% a line the forger says was there\n"
+    at = was.index(OLD)
+    now = was[:at] + new + was[at + len(OLD) :]
+    gen = f"{edit}:{generation(_edit(root, edit))}"
+    act = "keep:c3c3c3c3c3c3c3c3"
+    begin = {
+        "event": "begin",
+        "act": act,
+        "kind": "keep",
+        "actor": "Tester",
+        "by": "person",
+        "when": "2026-11-24T00:00:00Z",
+        "files": {DOC: [writes.store(hist, was.encode()), writes.store(hist, now.encode())]},
+        "splices": {DOC: [{"at": at, "old": OLD, "new": new, "edit": gen}]},
+        "edits": [gen],
+        "records": [],
+    }
+    with (root / JOURNAL).open("a") as fh:
+        fh.write(json.dumps(begin) + "\n")
+    (root / JOURNAL_INDEX).unlink(missing_ok=True)
+    writes.recover(root, hist)
+    assert [a for a, *_ in writes.left_acts(root, hist)] == [act]
+    return act
+
+
+@pytest.mark.parametrize("new", ["Words the agent never suggested", NEW])
+def test_a_forged_left_line_gains_nothing_when_settled(tmp_path: Path, new: str) -> None:
+    """A left Keep forged into the journal, naming an open suggestion with a splice of other words, or of its own words where the file holds the words they replace: settling it writes none of the person's files and leaves the suggestion open, its record untouched."""
+    from loom.paths import EDIT_LOG
+
+    root, hist, edit = _quilt(tmp_path)
+    act = _forge_left(root, hist, edit, new)
+    log = (root / EDIT_LOG).read_bytes()
+    before = _person_s(root)
+    plan = settling.settle(root, hist, act, "Tester")
+    assert [d.outcome for d in plan.edits] == ["as-is" if new != NEW else "open"]
+    assert all(d.record is None for d in plan.edits)
+    assert _person_s(root) == before and (root / EDIT_LOG).read_bytes() == log
+    assert _edit(root, edit).status == "open" and writes.left_acts(root, hist) == []
+
+
+def test_an_untrusted_left_line_is_only_ended(tmp_path: Path) -> None:
+    """A left line naming a file outside the quilt, as one copied in with a folder may: settling it decides nothing, confirms nothing and writes nothing; it only ends the notice."""
+    from loom.paths import EDIT_LOG, JOURNAL, JOURNAL_INDEX
+
+    root, hist, edit = _quilt(tmp_path)
+    act = "keep:d4d4d4d4d4d4d4d4"
+    d = writes.store(hist, b"x\n")
+    begin = {"event": "begin", "act": act, "kind": "keep", "actor": "Tester", "by": "person", "when": "2026-11-24T00:00:00Z", "files": {"../outside.tex": [d, d]}, "edits": [f"{edit}:0"], "records": []}  # fmt: skip
+    with (root / JOURNAL).open("a") as fh:
+        fh.write(json.dumps(begin) + "\n")
+    (root / JOURNAL_INDEX).unlink(missing_ok=True)
+    writes.recover(root, hist)
+    assert [a for a, *_ in writes.left_acts(root, hist)] == [act]
+    log, before = (root / EDIT_LOG).read_bytes(), _person_s(root)
+    plan = settling.settle(root, hist, act, "Tester")
+    assert not plan.trusted and plan.edits == [] and plan.files == []
+    assert _person_s(root) == before and (root / EDIT_LOG).read_bytes() == log
+    assert _edit(root, edit).status == "open" and writes.left_acts(root, hist) == []
+
+
+def test_a_settling_cut_short_is_finished_by_recovery_once_or_left_when_a_file_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A settling that dies after its journal line and before its records: recovery finishes it while the document still holds what the person settled on, recording the suggestion kept once and ending the act it names; where the document was saved in between, the settling is left too, and settling the first act again settles it."""
+    from loom.paths import EDIT_LOG
+
+    for saved in (False, True):
+        (tmp_path / str(saved)).mkdir()
+        root, hist, edit = _quilt(tmp_path / str(saved))
+        act = _cut(root, monkeypatch, edit, "after the file")
+        before = _person_s(root)
+
+        def records(*args: Any, **kwargs: Any) -> None:
+            raise Died
+
+        monkeypatch.setattr(writes, "_append_records", records)
+        with pytest.raises(Died):
+            settling.settle(root, hist, act, "Tester")
+        monkeypatch.undo()
+        assert _person_s(root) == before
+        if not saved:
+            writes.recover(root, hist)
+            assert writes.left_acts(root, hist) == [] and _edit(root, edit).status == "kept"
+            kept = [ln for ln in (root / EDIT_LOG).read_text().splitlines() if '"kept"' in ln]
+            assert len(kept) == 1 and _person_s(root) == before
+            continue
+        doc = root / DOC
+        doc.write_bytes(doc.read_bytes() + b"% saved again\n")
+        writes.recover(root, hist)
+        left = [a for a, *_ in writes.left_acts(root, hist)]
+        assert act in left and len(left) == 2 and _edit(root, edit).status == "open"
+        settling.settle(root, hist, act, "Tester")
+        (stale,) = [a for a, *_ in writes.left_acts(root, hist)]
+        assert stale.startswith("settle:") and _edit(root, edit).status == "kept"
+        settling.settle(root, hist, stale, "Tester")
+        assert writes.left_acts(root, hist) == [] and _edit(root, edit).status == "kept"
