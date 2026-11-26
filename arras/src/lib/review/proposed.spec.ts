@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../tests/fixture/manifest.json';
 import type { Manifest } from '$lib/manifest/types';
-import { adoptionsOf, cardsOf, copySays, proposedCount, pullLabel } from './proposed';
+import { adoptionsOf, cardsOf, copySays, proposedCount } from './proposed';
 
 const m = fixture as unknown as Manifest;
 // the fixture's two open suggested edits: one on sy-0002, the newer, and one on sy-0004 answering an annotation
@@ -22,14 +22,6 @@ describe('what is proposed to the person', () => {
 		expect(cardsOf(m).some((c) => c.id === TEXT || c.id === ANSWERING)).toBe(false);
 		expect(proposedCount(m)).toBe(1);
 		expect(adoptionsOf(m).map((a) => a.copy)).toEqual([COPY]);
-	});
-
-	it('puts a pull first, by its own name', () => {
-		const x = changed((y) => {
-			y.incoming = { workspace: 'https://git.overleaf.com/0123', changes: [], files: [] } as unknown as Manifest['incoming'];
-		});
-		expect(cardsOf(x)[0].kind).toBe('pull');
-		expect(pullLabel(x)).toBe('Pull from https://git.overleaf.com/0123');
 	});
 
 	it('holds a suggested edit on a copy on that copy, which counts once', () => {

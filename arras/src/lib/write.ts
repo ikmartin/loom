@@ -2,7 +2,7 @@
 //
 // Detected, never assumed. The publisher answers `GET /_api` with the capabilities it actually serves, or 404 when it serves none, and a viewer that gets 404 shows no editing affordances at all -- which is how the same bundle reads a corpus published to a static host and edits one served by its own publisher, with no build-time flag deciding which.
 //
-// Arras writes nothing itself. It asks the publisher to act; sync-incorporate is the one explicit capability that may update author files.
+// Arras writes nothing itself. It asks the publisher to act; overleaf-update and adopt-finish are the explicit acts that write the person's files.
 
 import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';
@@ -99,7 +99,7 @@ export interface WriteResult {
 /** Ask the publisher to write. Errors come back as the publisher's own refusal rather than as an exception, because a refused annotation is an answer a reader needs to see. */
 export async function write(endpoint: string, body: Record<string, unknown>): Promise<WriteResult> {
 	try {
-		if (endpoint === 'review-accept' || endpoint.startsWith('adopt-') || endpoint === 'sync-preview' || endpoint === 'sync-incorporate') {
+		if (endpoint === 'review-accept' || endpoint.startsWith('adopt-')) {
 			body = { reviewer: store.manifest?.reviewer?.name ?? '', ...body };
 		}
 		// The token is CSRF protection and not a login: a browser blocks a cross-origin response and never the

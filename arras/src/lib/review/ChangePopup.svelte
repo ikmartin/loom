@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A pending change's popup, opened at its words, or at the element it is marked on where it is not merged into the text (`apart`): what it is (an edit in the file, or a suggestion, with who wrote it and when), its words out and in and its patch where the text does not show them, the annotations on its words, each of which opens its own popup, what a suggestion's writer says of it, a box that writes an annotation on its words, and Keep and Discard. Both take effect on screen at once (`history.svelte.ts`); a change that is not ready says why and offers neither.
+	// A pending change's popup, opened at its words, or at the element it is marked on where it is not merged into the text (`apart`): what it is (an edit in the file, or a suggestion, with who wrote it and when), its words out and in and its patch where the text does not show them, the annotations on its words, each of which opens its own popup, what a suggestion's writer says of it, a box that writes an annotation on its words, and Keep and Discard, with Copy new text and Done in Overleaf in place of Keep on a document that mirrors Overleaf (`MirroredActs`). Both take effect on screen at once (`history.svelte.ts`); a change that is not ready says why and offers neither.
 	import { onMount } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
@@ -14,6 +14,9 @@
 	import { actSays, changeById, kindName, ready, refusal, whoMade } from './changes';
 	import { annotate, discardChanges, keepChanges } from './history.svelte';
 	import { say } from './toasts.svelte';
+	import MirroredActs from '$lib/overleaf/MirroredActs.svelte';
+	import { mirrors } from '$lib/overleaf/said';
+	import { overleaf as overleafWords } from '$lib/words/overleaf';
 
 	let {
 		id,
@@ -35,7 +38,9 @@
 	const m = $derived(store.manifest);
 	const c = $derived(changeById(m, id));
 	const says = $derived(c ? actSays(c) : null);
-	const why = $derived(c ? refusal(c) : '');
+	// a change to a document that mirrors Overleaf is made there: Copy new text and Done in Overleaf stand in place of Keep
+	const mirrored = $derived(!!c && mirrors(m?.overleaf, c.path));
+	const why = $derived(c ? refusal(c) || (mirrored ? overleafWords.change.why : '') : '');
 	const on = $derived(here.map((x) => m?.annotations[x]).filter((a) => !!a && !a.in_reply_to));
 	const answers = $derived(c?.answers ? m?.annotations[c.answers] : undefined);
 
@@ -108,7 +113,7 @@
 		{/if}
 		{#if said}<p class="said" role="status" data-testid="change-said">{said}</p>{/if}
 		<div class="cfoot">
-			<button type="button" class="btn small primary" disabled={!ready(c) || !allowed.keep} title={says.keep} data-testid="change-keep" onclick={() => void act('keep')}><Icon name="check" size={13} />Keep</button>
+			{#if mirrored}<MirroredActs {c} size={13} />{:else}<button type="button" class="btn small primary" disabled={!ready(c) || !allowed.keep} title={says.keep} data-testid="change-keep" onclick={() => void act('keep')}><Icon name="check" size={13} />Keep</button>{/if}
 			<button type="button" class="btn small" disabled={!ready(c) || !allowed.discard} title={says.discard} data-testid="change-discard" onclick={() => void act('discard')}><Icon name="close" size={13} />Discard</button>
 			<span class="cwhy" data-testid="change-why">{why || says.line}</span>
 		</div>
@@ -238,6 +243,7 @@
 	}
 	.cfoot {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 8px;
 	}

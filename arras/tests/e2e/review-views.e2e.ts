@@ -306,18 +306,6 @@ test("a proposed edit's see it lays its draft over Review and lands at the resul
 	await expect(page).toHaveURL(/\/review(\?|$)/);
 });
 
-test("a collaborator's pull is chosen under the kinds and drawn as today's review of it", async ({ page }) => {
-	await serve(page, (m) => {
-		m.incoming = { workspace: 'https://git.overleaf.com/0123', branch: 'master', base: 'a'.repeat(40), commit: 'b'.repeat(40), observed: '2026-09-28', files: [{ status: 'M', path: 'drafting/main.tex', diff: '-Old prose\n+New prose' }], changes: [{ key: 'prose:setup', name: 'Introduction', category: 'prose', kind: 'edited', local_changed: false, conflict: false, already_local: false, current: 'Old prose', proposed: 'New prose', affected: [] }] };
-	});
-	await open(page);
-	await page.getByTestId('review-kind-incoming').click();
-	await expect(page.getByText('New prose', { exact: true })).toBeVisible();
-	await expect(page.getByTestId('contribution-bar')).toContainText('A pull is taken whole.');
-	await page.getByTestId('review-kind-all').click();
-	await expect(rows(page)).toHaveCount(28);
-});
-
 test('the tasks waiting for an agent say what was asked, who works on one, and delete withdraws one', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-agents').click();
@@ -386,10 +374,7 @@ test("the review's round: locate washes the words found at reading size, a page 
 	await expect(prop).not.toContainText('as you wrote it');
 });
 
-test("the review's round: a task deleted comes back on undo, results are named in the paper's order, the column fits, and the pull has its card", async ({ page }) => {
-	await serve(page, (m) => {
-		m.incoming = { workspace: 'https://git.overleaf.com/0123', branch: 'master', base: 'a'.repeat(40), commit: 'b'.repeat(40), observed: '2026-09-28', files: [], changes: [] };
-	});
+test("the review's round: a task deleted comes back on undo, results are named in the paper's order, and the column fits", async ({ page }) => {
 	await open(page);
 	const label = page.getByTestId('review-kind-accepted-changed');
 	expect((await label.boundingBox())!.height).toBeLessThanOrEqual(30);
@@ -404,7 +389,6 @@ test("the review's round: a task deleted comes back on undo, results are named i
 			expect(nb.x + nb.width, await b.innerText()).toBeLessThanOrEqual(box.x + box.width + 0.5);
 		}
 	}
-	await expect(page.getByTestId('review-kind-incoming')).toHaveAttribute('aria-description', /collaborator's changes/);
 	await page.getByTestId('review-kind-check').click();
 	await expect(page.getByTestId('review-row').filter({ hasText: 'Arden 2024 · Lemmas' })).toContainText('Arden 2024 · Lemmas 5.7 and 5.9');
 	await page.getByTestId('review-kind-agents').click();

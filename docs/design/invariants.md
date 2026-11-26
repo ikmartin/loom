@@ -52,9 +52,9 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 ### Overlooking is never accepting
 
-**Rule.** In a copy's or a pull's review every mathematical item starts pending, and only an explicit Accept records an acceptance. Incorporating the source accepts nothing; an item never visited, an item held, and an unchanged proof under a revised statement all stay pending.
+**Rule.** In a copy's review, and in Results to accept after an update from Overleaf, every mathematical item starts pending, and only an explicit Accept records an acceptance. Incorporating the source accepts nothing; an item never visited, an item held, and an unchanged proof under a revised statement all stay pending.
 
-**Why.** No incident is recorded. A pull's review applies a coauthor's pull whole, so the short path is to accept what was applied, which would record as read every item the author scrolled past.
+**Why.** No incident is recorded. An update from Overleaf takes a coauthor's text in whole, so the short path is to accept what it brought, which would record as read every item the author scrolled past.
 
 **Guard.** `loom/tests/unit/test_adopt.py::test_incoming_explicit_acceptance_keeps_unvisited_dependents_pending`
 

@@ -1,4 +1,5 @@
 import { notes } from '$lib/words/notes';
+import { overleaf } from '$lib/words/overleaf';
 
 // What Settings holds: its sections, in two groups, and every setting's name and what it does, which the rows draw their words from. Each section says where its settings are kept. `[lint] disable` has no section: what it silences is lint's, which agents read, and it is set in config.toml.
 
@@ -43,7 +44,7 @@ export const SECTIONS: Section[] = [
 	{ id: 'notes', label: notes.settings.section, group: 'quilt', where: notes.settings.where, icon: 'M5 3h10l4 4v14H5zM15 3v4h4M9 12h6M9 16h4' },
 	{ id: 'agents', label: 'Agents', group: 'quilt', where: QUILT, icon: 'M7 7h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3M12 3v4M9 13h.01M15 13h.01' },
 	{ id: 'library', label: 'Library', group: 'quilt', where: QUILT, icon: 'M5 4v16M9 4v16M13 5l4 15M19 4l-2 16' },
-	{ id: 'overleaf', label: 'Overleaf', group: 'quilt', where: 'Recorded in .loom/records/source-sync.json, committed with the quilt; the folder it names is a clone on this computer.', icon: 'M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5M18 3v4h-4M6 21v-4h4' }
+	{ id: 'overleaf', label: overleaf.settings.section, group: 'quilt', where: overleaf.settings.where, icon: 'M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5M18 3v4h-4M6 21v-4h4' }
 ];
 
 export const SETTINGS: Setting[] = [
@@ -71,7 +72,7 @@ export const SETTINGS: Setting[] = [
 	{ id: 'agents.protected', section: 'agents', name: 'Always protected', what: "Loom's records, this file and the research state, which an agent writes only through loom." },
 	{ id: 'agents.apps', section: 'agents', name: 'Apps', what: 'Which agent apps start loom here.' },
 	{ id: 'library.online', section: 'library', name: 'Use the network', what: 'Let the library look identifiers up (zbMATH Open, Crossref) and fetch papers from arXiv. Off, it uses only what is on this computer.', key: '[library] online' },
-	{ id: 'sync', section: 'overleaf', name: 'Overleaf project', what: "The clone of a Git workspace, such as an Overleaf project, that coauthors edit. Loom runs Git only in that folder, and never changes the quilt's files without you." }
+	{ id: 'overleaf', section: 'overleaf', name: overleaf.settings.project, what: overleaf.settings.projectWhat }
 ];
 
 export const SECTION = Object.fromEntries(SECTIONS.map((s) => [s.id, s])) as Record<SectionId, Section>;

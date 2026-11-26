@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Proposed edits' rows, every draft's or the one the column chooses, from the manifest (`changeList`, `copiesOf`): over them a line with `keep all N` and `discard all N` for every change listed that can be, the undo of the last keep or discard, and `to do N`; a row for each change (`ChangeRow`), then one for each agent's copy, whose link opens it on its own page in Review, where it is taken in and applied; with to do, the open annotations from others, a row each. Says once what it watches and what it leaves to the person.
+	// Proposed edits' rows, every draft's or the one the column chooses, from the manifest (`changeList`, `copiesOf`): over them a line with `keep all N` and `discard all N` for every change listed that can be (keep all passing over a change to a document that mirrors Overleaf, made there), the undo of the last keep or discard, and `to do N`; a row for each change (`ChangeRow`), then one for each agent's copy, whose link opens it on its own page in Review, where it is taken in and applied; with to do, the open annotations from others, a row each. Says once what it watches and what it leaves to the person.
 	import { said } from '$lib/library/said';
 	import { shortDate } from '$lib/badges';
 	import { dotVars, itemLabel } from '$lib/fragments/gutter';
@@ -15,6 +15,7 @@
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
 	import { can } from '$lib/write';
+	import { mirrors } from '$lib/overleaf/said';
 	import { changeSaid } from './answers';
 	import ChangeRow from './rows/ChangeRow.svelte';
 	import SeeItLink from './SeeItLink.svelte';
@@ -25,6 +26,8 @@
 	const items = $derived(changeList(m, acted.map, rv.doc));
 	const copies = $derived(copiesOf(m, rv.doc));
 	const ids = $derived(items.filter((i) => ready(i.c)).map((i) => i.c.id));
+	// a change to a document that mirrors Overleaf is made there, and kept by its own Done in Overleaf
+	const keeps = $derived(items.filter((i) => ready(i.c) && !mirrors(m.overleaf, i.c.path)).map((i) => i.c.id));
 	const todo = $derived(todoOf(m).filter((t) => !rv.doc || t.path === rv.doc));
 	const todoCount = $derived(todo.reduce((n, t) => n + t.annotations.length, 0));
 	const undoes = $derived(nextUndo().startsWith('keep') || nextUndo().startsWith('discard'));
@@ -39,11 +42,12 @@
 	/** Keep or discard every change listed that can be; the column's message says how many, and why any was not, in the viewer's words (`changeSaid`). */
 	async function every(how: 'keep' | 'discard'): Promise<void> {
 		busy = true;
-		const res = how === 'keep' ? await keepChanges({ changes: ids }) : await discardChanges({ changes: ids });
+		const which = how === 'keep' ? keeps : ids;
+		const res = how === 'keep' ? await keepChanges({ changes: which }) : await discardChanges({ changes: which });
 		busy = false;
 		if (!res.ok) return message.post(said({ code: res.error?.code ?? 'failed', message: res.error?.message ?? '' }));
 		const refused = res.refused ?? [];
-		message.post(changeSaid(how, res.done?.length ?? ids.length - refused.length, refused));
+		message.post(changeSaid(how, res.done?.length ?? which.length - refused.length, refused));
 	}
 
 	async function back(): Promise<void> {
@@ -58,7 +62,7 @@
 	{#if items.length || undoes || todoCount}
 		<div class="rg head acts" data-testid="review-edit-acts">
 			{#if items.length}
-				<button type="button" class="btn" disabled={!ids.length || !writes.keep || busy} data-testid="group-keep-all" onclick={() => void every('keep')}>{words.edits.keepAll(ids.length)}</button>
+				<button type="button" class="btn" disabled={!keeps.length || !writes.keep || busy} data-testid="group-keep-all" onclick={() => void every('keep')}>{words.edits.keepAll(keeps.length)}</button>
 				<button type="button" class="btn" disabled={!ids.length || !writes.discard || busy} data-testid="group-discard-all" onclick={() => void every('discard')}>{words.edits.discardAll(ids.length)}</button>
 			{/if}
 			{#if undoes}<button type="button" class="btn" disabled={history.busy} data-testid="review-undo" onclick={() => void back()}>{words.edits.undoLast(nextUndo())}</button>{/if}

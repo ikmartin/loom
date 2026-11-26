@@ -1,5 +1,5 @@
 <script lang="ts">
-	// One pending change as a card: what it is and who made it, its words out and in (struck and underlined in teal; new words that hold an environment or a paragraph break as TeX made them, `new_html`), what a suggestion's writer says of it and the annotation it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard, which act as its popup's do (`history.svelte.ts`). In the list beside a text a click opens it at its words; on the page of Your Changes it names where it is, with a link there; in a row of Review's Proposed edits it is drawn bare, the row naming where it is.
+	// One pending change as a card: what it is and who made it, its words out and in (struck and underlined in teal; new words that hold an environment or a paragraph break as TeX made them, `new_html`), what a suggestion's writer says of it and the annotation it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard (Copy new text and Done in Overleaf in place of Keep on a document that mirrors Overleaf, `MirroredActs`), which act as its popup's do (`history.svelte.ts`). In the list beside a text a click opens it at its words; on the page of Your Changes it names where it is, with a link there; in a row of Review's Proposed edits it is drawn bare, the row naming where it is.
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
@@ -13,6 +13,9 @@
 	import { actSays, kindName, ready, refusal, whoMade } from './changes';
 	import { discardChanges, keepChanges, type ChangeAnswer } from './history.svelte';
 	import { say } from './toasts.svelte';
+	import MirroredActs from '$lib/overleaf/MirroredActs.svelte';
+	import { mirrors } from '$lib/overleaf/said';
+	import { overleaf as overleafWords } from '$lib/words/overleaf';
 
 	let {
 		c,
@@ -40,7 +43,9 @@
 
 	const m = $derived(store.manifest);
 	const says = $derived(actSays(c));
-	const why = $derived(refusal(c));
+	// a change to a document that mirrors Overleaf is made there: Copy new text and Done in Overleaf stand in place of Keep
+	const mirrored = $derived(mirrors(m?.overleaf, c.path));
+	const why = $derived(refusal(c) || (mirrored ? overleafWords.change.why : ''));
 	const answers = $derived(c.answers ? m?.annotations[c.answers] : undefined);
 	const who = $derived(whoMade(m, c));
 	/** Whether the change is in its block's own file, which loom keeps under the block's id and a person never named: then the block alone says where it is. */
@@ -101,7 +106,7 @@
 	{#if answers && m}<div class="ct none" data-testid="change-card-answers">It answers {@render goes(linkName(m, `quilt:${answers.id}`), noteUrl(m, answers), answers.target.key)}.</div>{/if}
 	{#if why}<div class="ct none" data-testid="change-card-why">{why}</div>{/if}
 	<div class="acts">
-		<button type="button" class="btn small primary" disabled={!ready(c) || !allowed.keep} title={says.keep} data-testid="card-keep" onclick={(e) => void act('keep', e)}><Icon name="check" size={12} />Keep</button>
+		{#if mirrored}<MirroredActs {c} />{:else}<button type="button" class="btn small primary" disabled={!ready(c) || !allowed.keep} title={says.keep} data-testid="card-keep" onclick={(e) => void act('keep', e)}><Icon name="check" size={12} />Keep</button>{/if}
 		<button type="button" class="btn small" disabled={!ready(c) || !allowed.discard} title={says.discard} data-testid="card-discard" onclick={(e) => void act('discard', e)}><Icon name="close" size={12} />Discard</button>
 	</div>
 </div>
@@ -205,6 +210,8 @@
 	}
 	.acts {
 		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
 		gap: 6px;
 	}
 	.acts :global(.btn) {

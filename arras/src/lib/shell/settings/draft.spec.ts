@@ -9,7 +9,6 @@ const config = {
 	library: { online: false },
 	lint: { disable: [], codes: [] },
 	agents: { deny: ['paper/'], protected: [], layer: true, variant: 'mcp', stale: false, command: '', clients: [] },
-	sync: { paired: false, command: 'x' },
 	warnings: []
 } as QuiltSettings;
 

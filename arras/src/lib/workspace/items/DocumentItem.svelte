@@ -34,9 +34,7 @@
 	const reviewKey = $derived(item.params?.review ?? '');
 	const causeIndex = $derived(Number(item.params?.cause ?? '0'));
 	const reviewCause = $derived(m.keys[reviewKey]?.acceptance?.causes?.[causeIndex]);
-	const incomingKey = $derived(item.params?.incoming ?? '');
-	const incomingChange = $derived(m.incoming?.changes.find((change) => change.key === incomingKey));
-	const hasComparison = $derived(!!(reviewKey && m.keys[reviewKey]) || !!incomingChange?.incoming);
+	const hasComparison = $derived(!!(reviewKey && m.keys[reviewKey]));
 	/** Closing a comparison is the document without it, at the same place. */
 	const plain = $derived(pathFor(m, { kind: 'document', id: item.id, ...(item.anchor ? { anchor: item.anchor } : {}) }));
 
@@ -80,7 +78,7 @@
 	});
 	$effect(() => {
 		const root = docRoot;
-		const citation = incomingKey ? (item.anchor ?? '') : reviewCause?.kind === 'dependency-changed' ? reviewCause.citation : null;
+		const citation = reviewCause?.kind === 'dependency-changed' ? reviewCause.citation : null;
 		const target = citation && root ? root.querySelector(`[id="${CSS.escape(citation)}"]`) : null;
 		if (!target) return;
 		target.classList.add('review-citation-target');
@@ -156,12 +154,7 @@
 					</div>
 				</div>
 			</div>
-			{#if incomingChange?.incoming}
-				<aside class="review-comparison" data-testid="incoming-comparison" aria-label="Incoming comparison">
-					<header><strong>Incoming · {incomingKey}</strong><a href={plain}>close</a></header>
-					<Fragment path={incomingChange.incoming} macroSet={incomingChange.incoming_macros} isolatedMacros />
-				</aside>
-			{:else if reviewKey && m.keys[reviewKey] && master}
+			{#if reviewKey && m.keys[reviewKey] && master}
 				<aside class="review-comparison" data-testid="review-panel" aria-label="Why this block waits for review">
 					<ReviewPanel {reviewKey} {causeIndex} master={master.path} {plain} causeHref={(i) => pathFor(m, { ...item, params: { ...item.params, cause: String(i) } })} />
 				</aside>

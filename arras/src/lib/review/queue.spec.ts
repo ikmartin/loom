@@ -50,7 +50,7 @@ describe('blocks not freshly accepted', () => {
 	});
 
 	it('heads a taken-in group by its source, the copy named when loom gives no label', () => {
-		expect([takenLabel(row('x', 'adopted', { contribution: 'a/b/copy.tex' })), takenLabel(row('x', 'incoming-pull'))]).toEqual(['Taken in from the copy “copy”', 'Taken in from a pull']);
+		expect([takenLabel(row('x', 'adopted', { contribution: 'a/b/copy.tex' })), takenLabel(row('x', 'incoming-pull'))]).toEqual(['Taken in from the copy “copy”', 'Taken in from Overleaf']);
 	});
 
 	it('offers only documents that reach a block', () => {

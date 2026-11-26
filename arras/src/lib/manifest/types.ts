@@ -268,33 +268,21 @@ export interface Cause {
   };
 }
 
-export interface IncomingChange {
-  name?: string;
-  category?: "prose";
-  current?: string;
-  proposed?: string;
-  key: string;
-  kind: 'edited' | 'added' | 'removed';
-  local_changed: boolean;
-  conflict: boolean;
-  already_local: boolean;
-  local: string | null;
-  incoming: string | null;
-  incoming_macros: string;
-  affected: { key: string; citation: string | null }[];
+/** An update from Overleaf as the manifest keeps the last one: when, how many files, whose changes Review lists, how many only the person made, each change outside a result, and the results changed here that it wrote over. */
+export interface OverleafUpdate {
+  when: string;
+  files: number;
+  by: string[];
+  own: number;
+  /** `place` one of `preamble`, `between`, `removed`, `not-a-document`. */
+  places: { file: string; place: string; by: string[] }[];
+  here: string[];
 }
 
-export interface IncomingReview {
-  workspace: string;
-  branch: string;
-  base: string;
-  commit: string;
-  observed: string;
-  changes: IncomingChange[];
-  files: { status: string; path: string; diff?: string }[];
-  issues?: string[];
-  prepared?: { patch: string; root: string; incoming: string; paths: string[] };
-}
+/** The manifest's `overleaf` (`docs/specs/manifest.md`): `folder` the quilt folder the project is kept in, `main` its main document's quilt path, `link` the project's page in Overleaf, `waiting` Overleaf holds text not yet taken in, `ask_me` ask again who the person is there, `problem` the code of what the last reach of Overleaf could not do. */
+export type OverleafState =
+  | { paired: false }
+  | { paired: true; folder: string; main: string; link: string; waiting: boolean; last: OverleafUpdate | null; ask_me: boolean; problem: string | null };
 
 export interface AdoptionReview {
   kind: 'adopt';
@@ -654,7 +642,6 @@ export interface QuiltSettings {
     /** How far the deny list holds for the apps set up here, one sentence: which cannot edit there, which are only asked; '' without an agent layer. */
     holds?: string;
   };
-  sync: { paired: true; directory: string; workspace: string; branch: string; documents: string[] } | { paired: false; command: string };
   warnings: string[];
 }
 
@@ -668,9 +655,9 @@ export interface Manifest {
   canon?: CanonDoc[];
   nodes: Record<string, Node>;
   keys: Record<string, Key>;
-  /** Fetched source waiting for incorporation; never changes a key's recorded state. */
-  incoming?: IncomingReview;
-  contributions?: (AdoptionReview | (IncomingReview & {kind: 'workspace'; label: string}))[];
+  contributions?: AdoptionReview[];
+  /** Whether the quilt mirrors an Overleaf project, and how it stands; absent from an older publisher. */
+  overleaf?: OverleafState;
   unresolved?: UnresolvedReview[];
   history?: { steps: HistoryStep[]; acts?: HistoryAct[] };
   regions: Record<string, Region>;

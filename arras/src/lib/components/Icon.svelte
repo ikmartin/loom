@@ -136,6 +136,12 @@
 		<path d="M15 4v16" />
 	{:else if name === 'filter'}
 		<path d="M3 5h18l-7 8v6l-4-2v-4z" />
+	{:else if name === 'update'}
+		<path d="M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5" />
+		<path d="M18 3v4h-4M6 21v-4h4" />
+	{:else if name === 'copy'}
+		<rect x="9" y="9" width="12" height="12" rx="2" />
+		<path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
 	{:else if name === 'check'}
 		<path d="M20 6 9 17l-5-5" />
 	{/if}

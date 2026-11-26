@@ -1,8 +1,7 @@
 <script lang="ts">
-	// Review › Proposed Changes: everything someone proposes that the person decides in a pass of its own, one card each: a copy or a pull, which the card opens here at its own address (`?copy=`, `?pull`). A suggested edit is a pending change, kept or discarded in its document and in Your Changes; one on an agent's copy is listed on the copy's card, with what it says and the annotation it answers, and comes in with the copy.
+	// Review › Proposed Changes: everything someone proposes that the person decides in a pass of its own, one card each: an agent's copy, which the card opens here at its own address (`?copy=`). A suggested edit is a pending change, kept or discarded in its document and in Your Changes; one on an agent's copy is listed on the copy's card, with what it says and the annotation it answers, and comes in with the copy.
 	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
-	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import DiffView from '$lib/components/DiffView.svelte';
 	import { changeById, refusal } from '$lib/review/changes';
@@ -15,14 +14,12 @@
 	import { route } from '$lib/paths';
 	import ContributionReview from '$lib/review/ContributionReview.svelte';
 	import Empty from '$lib/review/Empty.svelte';
-	import IncomingPull from '$lib/review/IncomingPull.svelte';
 	import ReviewHeading from '$lib/review/ReviewHeading.svelte';
 	import Said from '$lib/review/Said.svelte';
 	import { itemsOf, tally } from '$lib/review/contribution';
-	import { adoptionsOf, cardsOf, copySays, pullLabel } from '$lib/review/proposed';
+	import { adoptionsOf, cardsOf, copySays } from '$lib/review/proposed';
 	import { documentOf, writerOf } from '$lib/review/suggestions';
 	import { keyName, linkName } from '$lib/workspace/names';
-	import { can } from '$lib/write';
 	import { rv } from '$lib/views/review/state.svelte';
 	import { review as reviewWords } from '$lib/words/review';
 
@@ -35,16 +32,10 @@
 	const asked = $derived(page.url.searchParams);
 	// what the address opens; one gone by the time it is asked for, as a copy taken in whole, leaves the list
 	const adoption = $derived(adoptionsOf(m).find((x) => x.copy === asked.get('copy')));
-	const pull = $derived(asked.has('pull') ? m.incoming : undefined);
-	const opened = $derived(!!adoption || !!pull);
-	const showing = $derived(adoption?.copy ?? (pull ? 'pull' : ''));
+	const opened = $derived(!!adoption);
+	const showing = $derived(adoption?.copy ?? '');
 
-	let served = $state<Record<string, boolean>>({});
-	onMount(() => {
-		void can('sync-incorporate').then((yes) => (served = { ...served, 'sync-incorporate': yes }));
-	});
-
-	// the last answer from a copy or a pull: said by its bar while it is open, and by the list once it is not
+	// the last answer from a copy: said by its bar while it is open, and by the list once it is not
 	let answer = $state<{ text: string; refused: boolean; from: string } | null>(null);
 
 	const name = (e: SuggestedEdit) => keyName(m, e.target.key);
@@ -91,26 +82,16 @@
 	{#if adoption}
 		{@const copy = adoption.copy}
 		{#key copy}<ContributionReview contribution={adoption} onanswer={(a) => (answer = a && { ...a, from: copy })} />{/key}
-	{:else if pull}
-		{#key pull.commit}<IncomingPull incoming={pull} label={pullLabel(m)} writable={!!served['sync-incorporate']} onanswer={(a) => (answer = a && { ...a, from: 'pull' })} />{/key}
 	{:else}
 		{#if answer && answer.from !== showing}<div class="answer"><Said text={answer.text} refused={answer.refused} testid="proposed-answer" /></div>{/if}
 		{#if !cards.length}
 			<Empty text="Nobody has proposed anything." testid="proposed-none" />
 		{:else}
-			<p class="lead" data-testid="proposed-summary">{cards.length} to decide. What agents and collaborators propose in a pass of its own: a copy or a pull is reviewed whole. A suggested edit is kept or discarded where it stands, in its document or in Review.</p>
+			<p class="lead" data-testid="proposed-summary">{cards.length} to decide. What agents and collaborators propose in a pass of its own: a copy is reviewed whole. A suggested edit is kept or discarded where it stands, in its document or in Review.</p>
 			<ul class="plain cards" data-testid="proposed-cards">
 				{#each cards as c (c.kind + c.id)}
 					<li class="card" data-testid="proposed-card" data-kind={c.kind} data-id={c.id}>
-						{#if c.kind === 'pull'}
-							<div class="line">
-								<span class="tag">a pull</span>
-								<span class="name">{c.label}</span>
-								<span class="acts"><a class="btn small primary" href="{here}?pull" data-testid="proposed-open">Review the pull</a></span>
-							</div>
-							<p class="why">{count(c.pull.changes.length, 'change', 'changes')}, taken whole.</p>
-							{@render chips(c.pull.changes.map((x) => ({ name: x.name ?? x.key, bad: x.conflict })))}
-						{:else}
+						{#if c.kind === 'copy'}
 							{@const items = itemsOf(m, c.copy)}
 							<div class="line">
 								<span class="tag">an agent's copy</span>

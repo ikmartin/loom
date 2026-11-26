@@ -11,7 +11,7 @@ export interface TakenIn {
 export interface Groups {
 	/** Accepted once, and changed since, or something they rest on has. */
 	changed: UnresolvedReview[];
-	/** Taken in from an agent's copy or a pull, one group per source. */
+	/** Taken in from an agent's copy or from Overleaf, one group per source. */
 	taken: TakenIn[];
 	never: UnresolvedReview[];
 	/** Accepted, as they stand. */
@@ -24,7 +24,7 @@ const reaches = (m: Pick<Manifest, 'nodes' | 'keys'>, key: string, path: string)
 export function takenLabel(row: UnresolvedReview): string {
 	if (row.source_label) return row.source_label;
 	if (row.contribution) return `Taken in from the copy “${row.contribution.split('/').pop()!.replace(/\.tex$/, '')}”`;
-	return 'Taken in from a pull';
+	return 'Taken in from Overleaf';
 }
 
 /** One document's groups, each in the publisher's (dependency) order. */

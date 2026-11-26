@@ -29,8 +29,8 @@ export async function readList(kind: ReviewKind | 'all' | 'agents', doc?: string
 }
 
 class ReviewState {
-	/** What the list shows: everything, one kind, the tasks waiting for an agent, or a collaborator's pull. */
-	kind = $state<ReviewKind | 'all' | 'agents' | 'incoming'>('all');
+	/** What the list shows: everything, one kind, or the tasks waiting for an agent. */
+	kind = $state<ReviewKind | 'all' | 'agents'>('all');
 	/** A document laid over the list, read only, at a result, with what changed since it was accepted where `since` asks for it; none while the list shows. */
 	over = $state<{ doc: string; key: string; name: string; since?: boolean } | null>(null);
 	/** The draft the list is narrowed to, or none. */
@@ -63,7 +63,7 @@ class ReviewState {
 	}
 
 	/** Shows one kind, or everything; choosing Everything shows every draft again. */
-	choose(kind: ReviewKind | 'all' | 'agents' | 'incoming'): void {
+	choose(kind: ReviewKind | 'all' | 'agents'): void {
 		this.kind = kind;
 		this.over = null;
 		if (kind === 'all') this.doc = null;

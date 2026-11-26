@@ -1,25 +1,18 @@
-// Review › Proposed Changes read from the manifest: one card for each thing someone proposes that the person decides in a pass of its own (a pull, an agent's copy), and what a copy's card says of it. A suggested edit is a pending change, kept or discarded in the document and in Your Changes; one on an agent's copy is listed on the copy's card, since it comes in with the copy. Model facts in, display facts out.
-import type { AdoptionReview, IncomingReview, Manifest, SuggestedEdit } from '$lib/manifest/types';
+// Review › Proposed Changes read from the manifest: one card for each thing someone proposes that the person decides in a pass of its own (an agent's copy), and what a copy's card says of it. A suggested edit is a pending change, kept or discarded in the document and in Your Changes; one on an agent's copy is listed on the copy's card, since it comes in with the copy. Model facts in, display facts out.
+import type { AdoptionReview, Manifest, SuggestedEdit } from '$lib/manifest/types';
 import { documentOf, openEdits } from './suggestions';
 
-export type Card =
-	| { kind: 'pull'; id: 'pull'; pull: IncomingReview; label: string }
-	| { kind: 'copy'; id: string; copy: AdoptionReview; edits: SuggestedEdit[] };
+export type Card = { kind: 'copy'; id: string; copy: AdoptionReview; edits: SuggestedEdit[] };
 
-type Read = Pick<Manifest, 'nodes' | 'keys' | 'masters'> & Partial<Pick<Manifest, 'regions' | 'suggested_edits' | 'contributions' | 'incoming'>>;
+type Read = Pick<Manifest, 'nodes' | 'keys' | 'masters'> & Partial<Pick<Manifest, 'regions' | 'suggested_edits' | 'contributions'>>;
 
 /** The agents' copies waiting to be taken in. */
 export function adoptionsOf(m: Pick<Manifest, 'contributions'>): AdoptionReview[] {
 	return (m.contributions ?? []).filter((x): x is AdoptionReview => x.kind === 'adopt');
 }
 
-/** What the fetched pull is called, by its contribution where the manifest lists one. */
-export function pullLabel(m: Pick<Manifest, 'contributions' | 'incoming'>): string {
-	return m.contributions?.find((c) => c.kind === 'workspace')?.label ?? `Pull from ${m.incoming?.workspace}`;
-}
-
 /**
- * Everything to decide here, in the order the page lists it: the fetched pull, then the agents' copies.
+ * Everything to decide here, in the order the page lists it: the agents' copies.
  *
  * Parameters
  * ----------
@@ -34,10 +27,7 @@ export function cardsOf(m: Read): Card[] {
 	const copies = adoptionsOf(m as Manifest);
 	const onCopy = new Map<string, SuggestedEdit[]>(copies.map((c) => [c.copy, []]));
 	for (const e of openEdits(m)) onCopy.get(documentOf(m as Manifest, e)?.path ?? '')?.push(e);
-	return [
-		...(m.incoming ? [{ kind: 'pull' as const, id: 'pull' as const, pull: m.incoming, label: pullLabel(m as Manifest) }] : []),
-		...copies.map((copy) => ({ kind: 'copy' as const, id: copy.copy, copy, edits: onCopy.get(copy.copy) ?? [] }))
-	];
+	return copies.map((copy) => ({ kind: 'copy' as const, id: copy.copy, copy, edits: onCopy.get(copy.copy) ?? [] }));
 }
 
 /** How many things wait to be decided: what Review counts here. */
