@@ -402,11 +402,10 @@ def _work_of(root: Path, ref: str | None) -> dict[str, Any]:
 
 
 def _digested(standing: Standing, node: str, digest: str) -> dict[str, Any] | None:
-    """The latest `digested` record on this very text: how, by whom (`loom`, or the name), and when."""
-    made = [r for r in standing.evidence.about("node", node, of="digested") if r.on is not None and r.on.hash == digest]
-    if not made:
+    """The latest `digested` record saying how this text's words were made (`Evidence.made`, through a fill of its numbers): how, by whom (`loom`, or the name), and when."""
+    last = standing.evidence.made("node", node, digest)
+    if last is None:
         return None
-    last = made[-1]
     return {"how": last.get("how"), "by": last.by.name or last.by.kind, "at": last.at}
 
 

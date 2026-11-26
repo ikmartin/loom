@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -377,3 +378,152 @@ def test_the_person_s_compile_numbers_what_waited(tmp_path: Path, pdf_text: list
 
     far = next(n for n in of_work(root, smith) if n.number == "2.2")
     assert far.body == "This lemma uses (2.1) as its only display.\n", "its number as the compile confirms it"
+
+
+def _compiled(result: ScanResult, ref: str) -> survey.Survey:
+    """The unasked survey as the person's compile would leave it: judged by a compile, `eq:bound` confirmed as 1.1 (the TeX-tier test above runs the compile itself)."""
+    s = survey.Survey.from_json(surveyed(result, ref).to_json())
+    s.compiled = True
+    s.labels["eq:bound"] = replace(s.labels["eq:bound"], number="1.1")
+    return s
+
+
+def _waiting(tmp_path: Path) -> tuple[ScanResult, str, str]:
+    """Smith 2024 with Lemma 1.2 digested without a compile, its display's anchor waiting: the scan, the work and the lemma."""
+    result, smith = quilt(tmp_path)
+    root = result.quilt.root
+    lemma = stub(root, smith, "1.2")
+    digest(result, smith, ["lem:bound"], surveyed(result, smith))
+    held = read(root, lemma)
+    assert held is not None and held.awaiting == (f"{lemma}-eq00",) and held.anchors == ()
+    return result, smith, lemma
+
+
+def _hash(root: Path, node: str) -> str:
+    held = read(root, node)
+    assert held is not None
+    return node_hash(node_bytes(held))
+
+
+def test_the_person_s_compile_numbers_a_compared_node_and_its_check_holds(tmp_path: Path, pdf_text: list[str]) -> None:
+    """The author's choice of 2026-11-26: after the person's compile, the person's digest fills a checked node's waiting display numbers and nothing else, recorded `digested` how `numbered` from `{ref, tex}` naming the text it filled, and the person's `compared` holds on the new text."""
+    from loom.library import reads
+
+    result, smith, lemma = _waiting(tmp_path)
+    root = result.quilt.root
+    before = read(root, lemma)
+    was = _hash(root, lemma)
+    acts.check(root, lemma, was, ME)
+    done = digest(result, smith, ["lem:bound"], _compiled(result, smith), numbers=True)
+    assert done.numbered == [lemma] and lemma in done.kept, done
+    after = read(root, lemma)
+    assert after is not None and before is not None
+    assert (after.anchors, after.awaiting) == (((f"{lemma}-eq00", "1.1"),), ())
+    assert replace(after, anchors=(), awaiting=before.awaiting) == before, "nothing but the numbers changed"
+    now = _hash(root, lemma)
+    evidence = replay(root)
+    filled = [r for r in evidence.about("node", lemma, of="digested") if r.on is not None and r.on.hash == now]
+    assert [(r.by.kind, r.get("how"), r.get("was"), r.get("from")) for r in filled] == [
+        ("loom", "numbered", was, {"ref": smith, "tex": read(root, smith).tex})  # type: ignore[union-attr]
+    ]
+    assert [r.on.hash for r in evidence.compared("node", lemma, now) if r.on] == [was], "the person's own record"
+    got = reads.node(result, lemma)
+    assert got["paper"] == "matches" and got["digested"]["how"] == "extracted", got
+    assert digest(result, smith, ["lem:bound"], _compiled(result, smith), numbers=True).numbered == [], "once"
+    status, _record = acts.propose(root, lemma, node_bytes(replace(after, body=after.body + "x\n")), Who("agent", "A"), "w")  # fmt: skip
+    assert status == "proposed", "an agent's correction of it waits for the person, as of any node they compared"
+
+
+def test_a_corrected_node_is_numbered_alike(tmp_path: Path, pdf_text: list[str]) -> None:
+    """A node an agent corrected, and one the person corrected by hand, are kept by digest as another hand's and numbered alike: the corrected words stay, and how they were made reads through the numbers."""
+    for hand in ("agent", "person"):
+        (tmp_path / hand).mkdir()
+        result, smith, lemma = _waiting(tmp_path / hand)
+        root = result.quilt.root
+        held = read(root, lemma)
+        assert held is not None
+        words = held.body.replace("satisfies", "obeys")
+        if hand == "agent":
+            assert acts.propose(root, lemma, node_bytes(replace(held, body=words)), Who("agent", "A"), "w")[0] == "written"  # fmt: skip
+        else:
+            acts.correct(root, lemma, _hash(root, lemma), words, ME)
+        was = _hash(root, lemma)
+        done = digest(result, smith, ["lem:bound"], _compiled(result, smith), numbers=True)
+        assert done.numbered == [lemma], (hand, done)
+        after = read(root, lemma)
+        assert after is not None and after.body == words and after.awaiting == ()
+        evidence = replay(root)
+        made = evidence.made("node", lemma, _hash(root, lemma))
+        assert made is not None and made.get("how") == ("corrected" if hand == "agent" else "written")
+        assert bool(evidence.compared("node", lemma, _hash(root, lemma))) == (hand == "person")
+        assert evidence.texts("node", lemma, _hash(root, lemma)) == [_hash(root, lemma), was]
+
+
+def test_numbering_refuses_any_change_beyond_the_numbers(tmp_path: Path, pdf_text: list[str]) -> None:
+    """`acts.numbered` writes a file only where it is the one now with waiting anchors numbered, every other byte the same; anything else is refused, and nothing is written or recorded."""
+    from loom.library.node import Node
+
+    result, smith, lemma = _waiting(tmp_path)
+    root = result.quilt.root
+    held = read(root, lemma)
+    assert held is not None
+    was = _hash(root, lemma)
+    tex = read(root, smith).tex  # type: ignore[union-attr]
+    anchor = f"{lemma}-eq00"
+    good = replace(held, anchors=((anchor, "1.1"),), awaiting=())
+    assert acts.only_numbers(held, good) is None
+    forged: list[Node] = [
+        replace(good, body=held.body.replace("satisfies", "obeys")),
+        replace(good, title="Bound"),
+        replace(good, pages="9"),
+        replace(good, uses=(*held.uses, smith)),
+        replace(held, anchors=((anchor, ""),), awaiting=()),
+        replace(held, anchors=((anchor, "1.1"), (f"{lemma}-eq01", "1.2")), awaiting=()),
+        held,
+    ]
+    count = len(records(root, "digested"))
+    for new in forged:
+        with pytest.raises(acts.ActRefused) as refused:
+            acts.numbered(root, lemma, was, new, {"ref": smith, "tex": tex})
+        assert refused.value.code == "refused", new
+    with pytest.raises(acts.ActRefused) as refused:
+        acts.numbered(root, lemma, was, good, {"ref": "tq-0000-ref", "tex": tex})
+    assert refused.value.code == "refused", "a number from another work's source"
+    with pytest.raises(acts.ActRefused) as refused:
+        acts.numbered(root, lemma, "sha256:" + "0" * 64, good, {"ref": smith, "tex": tex})
+    assert refused.value.code == "changed", "a text no longer the one digest read"
+    assert _hash(root, lemma) == was and len(records(root, "digested")) == count, "nothing written, nothing recorded"
+    acts.numbered(root, lemma, was, good, {"ref": smith, "tex": tex})
+    with pytest.raises(acts.ActRefused):
+        acts.numbered(root, lemma, _hash(root, lemma), replace(good, anchors=((anchor, "2.1"),)), {"ref": smith, "tex": tex})  # fmt: skip
+
+
+def test_no_agent_and_no_unasked_digest_reaches_numbering(tmp_path: Path, pdf_text: list[str]) -> None:
+    """Only the person's digest after their compile fills a kept node's numbers: the log refuses `numbered` from any hand but loom's, an agent's correction cannot change `awaiting` (`test_only_digest_sets_or_clears_awaiting`), the unasked digest and a survey no compile judged leave it waiting, a node whose anchors loom gave from another source stays waiting, and only digest calls the act."""
+    import loom
+    from loom.evidence.log import EvidenceRefused, check
+
+    result, smith, lemma = _waiting(tmp_path)
+    root = result.quilt.root
+    was = _hash(root, lemma)
+    acts.check(root, lemma, was, ME)
+    tex = read(root, smith).tex  # type: ignore[union-attr]
+    on = replay(root).about("node", lemma, of="compared")[-1].on
+    for hand in (Who("agent", "A"), ME):
+        with pytest.raises(EvidenceRefused):
+            check("digested", hand, on=on, how="numbered", was="sha256:" + "1" * 64, **{"from": {"ref": smith, "tex": tex}})  # fmt: skip
+    with pytest.raises(acts.ActRefused):
+        acts.digested(root, lemma, was, Who("agent", "A"), "numbered", {"ref": smith, "tex": tex})
+    assert digest(result, smith, ["lem:bound"], _compiled(result, smith)).numbered == [], "the unasked path's digest"
+    assert digest(result, smith, ["lem:bound"], surveyed(result, smith), numbers=True).numbered == [], "no compile"
+    other = replace(_compiled(result, smith), tex="sha256:" + "2" * 64)
+    from loom.library.digest import _Run
+
+    run = _Run(result, read(root, smith), other, True, numbers=True)  # type: ignore[arg-type]
+    run.work = replace(run.work, tex=other.tex)
+    assert run.run(["lem:bound"]).numbered == [], "anchors given from another text of the source"
+    assert _hash(root, lemma) == was
+    src = Path(loom.__file__).parent
+    calls = re.compile(r"from loom\.evidence\.acts import [^\n]*\bnumbered\b|acts\.numbered\(")
+    callers = sorted(p.relative_to(src).as_posix() for p in src.rglob("*.py") if calls.search(p.read_text()))
+    assert callers == ["library/digest.py"], callers

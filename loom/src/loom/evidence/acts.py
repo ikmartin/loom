@@ -286,6 +286,69 @@ def digested(root: Path, node: str, written: str, by: Who, how: str, source: dic
         return _write(root, "digested", by, on=Subject("node", node, digest), how=how, **{"from": source})
 
 
+def only_numbers(was: Node, new: Node) -> str | None:
+    """Why `new` is more than `was` with display numbers filled in, None where it is not: each anchor it numbers waited in `was` (`awaiting`) and leaves it, no number `was` held changes, and every other byte of the file is the same.
+
+    `numbered` refuses by it, so loom's fill of a compile's numbers can change no word of a text a person checked.
+    """
+    from loom.library.node import node_bytes
+
+    before, after = dict(was.anchors), dict(new.anchors)
+    filled = set(was.awaiting) - set(new.awaiting)
+    if not filled:
+        return "it numbers no anchor that waits"
+    if not set(new.awaiting) <= set(was.awaiting):
+        return "it makes an anchor wait that did not"
+    if any(after.get(anchor) != number for anchor, number in before.items()):
+        return "it changes or drops a number the file held"
+    if set(after) - set(before) != filled or any(not after[anchor] for anchor in filled):
+        return "it numbers an anchor that did not wait, or leaves one it takes out of waiting with no number"
+    if node_bytes(replace(new, anchors=was.anchors, awaiting=was.awaiting)) != node_bytes(was):
+        return "it changes the file beyond its anchors' numbers"
+    return None
+
+
+def numbered(root: Path, node: str, shown: str, new: Node, source: dict[str, Any]) -> Record:
+    """Loom fills display numbers the person's compile confirmed into a node's anchors that wait for them, and nothing else: the file written is `new`, recorded `digested` how `numbered` from the work's TeX source, naming the text it filled (`was`), so a person's `compared` on that text holds on this one (`Evidence.compared`).
+
+    Only digest calls it, after the person's compile of the work's source (`library.digest`); it takes no hand, since none but loom's makes this record, and the log refuses `numbered` from any other.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    node : str
+        A statement's or a proof's id.
+    shown : str
+        The hash of the file the numbers are filled into, as digest read it.
+    new : Node
+        That file with the numbers filled in.
+    source : dict
+        The work's TeX source the compile read, `{ref, tex}`; `ref` must be the node's work.
+
+    Returns
+    -------
+    Record
+        The `digested` record on the text written.
+
+    Raises
+    ------
+    ActRefused
+        `no-such-node`; `changed` when the file is no longer `shown`; `stub`; `refused` where `new` is more than numbers filled in (`only_numbers`), the source is not the node's work, or the store's checks refuse the file.
+    """
+    loom = Who("loom")
+    with _held(root):
+        found = _shown(root, node, shown)
+        if source.get("ref") != found.source:
+            raise ActRefused("refused", f"{node}'s numbers come from its own work's source, not {source.get('ref')}")
+        said = only_numbers(found, new)
+        if said is not None:
+            raise ActRefused("refused", f"loom fills only a compile's display numbers into {node}: {said}")
+        _checked("digested", loom, on=Subject("node", node, _to_store(new)), how="numbered", was=shown, **{"from": source})  # fmt: skip
+        written = _store(root, new)
+        return _write(root, "digested", loom, on=Subject("node", node, written), how="numbered", was=shown, **{"from": source})  # fmt: skip
+
+
 def check(root: Path, node: str, shown: str, by: Who) -> Record:
     """The person's record that a node's text matches its paper (`compared`), which the viewer words "matches the paper".
 
@@ -354,7 +417,7 @@ def propose(root: Path, node: str, data: bytes, by: Who, why: str) -> tuple[str,
         if node_hash(data) == digest:
             raise ActRefused("refused", "the proposed file is the node's file now")
         evidence = replay(root)
-        compared = any(r.on is not None and r.on.hash == digest for r in evidence.about("node", node, of="compared"))
+        compared = bool(evidence.compared("node", node, digest))
         if compared:
             return "proposed", _write(root, "proposed", by, on=Subject("node", node, digest), bytes=data.decode("utf-8"), why=why)  # fmt: skip
         _checked("digested", by, on=Subject("node", node, _to_store(new)), how="corrected", **{"from": source})
@@ -604,14 +667,19 @@ def _attestable(
     if gone:
         return Unattestable("changed", f"what it uses no longer reads as one text: {', '.join(n for _, n in gone)}", gone=gone)  # fmt: skip
     nodes = ([subject.name] if subject.kind == "node" else []) + [n for k, n in closure if k == "node"]
-    compared = {r.on.hash for n in nodes for r in evidence.about("node", n, of="compared") if r.on is not None}
     unread = tuple(n for n in nodes if web.stub(Here("node", n)) is not False)
-    unchecked = tuple(n for n in nodes if n not in unread and web.resolve(("node", n), here) not in compared)
+    unchecked = tuple(n for n in nodes if n not in unread and not _compared_now(evidence, web, n, here))
     cites = tuple(web.cited(here))
     if unread or unchecked or cites:
         said = [*(f"{n} is not read and compared with its paper" for n in (*unread, *unchecked)), *(f"its citation {c} names no node yet" for c in cites)]  # fmt: skip
         return Unattestable("unchecked", "; ".join(said), unread=unread, unchecked=unchecked, cites=cites)
     return subject, latest, closure
+
+
+def _compared_now(evidence: Evidence, web: Web, node: str, here: Here) -> bool:
+    """Whether a person's `compared` holds on the node's text as `here` resolves it now, carried through its numbers (`Evidence.compared`)."""
+    digest = web.resolve(("node", node), here)
+    return digest is not None and bool(evidence.compared("node", node, digest))
 
 
 def _members_of(raw: list[dict[str, Any]]) -> set[tuple[tuple[str, str], str]]:

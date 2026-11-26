@@ -45,7 +45,7 @@ class DigestRefused(ValueError):
 class Digested:
     """What one digest of a work wrote, or would write.
 
-    `made` the nodes written new (statements with their proofs, stubs and references), `filled` the stubs given their text under their ids, `rewritten` loom's own earlier extraction written again where the source now reads otherwise, `kept` the nodes another hand wrote or a person compared, left as they are, `waiting` each item not written with why, and `sought` the work's stubs its source does not print.
+    `made` the nodes written new (statements with their proofs, stubs and references), `filled` the stubs given their text under their ids, `rewritten` loom's own earlier extraction written again where the source now reads otherwise, `kept` the nodes another hand wrote or a person compared, left as they are, `numbered` those of them whose waiting display numbers the person's compile filled in, nothing else changed (`evidence.acts.numbered`), `waiting` each item not written with why, and `sought` the work's stubs its source does not print.
     """
 
     ref: str
@@ -53,6 +53,7 @@ class Digested:
     filled: list[str] = field(default_factory=list)
     rewritten: list[str] = field(default_factory=list)
     kept: list[str] = field(default_factory=list)
+    numbered: list[str] = field(default_factory=list)
     waiting: dict[str, str] = field(default_factory=dict)
     sought: list[str] = field(default_factory=list)
 
@@ -64,6 +65,7 @@ class Digested:
             "filled": self.filled,
             "rewritten": self.rewritten,
             "kept": self.kept,
+            "numbered": self.numbered,
             "waiting": self.waiting,
             "sought": self.sought,
         }
@@ -95,7 +97,14 @@ class _Cited:
 
 
 def digest(
-    result: ScanResult, ref: str, items: Iterable[str], s: Survey, *, closure: bool = False, write: bool = True
+    result: ScanResult,
+    ref: str,
+    items: Iterable[str],
+    s: Survey,
+    *,
+    closure: bool = False,
+    write: bool = True,
+    numbers: bool = False,
 ) -> Digested:
     """Write a work's items as nodes from its source's survey, as loom's own act.
 
@@ -113,6 +122,8 @@ def digest(
         Digest too each result of the work a statement written points at, by its own text and so on, as scope `used` does: what a draft rests on is a cited result's statement and what it needs to say what it means, never its proof's.
     write : bool, default True
         Write the nodes and records, under the id lock and the library's lock; False says what would be written, and takes no lock.
+    numbers : bool, default False
+        The person's digest after their compile (`s.compiled`): fill the compile's display numbers into the anchors waiting in a node kept as another hand's or a person's, nothing else of it (`evidence.acts.numbered`). The unasked path never passes it.
 
     Returns
     -------
@@ -141,7 +152,7 @@ def digest(
     if s.state != "ready":
         raise DigestRefused("reading", f"the survey of {ref}'s source is {s.state}")
     with writing(root) if write else nullcontext():
-        return _Run(result, work, s, write, closure).run(list(dict.fromkeys(items)))
+        return _Run(result, work, s, write, closure, numbers and s.compiled).run(list(dict.fromkeys(items)))
 
 
 #: What a digest takes of a work (`library-digest`'s `scope`).
@@ -221,7 +232,7 @@ def digest_works(
             if s.why == "no-pdf" and not s.compiled:
                 out.job = jobs_of(root).submit(partial(_compiled, root, ref, scope, chosen, online))
                 continue
-            done = digest(result, ref, scoped(result, ref, s, scope, chosen), s, closure=scope == "used")
+            done = digest(result, ref, scoped(result, ref, s, scope, chosen), s, closure=scope == "used", numbers=True)
             out.made += len(done.made) + len(done.filled) + len(done.rewritten)
             if done.waiting:
                 out.waiting[ref] = done.waiting
@@ -330,7 +341,7 @@ def _compiled(root: Path, ref: str, scope: str, chosen: list[str] | None, online
     with writing(root):
         result = scan(load_quilt(root))
         resolve(result)
-        digest(result, ref, scoped(result, ref, s, scope, chosen), s, closure=scope == "used")
+        digest(result, ref, scoped(result, ref, s, scope, chosen), s, closure=scope == "used", numbers=True)
 
 
 def used(result: ScanResult, ref: str, s: Survey) -> list[str]:
@@ -443,12 +454,18 @@ def matched(s: Survey, statements: list[Node]) -> dict[str, Node]:
 class _Run:
     """One digest of one work: what it reads once, the ids it gives, and what it writes."""
 
-    def __init__(self, result: ScanResult, work: Node, s: Survey, write: bool, closure: bool = False) -> None:
+    def __init__(
+        self, result: ScanResult, work: Node, s: Survey, write: bool, closure: bool = False, numbers: bool = False
+    ) -> None:
         from loom.evidence.log import replay
         from loom.library import documents
         from loom.library.intake import Library
 
         self.result, self.work, self.s, self.write, self.closure = result, work, s, write, closure
+        self.numbers = (
+            numbers and s.compiled
+        )  # the person's digest after their compile, which alone fills a kept node's numbers
+        self.kept_items: list[Item] = []
         self.reached: list[str] = []  # items a statement written points at, by its own text
         self.root, self.ref = result.quilt.root, work.id
         assert work.tex is not None
@@ -839,6 +856,8 @@ class _Run:
         }
         self._write_stubs([self.stubs[i] for i in sorted(needed) if i in self.stubs and i not in self.nodes])
         self._write_items(planned)
+        if self.numbers and self.write:
+            self._number_kept()
         self._sought()
         return self.out
 
@@ -854,8 +873,50 @@ class _Run:
         held = self.held.get(item.item)
         if held is not None and not self._ours(held):
             self.out.kept.append(held.id)
+            self.kept_items.append(item)
             return "its node's text is another hand's, or a person compared it"
         return None
+
+    def _number_kept(self) -> None:
+        """Fill the compile's display numbers into the anchors waiting in each kept item's statement and proofs, nothing else of them (`acts.numbered`); a node whose anchors were given from another text of the source stays waiting, since an anchor is its label's place among its owner's."""
+        from loom.evidence.acts import ActRefused, numbered
+        from loom.library.node import node_bytes, node_hash
+
+        for item in self.kept_items:
+            sid = self.statement_of(item)
+            self._give_proofs(item, sid)
+            confirmed: dict[str, str] = {}
+            for name, label in self.s.labels.items():
+                if label.owner != item.item or label.kind != "equation" or label.number is None or name in self.s.twice:
+                    continue
+                try:
+                    confirmed[self.anchor(name)] = label.number
+                except _Wait:
+                    continue
+            for nid in (sid, *self.proofs.get(sid, [])):
+                n = self.nodes.get(nid)
+                if n is None or not n.awaiting or not self._anchored_here(n):
+                    continue
+                fill = {a: confirmed[a] for a in n.awaiting if a in confirmed}
+                if not fill:
+                    continue
+                new = replace(
+                    n,
+                    anchors=tuple(sorted({**dict(n.anchors), **fill}.items())),
+                    awaiting=tuple(a for a in n.awaiting if a not in fill),
+                )
+                try:
+                    numbered(self.root, nid, node_hash(node_bytes(n)), new, {"ref": self.ref, "tex": self.work.tex})
+                except ActRefused as exc:
+                    self.out.waiting[item.item] = f"its display numbers could not be filled in: {exc}"[:300]
+                    continue
+                self.nodes[nid] = new
+                self.out.numbered.append(nid)
+
+    def _anchored_here(self, node: Node) -> bool:
+        """Whether loom gave the node's anchors from this very source: its latest extraction, at any text, read the work's TeX source as it is held now."""
+        made = [r for r in self.evidence.about("node", node.id, of="digested") if r.by.kind == "loom" and r.get("how") == "extracted"]  # fmt: skip
+        return bool(made) and (made[-1].get("from") or {}).get("tex") == self.work.tex
 
     def _ours(self, node: Node) -> bool:
         """Whether loom may write a node again: a stub, or loom's own extraction no person compared, its proofs with text alike; a pointer proof is left as it stands (`_give_proofs`)."""
@@ -865,12 +926,11 @@ class _Run:
             if n.empty:
                 continue
             digest = node_hash(node_bytes(n))
-            made = [
-                r for r in self.evidence.about("node", n.id, of="digested") if r.on is not None and r.on.hash == digest
-            ]
-            if not made or made[-1].by.kind != "loom" or made[-1].get("how") != "extracted":
+            # how its words were made, through a fill of its numbers (`Evidence.made`)
+            made = self.evidence.made("node", n.id, digest)
+            if made is None or made.by.kind != "loom" or made.get("how") != "extracted":
                 return False
-            if any(r.on is not None and r.on.hash == digest for r in self.evidence.about("node", n.id, of="compared")):
+            if self.evidence.compared("node", n.id, digest):
                 return False
         return True
 

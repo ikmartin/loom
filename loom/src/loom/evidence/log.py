@@ -28,7 +28,14 @@ AT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 #: Every kind of record, in the order the spec gives them.
 KINDS = ("digested", "compared", "proposed", "declined", "lean", "attested", "sought", "mention")
 #: How a node's text was made, and the one kind of hand that makes it so.
-HOWS = {"extracted": "loom", "transcribed": "agent", "read": "agent", "corrected": "agent", "written": "person"}
+HOWS = {
+    "extracted": "loom",
+    "transcribed": "agent",
+    "read": "agent",
+    "corrected": "agent",
+    "written": "person",
+    "numbered": "loom",
+}
 #: The one kind of hand each record may come from; a kind not here may come from any.
 HANDS = {
     "compared": ("person",),
@@ -91,6 +98,37 @@ class Evidence:
         """Every record on the thing `kind`, `name` names, at any hash, oldest first by `at`, records of one second in the order read; with `of`, only records of that kind."""
         found = self._about.get((kind, name), [])
         return [r for r in found if of is None or r.kind == of]
+
+    def texts(self, kind: str, name: str, digest: str) -> list[str]:
+        """The text `digest` and each it was numbered from, newest first: a loom `digested` how `numbered` on a text names the text its numbers were filled into (`was`), which differs from it only in its anchors' numbers, so a person's word on that one holds on this (`docs/specs/evidence.md` §3.1)."""
+        out = [digest]
+        while True:
+            filled = [
+                r
+                for r in self.about(kind, name, of="digested")
+                if r.on is not None and r.on.hash == out[-1] and r.get("how") == "numbered" and r.by.kind == "loom"
+            ]
+            was = filled[-1].get("was") if filled else None
+            if not isinstance(was, str) or was in out:
+                return out
+            out.append(was)
+
+    def compared(self, kind: str, name: str, digest: str) -> list[Record]:
+        """The person's `compared` records that hold on the text `digest`: on it, or on a text it was numbered from (`texts`), oldest first."""
+        held = set(self.texts(kind, name, digest))
+        return [r for r in self.about(kind, name, of="compared") if r.on is not None and r.on.hash in held]
+
+    def made(self, kind: str, name: str, digest: str) -> Record | None:
+        """The latest `digested` saying how the words of the text `digest` were made: on it, else on the text it was numbered from, a `numbered` record saying only where its numbers came from."""
+        for text in self.texts(kind, name, digest):
+            said = [
+                r
+                for r in self.about(kind, name, of="digested")
+                if r.on is not None and r.on.hash == text and r.get("how") != "numbered"
+            ]
+            if said:
+                return said[-1]
+        return None
 
     def by_id(self, record_id: str) -> Record | None:
         """The record with this id, the first if a merge kept two."""
@@ -318,12 +356,21 @@ def _document(value: Any, what: str, *, pages: bool) -> None:
 
 
 def _digested(raw: dict[str, Any], by: Who) -> Subject:
-    _keys(raw, {"on", "how", "from"})
-    how = raw["how"]
+    how = raw.get("how")
+    _keys(raw, {"on", "how", "from", *(("was",) if how == "numbered" else ())})
     if how not in HOWS:
         raise ValueError(f"{how!r} is not how a node is made")
     if HOWS[how] != by.kind:
         raise ValueError(f"a node {how} is made by {HOWS[how]}, not {by.kind}")
+    if how == "numbered":
+        # numbers from the person's compile of the TeX source, filled into the text `was`
+        _document(raw["from"], "from", pages=False)
+        if "tex" not in raw["from"]:
+            raise ValueError("a node is numbered from its work's TeX source")
+        on = _node_on(raw)
+        if _hash(raw["was"], "was") == on.hash:
+            raise ValueError("was is the text before the numbers were filled, not the text after")
+        return on
     if how == "written" and raw["from"] is None:
         return _node_on(raw)
     _document(raw["from"], "from", pages=True)
