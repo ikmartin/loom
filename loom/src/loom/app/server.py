@@ -24,6 +24,7 @@ from loom.app import registry
 from loom.app.registry import HOME_PORT, Entry, address
 from loom.app.supervise import SETTLE, Supervisor, tail
 from loom.files import FILES_URL
+from loom.identity import at_the_viewer
 from loom.render.endpoints.base import ApiError
 from loom.render.serve import BUILD_URL, LIBRARY_PDF_URL, LIBRARY_THUMB_URL, HeldBundle, LoomHandler, from_elsewhere
 from loom.version import code_stamp
@@ -300,7 +301,10 @@ class HomeHandler(LoomHandler):
             self._json(HTTPStatus.BAD_REQUEST, {"error": {"code": "bad-json", "message": str(exc)}})
             return
         try:
-            self._json(HTTPStatus.OK, handler(self.home, body))
+            # a request from the home page is the person at a browser, whichever shell started the home
+            with at_the_viewer():
+                answer = handler(self.home, body)
+            self._json(HTTPStatus.OK, answer)
         except ApiError as exc:
             self._json(exc.status, exc.answer())
         except registry.Unreadable as exc:
@@ -367,7 +371,10 @@ class Home:
         return [dict(job) for job in reversed(self.jobs.values())]
 
     def start_job(self, kind: str, work: Callable[[Callable[[str], None]], dict[str, Any]]) -> str:
-        """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, then `done` with what `work` answered or `failed` with `why` and `said`."""
+        """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, then `done` with what `work` answered or `failed` with `why` and `said`.
+
+        The thread runs `at_the_viewer`, since a job is the home page's request and a new thread starts outside the one that asked: a quilt made from a drop is the person's act whichever shell started the home.
+        """
         key = secrets.token_hex(6)
         job: dict[str, Any] = {"job": key, "kind": kind, "state": "running", "step": ""}
         self.jobs[key] = job
@@ -379,7 +386,9 @@ class Home:
 
         def go() -> None:
             try:
-                job.update(work(step), state="done")
+                with at_the_viewer():
+                    done = work(step)
+                job.update(done, state="done")
             except ApiError as exc:
                 job.update(state="failed", why=exc.code, said=exc.message)
             except Exception as exc:  # noqa: BLE001

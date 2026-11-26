@@ -239,6 +239,20 @@ def test_a_paper_dropped_over_the_wire_becomes_a_quilt_that_is_served(home_serve
     until(lambda: home_server.supervisor.state(entry)["state"] == "running", "the quilt served")
 
 
+def test_a_quilt_made_on_the_home_page_is_the_persons_act_whichever_shell_started_the_home(
+    home_server: Home, place: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.paths import JOURNAL
+
+    monkeypatch.setenv("CLAUDECODE", "1")  # the home started from an agent's terminal
+    job = create_job(home_server, "Mine", place, drop({"paper.tex": PAPER}))
+    until(lambda: job()["state"] != "running", "the quilt made")
+    assert job()["state"] == "done", job()
+    lines = [json.loads(line) for line in (place / "Mine" / JOURNAL).read_text().splitlines()]
+    imports = [e for e in lines if e.get("event") == "begin" and e.get("kind") == "import"]
+    assert [e["by"] for e in imports] == ["person"], imports
+
+
 def test_a_create_while_the_list_cannot_be_read_is_refused_and_makes_nothing(home_server: Home, place: Path) -> None:
     listed = registry.folder() / "quilts.json"
     listed.write_text("{")
