@@ -225,7 +225,7 @@ THING is a node or any key in it, a document's path, an annotation id, a session
 
 ## Review
 
-Annotate, accept, keep or undo what changed, see what rests on what, and what is known of a result.
+Annotate, accept, keep or undo what changed, see what rests on what, what is known of a result, and Lean's check of it.
 
 ### `loom annotate`
 
@@ -354,6 +354,60 @@ With --proofs, only the proofs that cite ID themselves: where a hypothesis or a 
 `loom evidence [OPTIONS] NAME`
 
 What is known of a result: its status, and every record about it. NAME is a draft's label or a node's id.
+
+| option | description |
+|---|---|
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+### `loom formal`
+
+`loom formal [OPTIONS]`
+
+`loom formal [OPTIONS] [COMMAND] [ARGS]...`
+
+Run alone, `loom formal` is a command; its subcommands follow its options.
+
+Say whether formalization is on for this quilt on this machine, and whether loom can check its Lean here.
+
+The person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom "LABEL"]`, and asks loom to check it (`loom formal check`). What Lean said is loom's own record, never an agent's.
+
+| option | description |
+|---|---|
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom formal check`
+
+`loom formal check [OPTIONS]`
+
+Have loom check the quilt's Lean itself: rebuild the project from clean, read which declaration states which result (`@[loom "LABEL"]`) and the axioms each rests on, and replay the build in Lean's kernel, every step fenced, with no network and writes only in the project. Each result a declaration states gets loom's own record of what Lean said, which stops standing once its Lean or its statement changes.
+
+Refused when formalization is off here, and from a shell that is itself fenced, such as an agent's sandbox, where the fence cannot be put up: ask through loom's tools instead.
+
+| option | description |
+|---|---|
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom formal off`
+
+`loom formal off [OPTIONS]`
+
+Turn formalization off for this quilt on this machine: loom runs no Lean here until it is turned on again. What it installed stays, and so do its records.
+
+| option | description |
+|---|---|
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom formal on`
+
+`loom formal on [OPTIONS]`
+
+Turn formalization on for this quilt on this machine: install elan, the Lean toolchain and Mathlib (about 11 GB and a few minutes the first time), and make the quilt's Lean project where it has none.
+
+Kept on this machine and never in the quilt, so a co-author who opens the quilt runs nothing until they turn it on themselves. It downloads and runs Lean's and Mathlib's own installers; the check that follows runs fenced.
 
 | option | description |
 |---|---|

@@ -653,6 +653,48 @@
    "open_world_hint": false,
    "read_only_hint": true
   },
+  "command": "loom formal",
+  "description": "Say whether formalization is on for this quilt on this machine, and whether loom can check its Lean here.\n\nThe person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom \"LABEL\"]`, and asks loom to check it (`loom formal check`). What Lean said is loom's own record, never an agent's.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    }
+   },
+   "type": "object"
+  },
+  "name": "loom_formal"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom formal check",
+  "description": "Have loom check the quilt's Lean itself: rebuild the project from clean, read which declaration states which result (`@[loom \"LABEL\"]`) and the axioms each rests on, and replay the build in Lean's kernel, every step fenced, with no network and writes only in the project. Each result a declaration states gets loom's own record of what Lean said, which stops standing once its Lean or its statement changes.\n\nRefused when formalization is off here, and from a shell that is itself fenced, such as an agent's sandbox, where the fence cannot be put up: ask through loom's tools instead.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    }
+   },
+   "type": "object"
+  },
+  "name": "loom_formal_check"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
   "command": "loom here",
   "description": "Say where the person is looking in the viewer: the document, result, paper or session in front of them, the block at the top of the pane, the words they selected or the region of a page, and the annotation whose popup is open. A region or an annotation on a PDF page comes with a crop of the page around it, under .loom/cache/crops/.\n\nThe viewer tab they touched last reports it to `loom serve`, which keeps it in memory only. With nothing serving the quilt, or no tab open, it says so. Each thing is named with the link `loom link` prints.",
   "inputSchema": {
