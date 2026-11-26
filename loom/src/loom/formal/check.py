@@ -77,7 +77,7 @@ def _digest(path: Path) -> str | None:
 
 
 def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
-    """Run loom's certifying check of the quilt's Lean project and record what Lean said.
+    """Run loom's certifying check of the quilt's Lean project and record what Lean said; once it has the project's lock, when it ran and what came of it, a refusal too, is kept beside the switch (`switch.remember_check`).
 
     Parameters
     ----------
@@ -140,9 +140,14 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
         except EnvError:
             raise Refused("loom is already checking this quilt's Lean; ask again once it is done") from None
         try:
-            return _check(root, proj, name, toolchain, mods, places, Path(probe) / "Probe.lean", say)
+            done = _check(root, proj, name, toolchain, mods, places, Path(probe) / "Probe.lean", say)
+        except Refused as e:
+            switch.remember_check(root, {"refused": str(e)})
+            raise
         finally:
             lock.__exit__(None, None, None)
+    switch.remember_check(root, {"written": len(done.written), "unchanged": len(done.unchanged), "unknown": len(done.unknown), "errors": len(done.errors)})  # fmt: skip
+    return done
 
 
 def _check(

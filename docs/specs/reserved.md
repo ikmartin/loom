@@ -62,7 +62,7 @@ None is registered, so help, the command reference and the agent's tools are unc
 
 ## Diagnostics and doctor
 
-Code prefixes: `loom:formal-` for formalization; `loom:markdown-` for the checks of links in Markdown; `loom:tex-` for a missing picture or package; `loom:compile-` for a failed compile shown as a problem. Doctor items: `writes`, what recovery of the journal could not settle; and the Lean items of formalization.
+Code prefixes: `loom:formal-` for formalization; `loom:markdown-` for the checks of links in Markdown; `loom:tex-` for a missing picture or package; `loom:compile-` for a failed compile shown as a problem. Doctor items: `writes`, what recovery of the journal could not settle.
 
 ## The viewer
 
