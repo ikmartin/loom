@@ -286,7 +286,9 @@ def refuse_bad_links(result: Any, root: Path, text: str) -> None:
 
 def quilt_link(key: str, place: str = "", words: str | None = None) -> str:
     """`[](quilt:KEY#PLACE&quote=WORDS)`, the empty text the viewer fills with its own name for the thing; a file's path and the words are percent-encoded, so a space, a bracket or a parenthesis does not end the link."""
-    keys = [k for k in (place, "quote=" + quote(" ".join(words.split()), safe="") if words else "") if k]
+    # a full stop is encoded too, so words ending a sentence keep it when the link is read raw, where a trailing `.` is the sentence's
+    said = quote(" ".join(words.split()), safe="").replace(".", "%2E") if words else ""
+    keys = [k for k in (place, "quote=" + said if said else "") if k]
     return f"[](quilt:{quote(key, safe='/:._-~')}{'#' + '&'.join(keys) if keys else ''})"
 
 

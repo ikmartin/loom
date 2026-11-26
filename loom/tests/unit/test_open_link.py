@@ -52,6 +52,14 @@ def test_a_cited_link_opens_the_work_at_its_pages_here(tmp_path: Path, opened: l
     assert opened == [f"http://127.0.0.1:8765/open?link={quote(f'quilt:{ref}#page=2&quote=a%20phrase', safe='')}"]
 
 
+def test_a_label_opens_the_node_it_names(tmp_path: Path, opened: list[str]) -> None:
+    """The viewer knows a node by its key, not by the labels the source gives it, so `loom open` sends the key loom resolved."""
+    q = demo(tmp_path)
+    listening(q)
+    ok("open", "quilt:lem:orbits#quote=one%20or%20two", cwd=q)
+    assert opened == [f"http://127.0.0.1:8765/open?link={quote('quilt:dm-0002#quote=one%20or%20two', safe='')}"]
+
+
 def test_a_link_to_nothing_is_refused_and_opens_nothing(tmp_path: Path, opened: list[str]) -> None:
     q = demo(tmp_path)
     listening(q)

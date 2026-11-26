@@ -139,6 +139,12 @@ def test_loom_link_prints_what_the_viewer_follows(q: Path) -> None:
         link("drafting/main.tex", "--at", "dm-0003", "--quote", "every  vertex")
         == "[](quilt:drafting/main.tex#dm-0003&quote=every%20vertex)"
     )
+    # words ending a sentence keep their full stop when the link is read raw, as an editor hands it to loom open
+    ended = link("dm-0003", "--quote", "ends here.")
+    assert ended == "[](quilt:dm-0003#quote=ends%20here%2E)"
+    from loom.links import raw_links, split_quote
+
+    assert split_quote(raw_links(ended)[0][1].partition("#")[2])[1] == "ends here."
     refused("link", "drafting/nodes/dm-0001.tex", cwd=q, code=2, match="file the documents include")
     refused("link", "dm-0003", "--page", "2", cwd=q, code=2, match="for a work")  # a page is a work's
     refused("link", "a-2026-09-16-tc3rcf", "--quote", "x", cwd=q, code=2, match="quoted words are for")

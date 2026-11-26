@@ -38,9 +38,9 @@ def open_command(link: str, quilt_path: str | None) -> None:
         target = resolve(result, root, href)
     except LinkError as exc:
         raise EnvError(str(exc)) from None
-    if href.startswith("cited:"):
-        # a work by its identifier opens at its own pages here, as the quilt names it
-        href = quilt_link(target.key, target.place, _cited_quote(href))[len("[](") : -1]
+    # the link as the viewer reads it: by the key loom resolved it to, so an alias or a label (`def:widget`) opens its node, and a work by its identifier opens at its own pages here
+    words = _cited_quote(href) if href.startswith("cited:") else target.quote
+    href = quilt_link(target.key, target.place, words)[len("[](") : -1]
     url = open_url(root) or _start(root)
     at = f"{url}open?link={quote(href, safe='')}"
     webbrowser.open(at)
