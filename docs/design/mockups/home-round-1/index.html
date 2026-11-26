@@ -359,7 +359,7 @@ const SCREENS = [
    ${row(Q.cover,'refused',{said:'config.toml, line 4: a closing ] is missing'})}
    ${row(Q.widget,'refused',{said:'this quilt is format 8; this loom reads format 7', newer:true, hint:'A newer loom made this quilt. To update loom, paste the line from loom’s GitHub page into Terminal again, as when you installed it; then open this quilt here.', copied:true})}
    ${row(Q.flow,'exited')}
-   ${row(Q.lattice,'cannot-start',{said:"Operation not permitted: '/Users/maren/Dropbox/lattice-points/.loom'"})}
+   ${row(Q.lattice,'cannot-start',{said:"Operation not permitted: '/Users/someone/Dropbox/lattice-points/.loom'"})}
  </div>${hint}`})},
  {id:'3c', group:3, label:'the list cannot be read', render:()=>home({disabled:true, body:`<div class="qlist" style="border-top:0"><div class="hnote bad" style="margin:0"><div class="t">Loom cannot read its list of quilts, so it shows none and gives no quilt an address until it can; the list is kept as it was. Quilts already open stay open.</div>${copyBtn()}</div></div>`})},
 
