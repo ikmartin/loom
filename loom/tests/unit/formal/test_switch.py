@@ -70,8 +70,9 @@ def test_off_is_kept_and_reads_off(tmp_path: Path) -> None:
 
 def test_a_new_project_trusts_only_lean_s_and_the_community_s_repositories(tmp_path: Path) -> None:
     """The project loom makes requires Mathlib from the community's repository at loom's pin, with loom's marker module beside its library."""
-    proj = tmp_path / "lean"
-    install.make_project(proj)
+    q = showcase(tmp_path)
+    install.make_project(q)
+    proj = install.project(q)
     assert install.untrusted(proj) == []
     assert install.toolchain_of(proj) == install.TOOLCHAIN
     assert (proj / "Loom.lean").read_bytes() == install.MARKER.read_bytes()
@@ -123,15 +124,17 @@ def test_a_project_asking_for_anything_else_is_refused(
 
 
 def test_loom_s_own_shape_with_mathlib_s_manifest_is_trusted(tmp_path: Path) -> None:
-    proj = tmp_path / "lean"
-    install.make_project(proj)
+    q = showcase(tmp_path)
+    install.make_project(q)
+    proj = install.project(q)
     (proj / "lake-manifest.json").write_text(json.dumps({"packages": [OWN, INHERITED]}), encoding="utf-8")
     assert install.untrusted(proj) == []
 
 
 def test_a_lakefile_that_is_a_program_is_refused(tmp_path: Path) -> None:
-    proj = tmp_path / "lean"
-    install.make_project(proj)
+    q = showcase(tmp_path)
+    install.make_project(q)
+    proj = install.project(q)
     (proj / "lakefile.lean").write_text("import Lake\n", encoding="utf-8")
     assert any("lakefile.lean" in p for p in install.untrusted(proj))
 
@@ -140,8 +143,9 @@ def test_a_lakefile_that_is_a_program_is_refused(tmp_path: Path) -> None:
     "name", ["someone/lean4:v4.36.0", "leanprover/lean4:nightly", "leanprover/lean4:v4.36.0; rm -rf ~"]
 )
 def test_a_toolchain_not_of_lean_s_own_releases_is_refused(tmp_path: Path, name: str) -> None:
-    proj = tmp_path / "lean"
-    install.make_project(proj)
+    q = showcase(tmp_path)
+    install.make_project(q)
+    proj = install.project(q)
     (proj / "lean-toolchain").write_text(name + "\n", encoding="utf-8")
     with pytest.raises(install.Refused, match="not one of Lean's own releases"):
         install.toolchain_of(proj)
@@ -184,10 +188,21 @@ def test_install_makes_the_project_and_fetches_through_the_toolchain_s_own_lake(
             (cwd / "lake-manifest.json").write_text(json.dumps({"packages": []}), encoding="utf-8")
 
     monkeypatch.setattr(install, "_run", fake)
-    q = tmp_path / "q"
-    q.mkdir()
+    q = showcase(tmp_path)
     done = install.install(q)
     lake = str(install.toolchain_folder(install.TOOLCHAIN) / "bin" / "lake")
     assert ran == [["/usr/bin/elan", "toolchain", "install", install.TOOLCHAIN], [lake, "update"]]
     assert [s for s, _ in done.steps] == ["toolchain", "mathlib"]
     assert (q / install.LEAN / "lakefile.toml").is_file()
+
+
+def test_the_project_is_made_through_the_door_and_keeps_what_is_there(tmp_path: Path) -> None:
+    """Making the project writes each file through the door (an act the journal names as turning formalization on) and only where none is, so a library root an agent already wrote is kept; loom's marker module is put back where it differs."""
+    q = showcase(tmp_path)
+    proj = install.project(q)
+    proj.mkdir()
+    (proj / "Formal.lean").write_text("import Loom\nimport Formal.Mine\n", encoding="utf-8")
+    (proj / "Loom.lean").write_text("-- not loom's\n", encoding="utf-8")
+    install.make_project(q)
+    assert (proj / "Formal.lean").read_text(encoding="utf-8") == "import Loom\nimport Formal.Mine\n"
+    assert install.marker_is_loom_s(q) and (proj / "lakefile.toml").is_file()

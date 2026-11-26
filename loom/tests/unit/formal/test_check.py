@@ -69,7 +69,7 @@ def quilt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     q = showcase(tmp_path)
     switch.turn_on(q)
     proj = install.project(q)
-    install.make_project(proj)
+    install.make_project(q)
     (proj / "lake-manifest.json").write_text(json.dumps({"packages": []}), encoding="utf-8")
     (proj / "Formal").mkdir()
     (proj / SATURATION).write_text("import Loom\n-- the trial's Lean\n", encoding="utf-8")
@@ -236,19 +236,6 @@ def test_a_lean_file_changed_during_the_check_records_nothing(quilt: Path, monke
     assert replay(quilt).of_kind("lean") == []
 
 
-def test_a_planted_build_link_is_refused(quilt: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """A `.lake/build` that is a link elsewhere is refused before anything is removed, so the clean rebuild deletes nothing outside the project."""
-    _steps(monkeypatch, _probe())
-    elsewhere = tmp_path / "elsewhere"
-    elsewhere.mkdir()
-    (elsewhere / "keep.txt").write_text("keep\n", encoding="utf-8")
-    (install.project(quilt) / ".lake").mkdir()
-    (install.project(quilt) / ".lake" / "build").symlink_to(elsewhere)
-    with pytest.raises(check.Refused, match="not a folder loom made"):
-        check.check(quilt)
-    assert (elsewhere / "keep.txt").is_file()
-
-
 def test_a_project_whose_folders_hold_the_person_s_files_is_refused(
     quilt: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -277,12 +264,34 @@ def test_a_probe_that_does_not_answer_records_nothing(quilt: Path, monkeypatch: 
     assert replay(quilt).of_kind("lean") == []
 
 
-def test_the_marker_module_is_put_back_as_loom_ships_it(quilt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _steps(monkeypatch, _probe())
+def test_a_marker_module_that_is_not_loom_s_is_refused(quilt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The check writes nothing in the quilt: where the marker module differs from loom's it refuses, runs nothing, and leaves the file for turning formalization on to put back."""
+    ran = _steps(monkeypatch, _probe())
     marker = install.project(quilt) / "Loom.lean"
     marker.write_text("import Lean\n-- the marker made to mean something else\n", encoding="utf-8")
-    check.check(quilt)
-    assert marker.read_bytes() == install.MARKER.read_bytes()
+    with pytest.raises(check.Refused, match="not loom's marker module"):
+        check.check(quilt)
+    assert ran == [] and marker.read_text(encoding="utf-8").endswith("something else\n")
+
+
+@pytest.mark.parametrize("linked", [".lake", ".lake/build", ".lake/loom"])
+def test_a_folder_the_check_removes_that_is_a_link_is_refused(quilt: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, linked: str) -> None:  # fmt: skip
+    """`.lake`, `.lake/build` or `.lake/loom` made a link to a folder elsewhere is refused before anything is removed, so the clean rebuild removes nothing outside the project."""
+    ran = _steps(monkeypatch, _probe())
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "build").mkdir(parents=True)
+    (elsewhere / "loom").mkdir()
+    (elsewhere / "keep.txt").write_text("keep\n", encoding="utf-8")
+    (elsewhere / "build" / "keep.txt").write_text("keep\n", encoding="utf-8")
+    lake = install.project(quilt) / ".lake"
+    if linked == ".lake":
+        lake.symlink_to(elsewhere)
+    else:
+        lake.mkdir()
+        (install.project(quilt) / linked).symlink_to(elsewhere)
+    with pytest.raises(check.Refused, match="not a folder of the project's own"):
+        check.check(quilt)
+    assert ran == [] and (elsewhere / "keep.txt").is_file() and (elsewhere / "build" / "keep.txt").is_file()
 
 
 def _helped(helper: str, proof: str) -> list[dict[str, Any]]:

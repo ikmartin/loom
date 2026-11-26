@@ -146,31 +146,46 @@ def _repository(url: object) -> str | None:
     return url.removesuffix("/").removesuffix(".git")
 
 
-def make_project(proj: Path) -> None:
-    """Write a new Lake project requiring Mathlib at `MATHLIB`: its `lakefile.toml`, `lean-toolchain`, the library's root module, loom's marker module and a `.gitignore` keeping `.lake` out."""
-    proj.mkdir(parents=True, exist_ok=True)
-    (proj / "lean-toolchain").write_text(TOOLCHAIN + "\n", encoding="utf-8")
-    (proj / "lakefile.toml").write_text(
-        f'name = "formal"\ndefaultTargets = ["{LIBRARY}"]\n\n'
+def make_project(root: Path) -> None:
+    """Make the quilt's Lake project, requiring Mathlib at `MATHLIB`, through the door: its `lakefile.toml`, `lean-toolchain`, the library's root module and a `.gitignore` keeping `.lake` out, each only where none is, and loom's marker module (`write_marker`)."""
+    files = {
+        "lean-toolchain": TOOLCHAIN + "\n",
+        "lakefile.toml": f'name = "formal"\ndefaultTargets = ["{LIBRARY}"]\n\n'
         f'[[require]]\nname = "mathlib"\ngit = "{MATHLIB_GIT}"\nrev = "{MATHLIB}"\n\n'
         f'[[lean_lib]]\nname = "{MARKER_MODULE}"\n\n[[lean_lib]]\nname = "{LIBRARY}"\n',
-        encoding="utf-8",
-    )
-    (proj / f"{LIBRARY}.lean").write_text(f"import {MARKER_MODULE}\n", encoding="utf-8")
-    (proj / ".gitignore").write_text("/.lake\n", encoding="utf-8")
-    write_marker(proj)
+        f"{LIBRARY}.lean": f"import {MARKER_MODULE}\n",
+        ".gitignore": "/.lake\n",
+    }
+    for name, text in files.items():
+        if not (project(root) / name).exists():
+            _put(root, name, text.encode("utf-8"), None)
+    write_marker(root)
 
 
-def write_marker(proj: Path) -> None:
-    """Put loom's marker module in the project, as loom ships it, where it is missing or differs."""
+def write_marker(root: Path) -> None:
+    """Put loom's marker module in the quilt's project as loom ships it, through the door, where it is missing or differs; refused (`changed`) where it changed since loom read it."""
     want = MARKER.read_bytes()
-    target = proj / f"{MARKER_MODULE}.lean"
     try:
-        if target.read_bytes() == want:
-            return
+        now: bytes | None = (project(root) / f"{MARKER_MODULE}.lean").read_bytes()
+    except FileNotFoundError:
+        now = None
+    if now != want:
+        _put(root, f"{MARKER_MODULE}.lean", want, now)
+
+
+def marker_is_loom_s(root: Path) -> bool:
+    """Whether the project's marker module is loom's as it ships it."""
+    try:
+        return (project(root) / f"{MARKER_MODULE}.lean").read_bytes() == MARKER.read_bytes()
     except OSError:
-        pass
-    target.write_bytes(want)
+        return False
+
+
+def _put(root: Path, name: str, data: bytes, expect: bytes | None) -> None:
+    """Write one file of the quilt's project through the door, as part of turning formalization on: a file of the quilt like any other, so its history keeps what it replaces."""
+    from loom.writes import put
+
+    put(root, None, f"{LEAN}/{name}", data, kind="formal", expect=expect)
 
 
 def install(root: Path, say: Callable[[str], None] = lambda _: None) -> Installed:
@@ -203,7 +218,7 @@ def install(root: Path, say: Callable[[str], None] = lambda _: None) -> Installe
         done.steps.append(("elan", time.monotonic() - t))
     if not (proj / "lakefile.toml").exists() and not (proj / "lakefile.lean").exists():
         say(f"making the Lean project in {LEAN}/")
-        make_project(proj)
+        make_project(root)
     problems = untrusted(proj)
     if problems:
         raise Refused("the Lean project requires what loom does not install: " + "; ".join(problems))
@@ -222,7 +237,7 @@ def install(root: Path, say: Callable[[str], None] = lambda _: None) -> Installe
     problems = untrusted(proj)
     if problems:
         raise Refused("Mathlib pinned what loom does not install: " + "; ".join(problems))
-    write_marker(proj)
+    write_marker(root)
     return done
 
 

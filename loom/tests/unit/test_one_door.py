@@ -72,6 +72,7 @@ MODULES = {
     "library/thumbs.py": "the stored PDFs' first pages as pictures, `.loom/cache/library/thumbs/`",
     "evidence/log.py": "the evidence log, `.loom/records/evidence/`",
     "cli/library/add.py": "a folder's source, packed into a drop in `.loom/local/incoming/`",
+    "formal/switch.py": "the switch that turns formalization on, one file a quilt in the machine's own place",
 }
 
 #: Functions of mixed modules that write only loom's own places, by `module:qualname`, with why.
@@ -110,6 +111,9 @@ FUNCTIONS = {
     "reshape/importer.py:_mirror_quilt": "a temporary stage",
     "scan/quilt.py:save_author": "the machine's own config",
     "upgrade.py:upgrade": "the annotation types, `.loom/records/annotation-types.toml`, written only where there are none",
+    "formal/check.py:check": "loom's probe, copied into a temporary folder of its own",
+    "formal/check.py:_check": "two folders in the Lake project's `.lake`, refused where it or they are a link: `.lake/loom`, loom's own folder for a check's home and temporary files, made anew each check; and `.lake/build`, Lake's build of the project's own modules, which the check builds again from clean; never a source, a package or anything outside the project",
+    "formal/install.py:_install_elan": "elan's installer, downloaded into a temporary folder of its own",
 }
 
 

@@ -151,7 +151,10 @@ def _check(
 ) -> Checked:
     """`check` once its preconditions hold: the fenced steps, then the records."""
     done = Checked()
-    install.write_marker(proj)
+    if not install.marker_is_loom_s(root):
+        raise Refused(
+            f"{install.LEAN}/{install.MARKER_MODULE}.lean is not loom's marker module as loom ships it; turning formalization on again puts it back"
+        )
     read = [*(p for p in mods.values()), *CONFIG]
     before = {p: _digest(proj / p) for p in read}
     if any(h is None for h in before.values()):
@@ -160,13 +163,14 @@ def _check(
             + ", ".join(p for p, h in before.items() if h is None)
             + "; turning formalization on again makes it"
         )
-    own = proj / ".lake" / "loom"
+    own, build = proj / ".lake" / "loom", proj / ".lake" / "build"
+    for p in (proj, proj / ".lake", own, build):
+        if p.is_symlink() or (p.exists() and not p.is_dir()):
+            raise Refused(f"{p.relative_to(root)} is not a folder of the project's own; remove it and check again")
+    # the two folders the check removes, each a plain folder in the project's .lake: loom's own for its runs, and Lake's build of the project's modules, which the check makes again from clean
     shutil.rmtree(own, ignore_errors=True)
     (own / "home").mkdir(parents=True)
     (own / "tmp").mkdir()
-    build = proj / ".lake" / "build"
-    if build.is_symlink() or (build.exists() and not build.is_dir()):
-        raise Refused("the project's .lake/build is not a folder loom made; remove it and check again")
     shutil.rmtree(build, ignore_errors=True)
     lake = str(toolchain / "bin" / "lake")
     env = {

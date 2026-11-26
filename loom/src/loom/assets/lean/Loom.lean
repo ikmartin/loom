@@ -1,5 +1,5 @@
 /-
-The marker loom reads when it checks this project. Kept by loom; an edit here is put back.
+The marker loom reads when it checks this project. Kept by loom: it checks the project only while this file is as loom ships it, and turning formalization on puts it back.
 
 `@[loom "NAME"]` on a declaration says that it states the result loom knows by NAME: a label of the person's drafts, such as `thm:rank`, or a library node's id. A result may be stated by several declarations together; a declaration with no marker only supports one. Write the marker on an `axiom` to assume a library result rather than prove it.
 -/

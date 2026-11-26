@@ -74,7 +74,7 @@ def quilt(tmp_path: Path) -> Path:
     q = showcase(tmp_path)
     switch.turn_on(q)
     proj = install.project(q)
-    install.make_project(proj)
+    install.make_project(q)
     (proj / "lakefile.toml").write_text(
         f'name = "formal"\ndefaultTargets = ["{install.LIBRARY}"]\n\n[[lean_lib]]\nname = "{install.MARKER_MODULE}"\n\n[[lean_lib]]\nname = "{install.LIBRARY}"\n',
         encoding="utf-8",
