@@ -213,10 +213,12 @@
 		marked = id ? { id, at, words: quote, target } : null;
 	}
 
-	/** Open the popup on an annotation just written, once the manifest that holds it has been drawn. Add comment stands, and keeps the keys typed, until it opens. */
+	/** Open the popup on an annotation just written, once the manifest that holds it has been drawn; a draft opened meanwhile ends the trying. Add comment stands, and keeps the keys typed, until it opens. */
 	async function openWritten(id: string): Promise<void> {
 		await store.refresh();
 		for (let i = 0; i < 20; i++) {
+			// a draft opened meanwhile is the reader's next step, and no popup opens over it
+			if (drafting) break;
 			if (notes.show(id)) {
 				if (marked?.id === id) marked = null;
 				return;
@@ -391,17 +393,23 @@
 	</SelectionMenu>
 {/if}
 {#if drafting}
-	<aside class="ann-popup-host" use:placed={drafting.at} data-testid="draft-host">
-		<AnnotationPopup
-			bind:this={popup}
-			draft={drafting.draft}
-			onclose={closeDraft}
-			onwritten={(id) => {
-				closeDraft();
-				if (id) void openWritten(id);
-			}}
-		/>
-	</aside>
+	{@const mine = drafting}
+	<!-- each draft its own popup, so a write still on its way from the last one neither holds this one's button nor closes it -->
+	{#key mine}
+		<aside class="ann-popup-host" use:placed={mine.at} data-testid="draft-host">
+			<AnnotationPopup
+				bind:this={popup}
+				draft={mine.draft}
+				onclose={closeDraft}
+				onwritten={(id) => {
+					// written after the reader moved on: the draft open now, or none, stays as it is
+					if (drafting !== mine) return;
+					closeDraft();
+					if (id) void openWritten(id);
+				}}
+			/>
+		</aside>
+	{/key}
 {/if}
 
 <style>

@@ -301,6 +301,10 @@ test.describe('on a project PDF', () => {
 		await holding(page, { type: null, over: {}, plain: { color: 'purple', style: 'highlight', weight: 3, opacity: 80 } });
 		await openPaper(page, `/file/${FILE}`);
 
+		// the pin's write is held until the next draft is open, as a slow publisher leaves it: its answer neither closes that draft nor opens the pin's popup over it
+		let release = () => {};
+		const held = new Promise<void>((r) => (release = r));
+		await page.route('**/_api/annotate', async (route) => (await held, route.continue()), { times: 1 });
 		await page.getByTestId('tool-comment').click();
 		await pressOn(page, 1, [0.1, 0.1]);
 		const draft = page.getByTestId('ann-popup');
@@ -313,6 +317,12 @@ test.describe('on a project PDF', () => {
 		await page.getByTestId('tool-text').click();
 		await pressOn(page, 1, [0.25, 0.08]);
 		await page.getByTestId('popup-comment-field').fill('words on the page');
+		const answered = page.waitForResponse('**/_api/annotate');
+		release();
+		await answered;
+		await published(served, 1);
+		await expect(page.getByTestId('draft-host')).toBeVisible();
+		await expect(page.getByTestId('popup-host')).toHaveCount(0);
 		await page.getByTestId('popup-save').click();
 		await expect(marks(page, 'text')).toContainText('words on the page');
 
