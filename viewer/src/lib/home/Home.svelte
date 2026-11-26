@@ -1,11 +1,12 @@
 <script lang="ts">
-	// Loom's home page, drawn in place of a quilt when `GET /_api` says `home` (`listing.svelte.ts`): the person's quilts, each with its state and controls, Open a quilt… and New quilt, the TeX notice with Repair TeX, and the list that cannot be read. It asks for the list once a second while it is in view. Files dragged over any part of it cover it with a sheet saying what they will make; dropped, they open the window for a new quilt (`QuiltWindow.svelte`), as New quilt does with no paper.
+	// Loom's home page, drawn in place of a quilt when `GET /_api` says `home` (`listing.svelte.ts`): the person's quilts, each with its state and controls, Open a quilt… and New quilt, the TeX notice with Repair TeX, the list that cannot be read, and the person's name (`YourName.svelte`). It asks for the list once a second while it is in view. Files dragged over any part of it cover it with a sheet saying what they will make; dropped, they open the window for a new quilt (`QuiltWindow.svelte`), as New quilt does with no paper.
 	import { onDestroy, onMount } from 'svelte';
 	import { call } from './api';
 	import { homePage, repairOf, rowsOf, shortPath } from './listing.svelte';
 	import QuiltRow from './QuiltRow.svelte';
 	import CopyDetails from './CopyDetails.svelte';
 	import QuiltWindow from './QuiltWindow.svelte';
+	import YourName from './YourName.svelte';
 	import { draggingPdf, readDrop, type Drop } from './drop';
 	import { home as words } from '$lib/words/home';
 
@@ -93,6 +94,8 @@
 				</div>
 			{/if}
 
+			<YourName place="card" />
+
 			{#if repairing}
 				<div class="hnote plain" role="status" data-testid="home-tex-repairing">
 					<span class="spin-wrap"><svg class="spin" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--rule)" stroke-width="1.6" /><path d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round" /></svg></span>
@@ -141,6 +144,7 @@
 			{/if}
 		</div>
 	</div>
+	<YourName place="foot" />
 </div>
 
 {#if cover}

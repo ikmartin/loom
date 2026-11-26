@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homePage, judgeHome, repairOf, rowsOf, shortPath } from './listing.svelte';
+import { homePage, judgeHome, nameOf, repairOf, rowsOf, shortPath } from './listing.svelte';
 import { reportOf } from './report';
 import type { Job, Listing, QuiltRow } from './api';
 
@@ -46,5 +46,13 @@ describe("loom's home page", () => {
 		expect(said).toContain('latexmk: missing (not found)');
 		expect(said).toContain('config.toml, line 4');
 		expect(said).not.toContain('loom doctor');
+	});
+
+	it("asks the person's name while none is known, and says where it comes from only when that is git, never a file's path", () => {
+		const as = (name: string, source: string) => nameOf({ ...listing([]), name: { name, source } });
+		expect(as('', '')).toEqual({ asked: true });
+		expect(as('Maren Holt', 'git config user.name')).toEqual({ asked: false, name: 'Maren Holt', fromGit: true });
+		expect(as('Maren Holt', '/Users/m/.config/loom/config.toml')).toEqual({ asked: false, name: 'Maren Holt', fromGit: false });
+		expect(nameOf(null)).toBeNull();
 	});
 });

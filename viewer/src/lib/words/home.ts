@@ -95,6 +95,28 @@ export const home = {
 	},
 	/** The notice in place of the list when loom cannot read it. */
 	unreadable: 'Loom cannot read its list of quilts, so it shows none and gives no quilt an address until it can; the list is kept as it was. Quilts already open stay open.',
+	name: {
+		/** The card under the heading, while no name is known: what the name is for. */
+		ask: 'Your name, as it appears beside your comments and decisions',
+		/** The name field's placeholder. */
+		placeholder: 'Your name',
+		/** The button that saves the name. */
+		save: 'Save',
+		/** The quiet button that leaves the name as it was. */
+		cancel: 'Cancel',
+		/** In the footer while the name is changed, before its field. */
+		label: 'Your name',
+		/** In the footer, before the person's name. */
+		shown: 'Your name: ',
+		/** In the footer, after the name, where it comes from git. */
+		fromGit: ', from git',
+		/** The footer's link that changes the name. */
+		change: 'Change',
+		/** Said under the field when the name given is an agent's. */
+		agent: 'That name is kept for agents; give your own.',
+		/** Said under the field when loom could not save the name. */
+		refused: 'Loom could not save it.'
+	},
 	cover: {
 		/** The sheet over the page while a paper, folder or archive is dragged over it. */
 		paper: 'New quilt from your paper',

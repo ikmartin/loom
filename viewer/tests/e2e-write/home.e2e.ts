@@ -144,3 +144,24 @@ test('a dropped PDF becomes a quilt for reading it, open on its library', async 
 	await expect(quilt.locator('body')).toContainText('10.4171/demo/14-1');
 	await quilt.close();
 });
+
+test("the person's name is asked once, then shown in the footer and changed there", async ({ page }) => {
+	await page.goto('/');
+	await expect(page.getByTestId('home-name')).toHaveCount(0);
+	const asked = page.getByTestId('home-name-asked');
+	await expect(asked).toContainText('Your name, as it appears beside your comments and decisions');
+	await expect(page.getByTestId('home-name-save')).toBeDisabled();
+	await page.getByTestId('home-name-field').fill('Maren Holt');
+	await page.getByTestId('home-name-save').click();
+	await expect(asked).toHaveCount(0);
+	// saved in loom's own settings, so no source is said: only git's would be
+	await expect(page.getByTestId('home-name')).toHaveText(/^Your name: Maren Holt\s*·\s*Change$/);
+	await page.getByTestId('home-name-change').click();
+	await page.getByTestId('home-name-field').fill('M. Holt');
+	await page.getByTestId('home-name-field').press('Enter');
+	await expect(page.getByTestId('home-name-shown')).toHaveText('M. Holt');
+	// asked no more, after a reload too
+	await page.reload();
+	await expect(page.getByTestId('home-name-shown')).toHaveText('M. Holt');
+	await expect(asked).toHaveCount(0);
+});

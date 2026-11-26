@@ -90,3 +90,25 @@ export function shortPath(path: string, home?: string): string {
 export function repairOf(listing: Listing | null): Job | null {
 	return listing?.jobs.find((j) => j.kind === 'repair') ?? null;
 }
+
+/** The `source` loom gives a name read from git's own settings. */
+const FROM_GIT = 'git config user.name';
+
+/**
+ * The person's name as the page shows it: asked for while none is known, else with where it comes from only when that is git, since any other source is a file's path (I-13).
+ *
+ * Parameters
+ * ----------
+ * listing : Listing or null
+ *     `quilt-list`'s answer.
+ *
+ * Returns
+ * -------
+ * object
+ *     `{asked: true}` while no name is known, else `{name, fromGit}`; null before the list answers.
+ */
+export function nameOf(listing: Listing | null): { asked: true } | { asked: false; name: string; fromGit: boolean } | null {
+	if (!listing) return null;
+	const { name, source } = listing.name;
+	return name ? { asked: false, name, fromGit: source === FROM_GIT } : { asked: true };
+}
