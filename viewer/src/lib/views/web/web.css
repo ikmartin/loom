@@ -284,6 +284,13 @@
 .wv .moreb dd {
 	margin: 0;
 }
+/* Check again under a result's Lean, with the check's progress beside it */
+.wv .moreb .again {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 6px;
+}
 .wv .nb3 {
 	display: grid;
 	grid-template-columns: 1fr 1fr;

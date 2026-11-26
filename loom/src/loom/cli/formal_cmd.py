@@ -52,7 +52,7 @@ def formal(ctx: click.Context, as_json: bool, quilt_path: str | None) -> None:
 def on_command(as_json: bool, quilt_path: str | None) -> None:
     """Turn formalization on for this quilt on this machine: install elan, the Lean toolchain and Mathlib (about 11 GB and a few minutes the first time), and make the quilt's Lean project where it has none.
 
-    Kept on this machine and never in the quilt, so a co-author who opens the quilt runs nothing until they turn it on themselves. It downloads and runs Lean's and Mathlib's own installers; the check that follows runs fenced.
+    Kept on this machine and never in the quilt, so a co-author who opens the quilt runs nothing until they turn it on themselves. It downloads and runs Lean's and Mathlib's own installers; the check that follows runs fenced. From then, while `loom serve` runs, loom also checks the Lean again on its own once a statement it states or the Lean a record rests on changes and has been still for a minute.
     """
     from loom.formal import install, switch
     from loom.identity import refuse_under_agent
@@ -65,7 +65,7 @@ def on_command(as_json: bool, quilt_path: str | None) -> None:
     switch.turn_on(root)
     with Progress("installing Lean") as progress:
         try:
-            done = install.install(root, say=progress.item)
+            done = install.install(root, say=lambda step: progress.item(install.STEPS[step]))
         except install.Refused as e:
             raise EnvError(
                 f"formalization is on, and installing failed: {e}\nRun `loom formal on` again once that is fixed."
@@ -107,7 +107,7 @@ def check_command(as_json: bool, quilt_path: str | None) -> None:
     root = open_quilt(quilt_path).root
     with Progress("checking the Lean") as progress:
         try:
-            done = check.check(root, say=progress.item)
+            done = check.check(root, say=lambda step: progress.item(check.STEPS[step]))
         except check.Refused as e:
             raise EnvError(str(e)) from None
     groups = [

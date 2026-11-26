@@ -5,6 +5,7 @@ Every item is `ok`, `warn` (it works, but the person will hit something) or `fai
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
@@ -883,6 +884,70 @@ def check_server(root: Path) -> Item:
     return Item("server", OK, QUILT, said, "", {"url": None, "port": port}, shown=True)
 
 
+def check_lean(root: Path) -> Item:
+    """Lean for this quilt on this machine: whether formalization is on here, and once it is, whether the project is made, its toolchain installed and Mathlib fetched, whether loom can check Lean fenced here, and when loom last checked it, with how many results' records no longer stand.
+
+    A warning where on and something the check needs is missing, or the last check was refused; Lean's own errors are the Lean's, said and not warned of. Off, it says only whether the quilt carries a project, which loom runs nothing of here.
+    """
+    from loom import fence
+    from loom.evidence.log import replay
+    from loom.evidence.status import files_unchanged
+    from loom.formal import install, switch
+    from loom.paths import LAKE_PACKAGES
+
+    proj = install.project(root)
+    made = (proj / "lakefile.toml").is_file()
+    on = switch.is_on(root)
+    extra: dict[str, Any] = {"on": on, "project": install.LEAN if made else None}
+    if not on:
+        if not made:
+            return Item("lean", OK, QUILT, "formalization is off here", "", extra)
+        said = f"formalization is off here; the quilt has a Lean project in {install.LEAN}/, of which loom runs nothing until you turn it on"
+        return Item("lean", OK, QUILT, said, "", extra, shown=True)
+    if not made:
+        return Item("lean", WARN, QUILT, f"on, but the quilt has no Lean project in {install.LEAN}/", "loom formal on makes it", extra)  # fmt: skip
+    try:
+        toolchain = install.toolchain_of(proj)
+    except install.Refused as exc:
+        return Item("lean", WARN, QUILT, f"on, but {exc}", "fix the project's lean-toolchain", extra)
+    extra["toolchain"] = toolchain
+    try:
+        manifest = json.loads((proj / "lake-manifest.json").read_text(encoding="utf-8"))
+        packages = [p for p in manifest.get("packages", []) if isinstance(p, dict)]
+    except (OSError, ValueError, AttributeError):
+        packages = []
+    extra["mathlib"] = next((str(p.get("inputRev")) for p in packages if p.get("name") == "mathlib"), None)
+    missing = [str(p.get("name")) for p in packages if not (proj / LAKE_PACKAGES / str(p.get("name"))).is_dir()]
+    if not (install.toolchain_folder(toolchain) / "bin" / "lake").is_file():
+        return Item("lean", WARN, QUILT, f"on, but the toolchain {toolchain} is not installed here", "loom formal on installs it", extra)  # fmt: skip
+    if missing:
+        return Item("lean", WARN, QUILT, f"on, but {', '.join(missing)} is not fetched into the project", "loom formal on fetches it", extra)  # fmt: skip
+    why = fence.lean_state()
+    extra["fence"] = why
+    if why is not None:
+        return Item("lean", WARN, QUILT, f"on, but loom cannot check Lean here: the fence is not up ({why})", "run loom outside an agent's sandboxed shell", extra)  # fmt: skip
+    have = f"on: the project in {install.LEAN}/, {toolchain}" + (f", Mathlib {extra['mathlib']}" if extra["mathlib"] else "")
+    last = switch.last_check(root)
+    extra["last"] = last
+    if last is None:
+        return Item("lean", OK, QUILT, f"{have}; not checked yet on this machine", "", extra, shown=True)
+    when = last["at"].replace("T", " ").removesuffix("Z") + " UTC"
+    if "refused" in last:
+        return Item("lean", WARN, QUILT, f"{have}; the last check, {when}, was refused: {last['refused']}", "fix what it says, then loom formal check", extra)  # fmt: skip
+    came = f"{last.get('written', 0)} recorded, {last.get('unchanged', 0)} as before"
+    if last.get("errors"):
+        came += f", {last['errors']} of Lean's errors"
+    latest: dict[tuple[str, str], Any] = {}
+    for r in replay(root).of_kind("lean"):
+        if r.on is not None:
+            latest[r.on.key] = r
+    stands = files_unchanged(root)
+    gone = sum(1 for r in latest.values() if not stands(r))
+    extra["stale"] = gone
+    tail = f"; {gone} of {len(latest)} results' Lean changed since, which loom checks again while it serves" if gone else ""
+    return Item("lean", OK, QUILT, f"{have}; last checked {when} ({came}){tail}", "", extra, shown=True)
+
+
 def check_sizes(root: Path) -> list[Item]:
     """What `.loom/` holds, by kind, in the units a person reads, the scratch and the write journal on their own; and each session whose scratch is over `lifetimes.LARGE_SCRATCH`, with the day it is removed, which is the whole of that limit."""
     import datetime
@@ -997,6 +1062,7 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
             check_gitignore(root),
             check_config(quilt),
             check_server(root),
+            check_lean(root),
             check_writes(quilt),
             *check_sizes(root),
         ]

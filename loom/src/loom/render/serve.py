@@ -1190,6 +1190,8 @@ class ServeSession:
         self.watcher: Watcher | None = None
         #: The look at which agent servers are alive (`loom.presence`), started with the watcher.
         self.presence: Watch | None = None
+        #: The look at whether the quilt's Lean records went stale, which checks the Lean again on its own where formalization is on here (`formal.again`).
+        self.again: Any = None
         self.held: HeldBundle | LiveBundle | None = None
         self.last_report: BuildReport | None = None
         self.published: dict[Path, float] = {}  # the watched files as the last publication read them
@@ -1490,7 +1492,7 @@ class ServeSession:
             self._begin()
 
     def _begin(self) -> None:
-        """What a start runs once the server listens: settle what a crash left, take the first look, build, then start the watcher and the look at who is connected.
+        """What a start runs once the server listens: settle what a crash left, take the first look, build, then start the watcher, the look at who is connected and the look at whether the Lean went stale.
 
         On the caller's thread from `start`, on its own after `bring_forward`; a server that stopped meanwhile starts no watcher.
         """
@@ -1509,6 +1511,10 @@ class ServeSession:
             self.watcher.start()
             self.presence = Watch(self.quilt.root, self.publications.told_connected)
             self.presence.start()
+            from loom.formal.again import Again
+
+            self.again = Again(self.quilt.root, lambda: self.last_report.result if self.last_report is not None else None)
+            self.again.start()
 
     def library_moved(self, result: Any = None) -> int | None:
         """The library's generation as it now stands (`library.generation`), from `result` or the last publication's scan, told to the stream, which says it only when it moved; None for a server with no scan yet, or a quilt still waiting to be brought forward."""
@@ -1610,6 +1616,8 @@ class ServeSession:
         (self.quilt.root / COMPILES).unlink(missing_ok=True)
         if self.presence:
             self.presence.stop()
+        if self.again:
+            self.again.stop()
         self.publications.close()
         if self.watcher:
             self.watcher.stop()

@@ -416,6 +416,7 @@ def test_the_demo_is_ok_in_every_quilt_item(box: Box) -> None:
         ".gitignore": ("ok", "has loom's lines"),
         "config": ("ok", "config.toml read cleanly"),
         "server": ("ok", "not running"),
+        "lean": ("ok", "formalization is off here"),
         "writes": ("ok", "nothing loom wrote is left unsettled"),
     }
 

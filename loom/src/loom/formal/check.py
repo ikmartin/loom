@@ -32,6 +32,12 @@ TIMEOUT = 3600
 OUTPUT = 20_000
 #: The replay a record names: the probe hands every declaration of the project's modules to Lean's kernel over the modules they import from outside it, as leanchecker does one module at a time.
 REPLAY = "Lean.Kernel.Environment.replay"
+#: Each fenced step of the check by the code `check` tells, with the words a terminal and each step's seconds say it in; the viewer has its own words for each code.
+STEPS = {
+    "mathlib": "checking that Mathlib's build is whole",
+    "build": "building the Lean project from clean",
+    "probe": "replaying the build in Lean's kernel and reading what it states",
+}
 _ERROR = re.compile(r"^error: (?:\./)?(?P<path>[^:\s]+\.lean):(?P<rest>.*)$")
 
 
@@ -71,14 +77,14 @@ def _digest(path: Path) -> str | None:
 
 
 def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
-    """Run loom's certifying check of the quilt's Lean project and record what Lean said.
+    """Run loom's certifying check of the quilt's Lean project and record what Lean said; once it has the project's lock, when it ran and what came of it, a refusal too, is kept beside the switch (`switch.remember_check`).
 
     Parameters
     ----------
     root : Path
         The quilt's root.
     say : callable, optional
-        Told each step as it starts, in words.
+        Told each fenced step as it starts, by its code in `STEPS`.
 
     Returns
     -------
@@ -134,9 +140,14 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
         except EnvError:
             raise Refused("loom is already checking this quilt's Lean; ask again once it is done") from None
         try:
-            return _check(root, proj, name, toolchain, mods, places, Path(probe) / "Probe.lean", say)
+            done = _check(root, proj, name, toolchain, mods, places, Path(probe) / "Probe.lean", say)
+        except Refused as e:
+            switch.remember_check(root, {"refused": str(e)})
+            raise
         finally:
             lock.__exit__(None, None, None)
+    switch.remember_check(root, {"written": len(done.written), "unchanged": len(done.unchanged), "unknown": len(done.unknown), "errors": len(done.errors)})  # fmt: skip
+    return done
 
 
 def _check(
@@ -186,16 +197,16 @@ def _check(
         try:
             got = _fenced(argv, places, proj, env)
         finally:
-            done.steps.append((step, time.monotonic() - t))
+            done.steps.append((STEPS[step], time.monotonic() - t))
         return got
 
     if "mathlib" in _packages(proj):
-        whole = run("checking that Mathlib's build is whole", [lake, "build", "--no-build", "Mathlib"])
+        whole = run("mathlib", [lake, "build", "--no-build", "Mathlib"])
         if whole.returncode != 0:
             raise Refused(
                 "Mathlib's build in the project is not whole, and loom will not compile Mathlib; turning formalization on again fetches it"
             )
-    built = run("building the Lean project from clean", [lake, "build", *(f"+{m}" for m in mods)])
+    built = run("build", [lake, "build", *(f"+{m}" for m in mods)])
     errors = _errors(built.stdout + built.stderr)
     done.errors = [e for es in errors.values() for e in es]
     ready = [m for m, p in mods.items() if (build / "lib" / "lean" / Path(p).with_suffix(".olean")).is_file()]
@@ -204,7 +215,7 @@ def _check(
     lib = Path("lib") / "lean"
     deps = [f"path={(proj / paths.LAKE_PACKAGES / p / paths.LAKE_BUILD / lib).resolve()}" for p in _packages(proj)]
     probed = run(
-        "replaying the build in Lean's kernel and reading what it states",
+        "probe",
         [str(toolchain / "bin" / "lean"), "--run", str(probe), f"own={(build / lib).resolve()}", *deps, *ready],
     )
     if probed.returncode != 0:
@@ -309,13 +320,13 @@ def _statement_hashes(decls: dict[str, _Decl]) -> dict[str, str]:
     return out
 
 
-def _resolver(root: Path) -> Callable[[str], list[Subject]]:
-    """What a marker names now: each text of a draft's result bearing it as a label, by its own label, else the library's node of that id; [] for nothing."""
+def resolver(root: Path, scanned: Any = None) -> Callable[[str], list[Subject]]:
+    """What a marker names now: each text of a draft's result bearing it as a label, by its own label, else the library's node of that id; [] for nothing. Over `scanned`, a scan of the quilt as it stands, else a fresh one; `again` asks it of what a record is on."""
     from loom.evidence.web import DraftWeb, Here, LibraryWeb
     from loom.scan.quilt import load_quilt
     from loom.scan.scan import scan
 
-    drafts = DraftWeb(scan(load_quilt(root)))
+    drafts = DraftWeb(scanned if scanned is not None else scan(load_quilt(root)))
     library = LibraryWeb(root)
 
     def resolve(marker: str) -> list[Subject]:
@@ -361,7 +372,7 @@ def _record(
         )
     imports: dict[str, list[str]] = {m: list(v) for m, v in found.get("modules", {}).items()}
     statements = _statement_hashes(decls)
-    resolve = _resolver(root)
+    resolve = resolver(root)
     named: dict[str, list[Subject]] = {}
     for decl, marker in markers.items():
         subjects = resolve(marker)

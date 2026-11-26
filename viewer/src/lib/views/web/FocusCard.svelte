@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The result in focus (7a): its name and title, its source and its marks with their words, its statement, one line on where it stands in Lean (verified relative to what it assumes, or what it rests on that is not read or not compared), and, folded, its proofs, Lean and record.
+	// The result in focus (7a): its name and title, its source and its marks with their words, its statement, one line on where it stands in Lean (verified relative to what it assumes, or what it rests on that is not read or not compared), and, folded, its proofs, Lean and record, with Check again beside its Lean where Lean is on for this quilt on this computer.
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -14,6 +14,9 @@
 	import Statement from '$lib/views/Statement.svelte';
 	import { choosable, wb } from './state.svelte';
 	import { formalize } from '$lib/formalize/state.svelte';
+	import { lean } from '$lib/formalize/lean.svelte';
+	import { jobLines, offersCheck } from '$lib/formalize/said';
+	import { lean as leanWords } from '$lib/words/lean';
 
 	let { focus }: { focus: WebFocus } = $props();
 	const more = new Read<WebFocus>();
@@ -30,6 +33,11 @@
 	const named = (r: Row) => (r.source && 'short' in r.source ? words.focus.of(r.name, r.source.short) : r.name);
 	const m = $derived(more.value?.row.result === row.result ? more.value.more : null);
 	const day = words.day;
+	// Lean's state on this computer, asked once the fold shows a Lean
+	$effect(() => {
+		if (wb.more && m?.lean.length && lean.served === null) void lean.load();
+	});
+	const checking = $derived(lean.state?.job?.kind === 'check' ? jobLines(lean.state.job) : []);
 </script>
 
 {#snippet marked(r: Row)}{#if r.paper}<Mark kind={paperMark(r.paper)} />{/if}{#if hasLean(r.lean)}<Mark kind={leanMark(r.lean)} />{/if}{/snippet}
@@ -68,7 +76,19 @@
 				<dt>{words.focus.proof}</dt>
 				<dd>{typeof p.where === 'string' ? words.focus.proofIn(p.where, p.uses.map((u) => u.name).join(', ') || words.focus.nothing) : words.focus.proofFrom(p.where.short, p.where.pages)}</dd>
 			{/each}
-			{#if m.lean.length}<dt>{words.focus.lean}</dt><dd><code>{m.lean.join(', ')}</code></dd>{/if}
+			{#if m.lean.length}
+				<dt>{words.focus.lean}</dt>
+				<dd>
+					<code>{m.lean.join(', ')}</code>
+					{#if lean.state?.on}
+						<div class="again">
+							<button type="button" class="btn" disabled={lean.busy || !offersCheck(lean.state)} title={leanWords.checkAgainHover} onclick={() => void lean.check()} data-testid="focus-check-again">{leanWords.checkAgain}</button>
+							{#if checking.length}<span class="quiet" aria-live="polite" data-testid="focus-check-said">{checking.join(' ')}</span>{/if}
+						</div>
+						{#if lean.refused}<p class="quiet" role="alert">{lean.refused}</p>{/if}
+					{/if}
+				</dd>
+			{/if}
 			{#if m.record.length}<dt>{words.focus.record}</dt><dd>{m.record.map((a) => words.focus.acts[a.act]?.(a.by, day(a.at)) ?? '').filter(Boolean).join(' · ')}</dd>{/if}
 		</dl>
 	{/if}

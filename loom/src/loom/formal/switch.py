@@ -1,4 +1,4 @@
-"""Whether formalization is on for a quilt on this machine: one file a quilt under loom's data folder, keyed by where the quilt lies and holding which folder lies there, and never in the quilt, so that opening a co-author's quilt, a copy of one's own, or a quilt cloned where a deleted one lay runs nothing until the person turns it on there."""
+"""Whether formalization is on for a quilt on this machine: one file a quilt under loom's data folder, keyed by where the quilt lies and holding which folder lies there, and never in the quilt, so that opening a co-author's quilt, a copy of one's own, or a quilt cloned where a deleted one lay runs nothing until the person turns it on there. Beside it, which state of the quilt's Lean loom last checked on its own (`again`), and when loom last checked it and what came of it (`loom doctor`)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 #: The folder of `machine.data_dir` that holds one file for each quilt formalization is on for.
 FOLDER = "formal"
@@ -59,3 +60,50 @@ def turn_on(root: Path) -> None:
 def turn_off(root: Path) -> None:
     """Turn formalization off for the quilt at `root` on this machine; what it installed stays."""
     switch_file(root).unlink(missing_ok=True)
+    checked_file(root).unlink(missing_ok=True)
+
+
+def checked_file(root: Path) -> Path:
+    """Where `again` keeps which state of the quilt's Lean and of the texts it states it last checked on its own: beside the switch, `formal/<key>.checked`."""
+    return switch_file(root).with_suffix(".checked")
+
+
+def checked(root: Path) -> str:
+    """The state `again` last checked on its own for the quilt at `root`, as `remember_checked` kept it; '' for none."""
+    try:
+        return checked_file(root).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def remember_checked(root: Path, state: str) -> None:
+    """Keep `state` as the one `again` last checked on its own for the quilt at `root`, so a server started again over the same Lean runs nothing."""
+    p = checked_file(root)
+    p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(state + "\n")
+
+
+def last_file(root: Path) -> Path:
+    """Where loom keeps when it last checked the quilt's Lean and what came of it: beside the switch, `formal/<key>.last`."""
+    return switch_file(root).with_suffix(".last")
+
+
+def last_check(root: Path) -> dict[str, Any] | None:
+    """When loom last checked the Lean of the quilt at `root` on this machine and what came of it, as `remember_check` kept it; None for never, or a file that does not read."""
+    try:
+        data = json.loads(last_file(root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) and isinstance(data.get("at"), str) else None
+
+
+def remember_check(root: Path, came: dict[str, Any]) -> None:
+    """Keep that loom checked the quilt's Lean now, and what came of it (`came`: counts of what it recorded, or why it refused), for `loom doctor`."""
+    p = last_file(root)
+    p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"at": at, **came}, indent=1) + "\n")

@@ -41,6 +41,15 @@ MARKER_MODULE = "Loom"
 MARKER = Path(__file__).parent.parent / "assets" / "lean" / "Loom.lean"
 
 
+#: Each step of the install by the code `install` tells, with the words a terminal says it in; the viewer has its own words for each code.
+STEPS = {
+    "elan": "installing elan, Lean's toolchain manager",
+    "project": f"making the Lean project in {LEAN}/",
+    "toolchain": "installing the Lean toolchain",
+    "mathlib": "fetching Mathlib and its build, about 1.3 GB the first time",
+}
+
+
 class Refused(Exception):
     """Formalization cannot be installed for this quilt, in a sentence for the person."""
 
@@ -196,7 +205,7 @@ def install(root: Path, say: Callable[[str], None] = lambda _: None) -> Installe
     root : Path
         The quilt's root.
     say : callable, optional
-        Told each step as it starts, in words.
+        Told each step as it starts, by its code in `STEPS`.
 
     Returns
     -------
@@ -212,25 +221,25 @@ def install(root: Path, say: Callable[[str], None] = lambda _: None) -> Installe
     proj = project(root)
     elan = find_elan()
     if elan is None:
-        say("installing elan, Lean's toolchain manager")
+        say("elan")
         t = time.monotonic()
         elan = _install_elan()
         done.steps.append(("elan", time.monotonic() - t))
     if not (proj / "lakefile.toml").exists() and not (proj / "lakefile.lean").exists():
-        say(f"making the Lean project in {LEAN}/")
+        say("project")
         make_project(root)
     problems = untrusted(proj)
     if problems:
         raise Refused("the Lean project requires what loom does not install: " + "; ".join(problems))
     name = toolchain_of(proj)
     if not (toolchain_folder(name) / "bin" / "lake").exists():
-        say(f"installing the Lean toolchain {name}")
+        say("toolchain")
         t = time.monotonic()
         _run([elan, "toolchain", "install", name], proj, "installing the toolchain")
         done.steps.append(("toolchain", time.monotonic() - t))
     lake = str(toolchain_folder(name) / "bin" / "lake")
     # always resolved again from Mathlib's own repository, so a manifest a quilt carries chooses no revision
-    say("fetching Mathlib and its build, about 1.3 GB the first time")
+    say("mathlib")
     t = time.monotonic()
     _run([lake, "update"], proj, "fetching Mathlib", name)
     done.steps.append(("mathlib", time.monotonic() - t))

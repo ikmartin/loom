@@ -127,12 +127,12 @@ def test_ai_init_permissions_generated(tmp_path: Path) -> None:
     # over MCP the server's tools are allowed, with the agent's own commands in a shell beside them, and the author's turned away
     assert "mcp__loom__*" in allow and "Bash(loom status*)" in allow and "Bash(loom *)" not in deny
     assert "Bash(loom accept*)" in deny and "Bash(rm *)" in deny and "Edit(/config.toml)" in deny
-    # a fresh quilt protects only loom's records, the config and the research state: the person's files are open
+    # a fresh quilt protects only loom's records, the config, the research state and what loom keeps in the Lean project: the person's files are open
     assert not [
         r
         for r in deny
         if r.startswith("Edit(")
-        and not r.startswith(("Edit(/.loom/", "Edit(/config.toml)", "Edit(/research-state.md)"))
+        and not r.startswith(("Edit(/.loom/", "Edit(/config.toml)", "Edit(/research-state.md)", "Edit(/lean/"))
     ]
     # relative to the working directory: passed with --settings, `/x` would be `.claude/x` and match nothing (DR-343-ikmartin)
     assert not any(r.startswith("Edit(/") for r in allow)
@@ -151,7 +151,7 @@ def test_an_agent_is_never_allowed_to_delete(tmp_path: Path) -> None:
 def test_modes_templates_present_and_contracts_listed(tmp_path: Path) -> None:
     """Every mode says in one line when it fits, names its report's blocks from the catalogue, and carries none of the ceremony the contract cut removed (plan 0.21.1)."""
     q = bare(tmp_path)
-    assert len(MODES) == 8 and "flow" in MODES and "brainstorm" not in MODES  # rules.md is not a mode
+    assert len(MODES) == 9 and "flow" in MODES and "formalize" in MODES and "brainstorm" not in MODES  # rules.md is not a mode
     assert not (q / ".loom/agents/instructions" / "modes" / "blocks.md").exists()
     rules = (q / ".loom/agents/instructions" / "rules.md").read_text()
     assert rules.startswith("# Standing rules, contracts, and blocks") and "## Never" in rules
@@ -550,7 +550,7 @@ def test_the_allow_list_and_the_permission_file_cannot_disagree(tmp_path: Path) 
     denied = {d.removeprefix("Bash(loom ").removesuffix("*)") for d in denied_paths if d.startswith("Bash(loom ")}
     assert denied == every - AGENT_COMMANDS
     shell = json.loads(permissions_json(QuiltConfig(), shell=True))["permissions"]
-    assert {r.removeprefix("Bash(loom ").removesuffix("*)") for r in shell["allow"] if r.startswith("Bash(")} == (
+    assert {r.removeprefix("Bash(loom ").removesuffix("*)") for r in shell["allow"] if r.startswith("Bash(loom ")} == (
         AGENT_COMMANDS | set(help_commands())
     )
     over_mcp = json.loads(permissions_json(QuiltConfig()))["permissions"]
@@ -614,6 +614,26 @@ def test_an_agent_in_a_shell_may_ask_loom_what_it_offers(tmp_path: Path) -> None
         said = ok(*typed.split(), cwd=q, env={"CLAUDECODE": "1"}).stdout
         assert said.startswith("Usage: "), typed
     assert "status*" in ok("--help", cwd=q, env={"CLAUDECODE": "1"}).stdout
+
+
+def test_an_agent_builds_in_the_lean_project_without_asking_and_never_edits_what_loom_keeps_there(tmp_path: Path) -> None:
+    """Both apps' files let an agent run Lake's build and Lean on a file without asking, and nothing else of Lake's; Claude Code's let it edit the project's modules and refuse its edits to loom's marker module and the files that say what the project builds and fetches, a deny beating the allow."""
+    from loom.ai.layout import LAKE_COMMANDS, codex_rules, permissions_json
+    from loom.scan.quilt import QuiltConfig
+
+    assert LAKE_COMMANDS == ("lake build", "lake env lean")
+    for shell in (False, True):
+        rules = json.loads(permissions_json(QuiltConfig(), shell=shell))["permissions"]
+        assert {"Bash(lake build*)", "Bash(lake env lean*)", "Edit(lean/**)"} <= set(rules["allow"])
+        assert not [r for r in rules["allow"] if r.startswith("Bash(lake") and r not in ("Bash(lake build*)", "Bash(lake env lean*)")]
+        for kept in ("Loom.lean", "lakefile.toml", "lean-toolchain", "lake-manifest.json"):
+            assert f"Edit(/lean/{kept})" in rules["deny"], kept
+    codex = codex_rules()
+    assert 'prefix_rule(pattern = ["lake", "build"], decision = "allow")' in codex
+    assert 'prefix_rule(pattern = ["lake", "env", "lean"], decision = "allow")' in codex
+    assert '"lake", "update"' not in codex and '"lake", "exe"' not in codex
+    q = bare(tmp_path)
+    assert "Bash(lake build*)" in json.loads((q / ".claude" / "settings.json").read_text())["permissions"]["allow"]
 
 
 def test_codex_is_given_the_same_policy_as_claude(tmp_path: Path) -> None:
