@@ -36,15 +36,22 @@ def attach(build: Attaching) -> None:
 
 
 def _mode(root: Path, name: str, versions: dict[str, str], shipped: dict[str, str]) -> dict[str, Any]:
-    """One mode for the manifest: its `When it fits` line, the quilt's copy, and whether that copy is the author's own, differing from what this loom ships and from what the layer records loom last wrote."""
-    from loom.ai.layout import sha
+    """One mode for the manifest: its `When it fits` line, the quilt's copy, whether that copy is the author's own (differing from what this loom ships and from what the layer records loom last wrote), its text as a person edits it, and whether `loom upgrade` left a newer version of loom's beside it.
+
+    `text` is the file, the quilt's copy else loom's, with each `{type:ID}` as written: what Settings › Modes edits, which an agent reads with each type named (`orient.mode_text`).
+    """
+    from loom.ai.layout import read_plain, sha
     from loom.ai.orient import fits
     from loom.paths import AI
 
     path = f"{AI}/modes/{name}.md"
-    try:
-        text = (root / path).read_text(encoding="utf-8")
-    except OSError:
-        text = None
+    text = read_plain(root, path)
     wrote = {versions.get(f"{name}.md"), sha(shipped[path])}
-    return {"name": name, "fits": fits(root, name), "path": path, "edited": text is not None and sha(text) not in wrote}
+    return {
+        "name": name,
+        "fits": fits(root, name),
+        "path": path,
+        "edited": text is not None and sha(text) not in wrote,
+        "text": shipped[path] if text is None else text,
+        "newer": read_plain(root, f"{path}.new") is not None,
+    }
