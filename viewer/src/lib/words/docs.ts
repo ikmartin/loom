@@ -193,6 +193,35 @@ export const docs = {
 		/** The column's message on a click on a mark of a result Lean accepted that waits for the person. */
 		waits: (name: string) => `${name}: Lean accepted, not attested. It waits for you in Review.`
 	},
+	history: {
+		/** The word on a document's toolbar that opens its history menu, and the accessible names of the word and of the menu. */
+		label: 'history',
+		name: (of: string) => `history menu for ${of}`,
+		menu: (of: string) => `history of ${of}`,
+		/** The menu's first line, which opens a field to name the version in place; its accessible name. */
+		record: 'record this version…',
+		recordName: (of: string) => `record a version of ${of}`,
+		/** The field that names the version to record, and its accessible name. */
+		recordField: 'name this version',
+		recordFieldName: (of: string) => `the name of the version of ${of} to record`,
+		/** The button beside the field, and its accessible name. */
+		recordGo: 'record',
+		recordGoName: (of: string) => `record this version of ${of} under that name`,
+		/** The column's message once a version is recorded: the document's file and the name. */
+		recorded: (file: string, name: string) => `Recorded this version of ${file} as “${name}”.`,
+		/** The line for the draft's own text, and a version's accessible name: its label and the document. */
+		live: 'live text',
+		versionName: (label: string, of: string) => `${label}, ${of}`,
+		/** At a version's right, which compares it with the one shown; its accessible name. */
+		compare: 'compare',
+		compareName: (of: string, label: string) => `compare ${of} with ${label}`,
+		/** The line for an agent's copy, or for a copy's source: its file. */
+		compareWith: (file: string) => `compare with ${file}`,
+		/** Under the newest versions, the line that lists the rest in the menu; once they are listed, the line that folds them again. Its accessible name. */
+		older: (n: number) => `${n} older`,
+		fewer: (n: number) => `only the newest ${n}`,
+		olderName: (of: string) => `the older versions of ${of}`
+	},
 	column: {
 		/** The label over the focused document's sections, low in Docs' column. */
 		outline: 'Outline',
