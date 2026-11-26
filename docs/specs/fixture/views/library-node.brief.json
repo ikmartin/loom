@@ -1,6 +1,7 @@
 {
  "answer": {
   "body": "The cycle space of a quiver is a saturated sublattice of the lattice of weightings: if $nw$ is balanced for some nonzero integer $n$, then $w$ is balanced.\n",
+  "compiled": false,
   "digested": {
    "at": "2026-09-19T09:00:00Z",
    "by": "loom",
