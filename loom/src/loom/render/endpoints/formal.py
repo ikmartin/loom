@@ -1,4 +1,4 @@
-"""Formalization: what asking an agent to formalize results comes to, the asking, and the person's attestation of a Lean statement (`docs/specs/evidence.md` §7)."""
+"""Formalization: what asking an agent to formalize results comes to, the asking, the person's attestation of a Lean statement (`docs/specs/evidence.md` §7), and the switch and loom's own check (`loom.formal`)."""
 
 from __future__ import annotations
 
@@ -275,14 +275,71 @@ def _formal_ask(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "tasks": tasks, "result": f"asked for {len(tasks)}" + _as(body, who)}
 
 
+def _formal_state(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`formal-state`: whether formalization is on for the quilt on this machine, whether it has a Lean project, whether loom can check Lean here, and what the server is doing for it or did last."""
+    from loom import fence
+    from loom.formal import install, jobs, switch
+
+    job = jobs.current(root)
+    return {
+        "ok": True,
+        "on": switch.is_on(root),
+        "project": install.LEAN if (install.project(root) / "lakefile.toml").is_file() else None,
+        "fence": fence.lean_state(),
+        "job": job.to_dict() if job else None,
+    }
+
+
+def _formal_enable(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`formal-enable`: the person turns formalization on for the quilt on this machine, which starts the install, or off; refused for a declared agent, since turning it on lets loom run code on this machine."""
+    from loom.formal import install, jobs, switch
+
+    _person(root, body)
+    on = body.get("on")
+    if not isinstance(on, bool):
+        raise ApiError("bad-field", "on is true or false")
+    if not on:
+        switch.turn_off(root)
+        return {"ok": True, "result": "formalization is off on this machine"}
+    switch.turn_on(root)
+
+    def work(tell: Any) -> dict[str, Any]:
+        done = install.install(root, say=tell)
+        return {"steps": [{"step": s, "seconds": round(t, 1)} for s, t in done.steps]}
+
+    started = jobs.start(root, "install", work)
+    if started is None:
+        raise ApiError("busy", "loom is already installing or checking Lean for this quilt", status=409)
+    return {"ok": True, "result": "formalization is on; installing Lean"}
+
+
+def _formal_check(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`formal-check`: run loom's own check of the quilt's Lean again, in the background; `off` (409) while formalization is off here, `busy` (409) while an install or a check runs."""
+    from loom.formal import check, jobs, switch
+
+    if not switch.is_on(root):
+        raise ApiError("off", "formalization is off for this quilt on this machine", status=409)
+
+    def work(tell: Any) -> dict[str, Any]:
+        done = check.check(root, say=tell)
+        return {"written": done.written, "unchanged": done.unchanged, "unknown": done.unknown, "errors": done.errors}
+
+    if jobs.start(root, "check", work) is None:
+        raise ApiError("busy", "loom is already installing or checking Lean for this quilt", status=409)
+    return {"ok": True, "result": "checking the Lean"}
+
+
 HANDLERS: dict[str, Handler] = {
     "formal-plan": plain(_formal_plan),
     "formal-ask": plain(_formal_ask),
     "formal-attest": plain(_formal_attest),
+    "formal-state": plain(_formal_state),
+    "formal-enable": plain(_formal_enable),
+    "formal-check": plain(_formal_check),
 }
 #: Of these, the ones that answer and change nothing the manifest shows.
-READS: tuple[str, ...] = ("formal-plan",)
-#: The ones the publisher does not rebuild after.
-NO_REBUILD: tuple[str, ...] = READS
+READS: tuple[str, ...] = ("formal-plan", "formal-state")
+#: The ones the publisher does not rebuild after: the reads, and the two that start work in the background, which writes nothing the build reads but records.
+NO_REBUILD: tuple[str, ...] = (*READS, "formal-enable", "formal-check")
 #: The ones that change records alone, so the publication builds from the last scan, which tells the viewer something changed.
 RECORD_WRITES: tuple[str, ...] = ("formal-ask", "formal-attest")
