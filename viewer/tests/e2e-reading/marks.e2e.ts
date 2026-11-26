@@ -324,7 +324,8 @@ test.describe('on a project PDF', () => {
 		await expect(page.getByTestId('draft-host')).toBeVisible();
 		await expect(page.getByTestId('popup-host')).toHaveCount(0);
 		await page.getByTestId('popup-save').click();
-		await expect(marks(page, 'text')).toContainText('words on the page');
+		// one text on the page, saying the words: the place lit while they were written stands beside it until loom answers
+		await expect(marks(page, 'text')).toHaveText([/words on the page/]);
 
 		await page.getByTestId('tool-rect').click();
 		await drag(page, 1, [0.2, 0.3], [0.4, 0.4]);
