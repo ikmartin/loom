@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds drawn from the manifest, Results to accept and Proposed edits, are counted as their rows are drawn (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
+	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, Problems among them by its name, which opens Review's Problems page with the count of what is wrong in the person's own files, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds drawn from the manifest, Results to accept and Proposed edits, are counted as their rows are drawn (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { route } from '$lib/paths';
@@ -12,6 +12,7 @@
 	import { store } from '$lib/manifest/client.svelte';
 	import { acted } from '$lib/review/acted.svelte';
 	import { YOURS, isYours, theirs, yoursCount, type YoursKind } from '$lib/views/review/yours';
+	import { yoursCount as problemsCount } from '$lib/diagnostics';
 
 	$effect(() => {
 		void gen.gen;
@@ -42,6 +43,14 @@
 	const draft = $derived(rv.doc ? counts?.drafts.find((d) => d.doc === rv.doc) : undefined);
 	const kinds = $derived(COLUMN_ORDER.filter((k) => loomCount(k) !== undefined));
 	const inList = $derived(page.route.id === '/review');
+	/** The problems in the person's own files, as Review's Problems page counts them. */
+	const problems = $derived(m ? problemsCount(m) : 0);
+	const onProblems = $derived(page.route.id === '/review/problems');
+	/** The entries under Everything: the kinds, and Problems placed among them by its name. */
+	const entries = $derived.by((): ((typeof kinds)[number] | 'problems')[] => {
+		const at = kinds.findIndex((k) => words.kinds[k].name.localeCompare(words.column.problems) > 0);
+		return at < 0 ? [...kinds, 'problems'] : [...kinds.slice(0, at), 'problems', ...kinds.slice(at)];
+	});
 
 	/** Shows `kind` in the list, coming back to it from History. */
 	function pick(kind: ReviewKind | 'all' | 'agents'): void {
@@ -61,10 +70,16 @@
 		<button type="button" class:on={on('all')} aria-current={on('all') ? 'true' : undefined} data-testid="review-kind-all" use:hovercard={{ text: words.column.everythingHover, place: 'beside' }} onclick={() => pick('all')}
 			><span class="t">{words.column.everything}</span><span class="n">{rv.doc ? (draft ? draftCount(draft) : '') : (everything ?? '')}</span></button
 		>
-		{#each kinds as k (k)}
-			<button type="button" class:on={on(k)} aria-current={on(k) ? 'true' : undefined} data-testid="review-kind-{k}" use:hovercard={{ text: words.kinds[k].hover, place: 'beside' }} onclick={() => pick(k)}
-				><span class="t">{words.kinds[k].name}</span><span class="n">{rv.doc ? '' : kindCount(k)}</span></button
-			>
+		{#each entries as k (k)}
+			{#if k === 'problems'}
+				<a class="entry" class:on={onProblems} aria-current={onProblems ? 'page' : undefined} href={route('/review/problems')} data-testid="review-problems" use:hovercard={{ text: words.column.problemsHover, place: 'beside' }}
+					><span class="t">{words.column.problems}</span><span class="n">{rv.doc ? '' : problems}</span></a
+				>
+			{:else}
+				<button type="button" class:on={on(k)} aria-current={on(k) ? 'true' : undefined} data-testid="review-kind-{k}" use:hovercard={{ text: words.kinds[k].hover, place: 'beside' }} onclick={() => pick(k)}
+					><span class="t">{words.kinds[k].name}</span><span class="n">{rv.doc ? '' : kindCount(k)}</span></button
+				>
+			{/if}
 		{/each}
 	</nav>
 	{#if counts?.drafts.length}
@@ -108,7 +123,8 @@
 		gap: 1px;
 		margin-bottom: 14px;
 	}
-	.navl button {
+	.navl button,
+	.navl .entry {
 		font: inherit;
 		font-size: 12.5px;
 		text-align: left;
@@ -122,15 +138,21 @@
 		color: var(--ink);
 		cursor: pointer;
 	}
-	.navl button:hover {
+	.navl .entry {
+		text-decoration: none;
+	}
+	.navl button:hover,
+	.navl .entry:hover {
 		background: var(--ann-neutral-wash);
 	}
-	.navl button.on {
+	.navl button.on,
+	.navl .entry.on {
 		background: var(--ann-neutral-wash);
 		font-weight: 500;
 	}
 	/* a label is one line whatever the font and the column's width: its words end in an ellipsis before they wrap, its count stays whole, and its hover says it in full */
-	.navl button {
+	.navl button,
+	.navl .entry {
 		min-width: 0;
 	}
 	.t {

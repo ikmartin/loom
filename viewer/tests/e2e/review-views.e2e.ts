@@ -28,6 +28,8 @@ test('Everything lists what waits by who is waiting, a row for each thing counte
 	// Results to accept and Proposed edits count their rows drawn from the manifest, not the fixture's rows; Lean statements to attest counts the attested results that changed too
 	expect(kinds).toEqual(['all 28', 'questions 2', 'cited 4', 'attest 4', 'fetch 3', 'edits 5', 'accepted-changed 5', 'check 5', 'agents 6']);
 	await expect(page.getByTestId('review-column').locator('[data-testid^="review-kind-"] .t')).toHaveText(['Everything', 'Agent questions', "Cited results loom can't read", 'Lean statements to attest', 'Papers to add', 'Proposed edits', 'Results to accept', 'Results to check', 'Agents still working']);
+	// Problems stands among the kinds by its name
+	await expect(page.getByTestId('review-column').locator('nav').first().locator('.t')).toHaveText(['Everything', 'Agent questions', "Cited results loom can't read", 'Lean statements to attest', 'Papers to add', 'Problems', 'Proposed edits', 'Results to accept', 'Results to check']);
 	// the tasks agents are still working on need nothing of the person, so they stand below the drafts, not under Waiting for you
 	expect(await page.getByTestId('review-kind-agents').evaluate((a) => !!(document.querySelector('[data-testid="review-draft"]')!.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
 	await expect(page.getByTestId('review-record')).toHaveText('History');
@@ -335,6 +337,30 @@ test('the tasks waiting for an agent say what was asked, who works on one, and d
 	await expect(page.getByTestId('column-message')).toContainText('Task deleted.');
 	await expect(tasks).toHaveCount(5);
 	await expect(count(page, 'review-kind-agents')).toHaveText('5');
+});
+
+test("Problems has its own entry in Review's column, with its count, and opens Review's Problems page inside Review", async ({ page }) => {
+	// a document of the person's that did not compile, so that something is counted
+	await serve(page, (m) => void m.diagnostics.push({ severity: 'error', code: 'loom:compile-failed', class: 'latex', message: 'drafting/main.tex did not compile', locations: [{ file: 'drafting/main.tex', line: 31 }], keys: ['drafting/main.tex'], owner: 'person' } as never));
+	await open(page);
+	const entry = page.getByTestId('review-problems');
+	await expect(entry.locator('.t')).toHaveText('Problems');
+	await expect(count(page, 'review-problems')).toHaveText(/^[1-9]\d*$/);
+	const n = (await count(page, 'review-problems').textContent())!;
+	await entry.click();
+	await expect(page).toHaveURL(/\/review\/problems/);
+	// still Review, its column standing, the entry marked as the page shown, and its count the page's
+	await expect(page.getByTestId('review-column')).toBeVisible();
+	await expect(entry).toHaveAttribute('aria-current', 'page');
+	await expect(page.getByTestId('problems-yours-count')).toHaveText(n);
+	// under a draft, it counts nothing, as the kinds do
+	await page.getByTestId('review-draft').first().click();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
+	await expect(count(page, 'review-problems')).toHaveText('');
+	// every link in the column keeps the person in Review
+	const links = await page.getByTestId('review-column').locator('a').evaluateAll((as) => as.map((a) => new URL((a as HTMLAnchorElement).href).pathname));
+	expect(links.length).toBeGreaterThan(1);
+	for (const l of links) expect(l).toMatch(/^\/review(\/|$)/);
 });
 
 test('no control in Review changes view, and no id is drawn', async ({ page }) => {

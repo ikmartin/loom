@@ -1,4 +1,4 @@
-// Review's words: its column (the kinds, their counts' hover cards, the drafts, the History line), the list and its groups, each kind's row and body, the tasks waiting for an agent, and what the column's message says after an act. An entry is named for the place it shows, with a comment saying where, on one line.
+// Review's words: its column (the kinds, their counts' hover cards, Problems, the drafts, the History line), the list and its groups, each kind's row and body, the tasks waiting for an agent, and what the column's message says after an act. An entry is named for the place it shows, with a comment saying where, on one line.
 
 import type { ReviewKind } from '$lib/library/types';
 
@@ -23,6 +23,10 @@ export const review = {
 		drafts: 'Drafts',
 		/** Hover card on Drafts. */
 		draftsHover: 'Show only what concerns one draft.',
+		/** The column's entry for Review's Problems page, among the kinds by its name, with the count of what is wrong in the person's own files. */
+		problems: 'Problems',
+		/** Hover card on Problems. */
+		problemsHover: "What is wrong in your own files: a document that did not compile, an error in its LaTeX, a link to something that is not there. Each opens at its place.",
 		/** The quiet line at the column's foot that opens History inside Review. */
 		record: 'History',
 		/** Hover card on History. */
