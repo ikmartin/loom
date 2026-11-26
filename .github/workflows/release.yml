@@ -52,7 +52,7 @@ jobs:
       - name: the wheel runs and carries the viewer it was built with
         run: |
           uv tool install --managed-python --python 3.13 dist/*.whl
-          loom --version
+          "$(uv tool dir --bin)/loom" --version
           installed="$(uv tool dir)/loomtex"
           cmp loom/src/loom/assets/viewer/VERSION "$(find "$installed" -path '*loom/assets/viewer/VERSION' | head -1)"
       - name: what the install line reads
