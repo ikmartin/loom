@@ -1,4 +1,4 @@
-// What a dropped file, a chosen one or a pasted identifier goes through (`docs/specs/library-views.md` §3.5): each file is received, then all are taken in together, a file dropped on a work's row named for that work. The column's message says what happened to the whole drop: one work by its name, several by their count with each that was not added named, and `undo` taking back every work the drop added. On a quilt that has not said whether loom may use the network, the take is made without it, and each work it added by an identifier loom found asks in its row whether to look it up this once. A file loom has a question about ("is this one of these works?", Open 19) is asked in the column, with each work it may be and a work of its own as answers, which `library-answer` settles; one still waiting after a reload is asked again from the manifest's `arriving`, and one closed unanswered is not asked again on this page. Nothing here changes view: a view that lists works lights the row just added.
+// What a dropped file, a chosen one or a pasted identifier goes through (`docs/specs/library-views.md` §3.5): each file is received, then all are taken in together, a file dropped on a work's row named for that work. The column's message says what happened to the whole drop: one work by its name, several by their count with each that was not added named, and `undo` taking back every work the drop added. On a quilt that has not said whether loom may use the network, the take is made without it, and each work it added by an identifier loom found asks in its row whether to look it up this once. A file loom has a question about ("is this one of these works?", Open 19) is asked in the column, with each work it may be and a work of its own as answers, which `library-answer` settles, and the works stating its identifier that hold a document of its kind already (`held`) named beside them; one whose every work holds one is asked about as a copy, kept as a work of its own or let go by `library-undo`; one still waiting after a reload is asked again from the manifest's `arriving`, and one closed unanswered is not asked again on this page. Nothing here changes view: a view that lists works lights the row just added.
 
 import { message } from '$lib/shell/message.svelte';
 import { library as words } from '$lib/words/library';
@@ -45,19 +45,32 @@ export function candidate(c: Candidate, all: readonly Candidate[]): string {
 	return c.title && c.title !== name && all.some((o) => o !== c && (o.short || o.title) === name) ? words.add.candidate(name, c.title) : name;
 }
 
-/** Asks a drop's question in the column: each work it may be that the library still holds, read afresh since a question waits across deletes, and a work of its own; with none left, only whether it is a work of its own. */
+/** Asks a drop's question in the column: each work it may be that the library still holds, read afresh since a question waits across deletes, and a work of its own; with none left but works holding its kind already, whether to keep the copy or let it go; with none at all, only whether it is a work of its own. */
 async function ask(r: api.TakeRow, now = false): Promise<void> {
 	const id = r.question!;
 	if (reading.has(id)) return;
 	reading.add(id);
-	const held = await api.works();
+	const library = await api.works();
 	reading.delete(id);
 	// while the works were read, the question was answered or closed, or, asked as the column fell quiet, something else was said
 	if (!waiting.has(id) || putOff.has(id) || (!now && message.said)) return;
-	const works = held.ok ? (r.candidates ?? []).filter((c) => held.value.works.some((w) => w.ref === c.ref)) : (r.candidates ?? []);
-	const stated = (r.candidates ?? []).find((c) => c.how)?.how ?? r.document?.identifiers[0];
+	const kept = (list: Candidate[]) => (library.ok ? list.filter((c) => library.value.works.some((w) => w.ref === c.ref)) : list);
+	const works = kept(r.candidates ?? []);
+	const holding = kept(r.held ?? []);
+	const stated = [...(r.candidates ?? []), ...(r.held ?? [])].find((c) => c.how)?.how ?? r.document?.identifiers[0];
+	const kind = words.add.kind[r.document?.kind ?? 'pdf'] ?? words.add.kind.pdf;
+	// every work it names holds a document of its kind already: the copy is asked about as what it is
+	if (!works.length && holding.length && stated)
+		return message.post(words.add.asksHeld(r.name, words.works.identifier(stated), kind, holding.map((c) => candidate(c, holding))), undefined, {
+			choices: [
+				{ label: words.add.ownWork, act: () => settle(r, null) },
+				{ label: words.add.letGo, act: () => letGo(r) }
+			],
+			ondismiss: () => putOff.add(id)
+		});
 	if (!works.length) return message.post(words.add.asksGone(r.name, stated ? words.works.identifier(stated) : ''), undefined, { choices: [{ label: words.add.ownWork, act: () => settle(r, null) }], ondismiss: () => putOff.add(id) });
-	const text = stated ? words.add.asks(r.name, words.works.identifier(stated), works.map((c) => c.short)) : words.add.asksOn(r.name, works[0]?.short ?? '');
+	const asked = stated ? words.add.asks(r.name, words.works.identifier(stated), works.map((c) => c.short)) : words.add.asksOn(r.name, works[0]?.short ?? '');
+	const text = holding.length ? `${asked} ${words.add.alsoHeld(kind, holding.map((c) => candidate(c, holding)))}` : asked;
 	const choices =
 		works.length === 1
 			? [
@@ -77,6 +90,15 @@ async function settle(r: api.TakeRow, same: string | null): Promise<void> {
 	if (!done.ok && done.error.code === 'network-unasked') done = await api.answerDrop(id, same, false);
 	if (!done.ok) return message.post(sentence(done.error));
 	tell([done.value.row], []);
+}
+
+/** Lets a copy go that the person would not keep (`library-undo` of its drop), which takes nothing else back. */
+async function letGo(r: api.TakeRow): Promise<void> {
+	const id = r.question!;
+	waiting.delete(id);
+	putOff.add(id);
+	const done = await api.undoTake(r.id);
+	message.post(done.ok ? words.add.letGone(r.name) : sentence(done.error));
 }
 
 /**

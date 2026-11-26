@@ -217,8 +217,8 @@ export interface Fixture {
 	network: 'asked' | 'off' | 'unasked';
 	/** The work each taken row added, by the row's id, which `library-undo` takes back out. */
 	taken: Record<string, string>;
-	/** The intake's questions waiting on the person, by id: the file's name and the works it may be. */
-	questions: Record<string, { name: string; candidates: string[] }>;
+	/** The intake's questions waiting on the person, by id: the drop's id, the file's name and the works it may be. */
+	questions: Record<string, { id: string; name: string; candidates: string[] }>;
 	/** The entries the person wrote, by reference, which stand in place of the one the fixture makes. */
 	entries: Record<string, string>;
 }

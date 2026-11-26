@@ -1,6 +1,8 @@
 // The Library's words: its column, the list of works, a work's tab, the reader's overlay, a result beside its page, and the drop of a paper. Every sentence the viewer says is written in this folder (`frame.ts` says how); a component holds none.
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** Names in a sentence: `A`, `A and B`, `A, B and C`. */
+const list = (names: string[]) => (names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
 
 /** How each identifier's scheme is written for a person. */
 const SCHEMES: Record<string, string> = { arxiv: 'arXiv', doi: 'doi', mr: 'MR', zbl: 'zbMATH' };
@@ -165,7 +167,16 @@ export const library = {
 		asksOn: (name: string, short: string) => `Is ${name} ${short}, the work you dropped it on?`,
 		/** The question where every work it named has since been deleted: only whether the file is a work of its own. */
 		asksGone: (name: string, stated: string) => (stated ? `${name} states ${stated}, as a work since deleted from your library did. Add it as a work of its own?` : `The work ${name} was dropped on has since been deleted from your library. Add it as a work of its own?`),
+		/** The question where every work the file's identifiers name holds a document of its kind already: the copy asked about as what it is, kept as a work of its own or let go. */
+		asksHeld: (name: string, stated: string, kind: string, works: string[]) => `${name} states ${stated}, whose ${kind} ${list(works)} ${works.length === 1 ? 'holds' : 'hold'} already. Keep it as a work of its own?`,
+		/** Beside a question with works to offer, the works that state the identifier too but hold a document of the file's kind already, and so are not offered. */
+		alsoHeld: (kind: string, works: string[]) => `${list(works)} ${works.length === 1 ? 'states it too and holds its' : 'state it too and hold their'} ${kind} already.`,
+		/** A document's kind, in those questions. */
+		kind: { pdf: 'PDF', tex: 'TeX source' } as Record<string, string>,
 		ownWork: 'yes, a work of its own',
+		/** The answer that lets a copy go, and the column's message once it has gone. */
+		letGo: 'no, let it go',
+		letGone: (name: string) => `Let ${name} go.`,
 		/** The answers: that it is the one work asked about, that it is a work of its own beside one or several. */
 		isIt: 'yes',
 		notIt: 'no, a work of its own',

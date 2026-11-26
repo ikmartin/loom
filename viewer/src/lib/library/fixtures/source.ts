@@ -31,7 +31,7 @@ function asLoomWork(a: object & { outline?: unknown }): object {
 const CITED: Record<string, string> = { arden24: '[1]', okafor: '[2]', arden25: '[3]', vance: '[4]' };
 
 /** A source over a fresh copy of round six's data; `onChange` hears each write's new generation. */
-export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { network?: 'asked' | 'off' | 'unasked'; web?: 'large' } = {}): Source & { data: Fixture } {
+export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { network?: 'asked' | 'off' | 'unasked'; web?: 'large'; killed?: boolean } = {}): Source & { data: Fixture } {
 	const f = round6();
 	if (o.network) f.network = o.network;
 	if (o.web === 'large') growWeb();
@@ -40,6 +40,19 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 	const no = (code: string, message = code) => ({ ok: false as const, error: { code, message } });
 	const changed = () => onChange(f.gen);
 	const answered = new Set<string>();
+	// a delete a killed act left under way, of Ostrander 2020: the next library read finishes it, and the works list answers it once
+	let killed = o.killed ? REF.ostrander : null;
+	const finish = (): { undo: string; ref: string; short: string } | null => {
+		const i = killed ? f.works.findIndex((w) => w.ref === killed) : -1;
+		killed = null;
+		if (i < 0) return null;
+		const undo = `u-${f.gen}`;
+		const work = f.works[i];
+		f.deleted[undo] = { work, at: i };
+		f.works.splice(i, 1);
+		f.gen++;
+		return { undo, ref: work.ref, short: work.short };
+	};
 
 	const reads: Record<string, (b: Body) => Answer<Gen>> = {
 		// asked for a draft, each work says the label that draft cites it by, as round six's main.tex does; no work here was made from a digested work's bibliography (`cited_from`)
@@ -215,8 +228,13 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			changed();
 			return ok({ ref: b.ref });
 		},
-		// undoing an add takes the work it added back out
+		// undoing an add takes the work it added back out; a drop with a question and no act is let go
 		'library-undo': (b) => {
+			const asked = Object.entries(f.questions).find(([, q]) => q.id === b.id);
+			if (asked) {
+				delete f.questions[asked[0]];
+				return ok({ result: 'the drop was discarded' });
+			}
 			if (!((b.id as string) in f.taken)) return no('no-such-intake', '');
 			const ref = f.taken[b.id as string];
 			const i = f.works.findIndex((w) => w.ref === ref);
@@ -276,10 +294,15 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 				const stated = it.incoming ? /^(\d{4}\.\d{4,5})(v\d+)?/.exec(name) : null;
 				const same = stated ? f.works.filter((w) => w.link?.replace(/v\d+$/, '').endsWith(`/${stated[1]}`)) : [];
 				if (stated && same.length) {
+					// a work holding a PDF already is never a candidate for a dropped PDF, only named as held
 					const question = `q-${f.gen}-${item}`;
-					f.questions[question] = { name, candidates: same.map((w) => w.ref) };
+					const id = `d-${f.gen}-${item}`;
+					const candidates = same.filter((w) => !w.holds.pdf);
+					const held = same.filter((w) => w.holds.pdf);
+					f.questions[question] = { id, name, candidates: candidates.map((w) => w.ref) };
 					const how = `arxiv:${stated[1]}`;
-					return { id: `d-${f.gen}-${item}`, item, name, state: 'question', question, document: { name, kind: 'pdf', identifiers: [`arxiv:${stated[1]}${stated[2] ?? ''}`] }, candidates: same.map((w) => ({ ref: w.ref, short: w.short, title: w.title, authors: w.authors, year: w.year, how })) };
+					const asWork = (w: (typeof same)[number]) => ({ ref: w.ref, short: w.short, title: w.title, authors: w.authors, year: w.year, how });
+					return { id, item, name, state: 'question', question, document: { name, kind: 'pdf', identifiers: [`arxiv:${stated[1]}${stated[2] ?? ''}`] }, candidates: candidates.map(asWork), ...(held.length ? { held: held.map(asWork) } : {}) };
 				}
 				const arxiv = /^\d{4}\.\d{4,5}/.test(name);
 				const added = addWork(f, name, offline);
@@ -298,8 +321,10 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 		async call<T extends Gen>(name: string, body: Body): Promise<Answer<T>> {
 			const read = reads[name];
 			if (read) {
+				const deleted = name.startsWith('library-') ? finish() : null;
 				if (typeof body.since === 'number' && body.since === f.gen) return { ok: true, value: { gen: f.gen, unchanged: true } as T };
-				return read(body) as Answer<T>;
+				const got = read(body) as Answer<T>;
+				return deleted && name === 'library-works' && got.ok ? { ok: true, value: { ...got.value, deleted } } : got;
 			}
 			const write = writes[name];
 			if (write) return write(body) as Answer<T>;
