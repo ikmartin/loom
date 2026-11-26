@@ -248,7 +248,7 @@ test('past the newest twelve, the menu lists the older versions in itself, and n
 		const base = m.canon[0];
 		for (let i = 0; i < 13; i++) {
 			const step = String(10 + i).padStart(4, '0');
-			m.canon.push({ ...structuredClone(base), path: `.loom/records/history/${step}-kept-${i}/kept-${i}.tex`, stem: `kept-${i}`, name: `kept-${i}`, message: `kept-${i}`, step, when: `2026-10-${String(1 + i).padStart(2, '0')}T09:00:00Z` });
+			m.canon.push({ ...structuredClone(base), path: `.loom/records/history/${step}-kept-${i}/kept-${i}.tex`, stem: `kept-${i}`, name: `kept-${i}`, message: `kept-${i}`, step, when: `2026-10-${String(1 + i).padStart(2, '0')}T${'09'}:00:00Z` });
 		}
 	});
 	await page.goto('/master/drafting/main');
