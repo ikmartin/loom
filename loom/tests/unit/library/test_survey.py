@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import threading
@@ -10,6 +11,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import pytest
 
@@ -800,13 +802,18 @@ def test_a_quilt_compiles_one_source_at_a_time_and_keeps_what_it_made(
     assert survey.complete(root, TEX, src, "main.tex").state == "ready" and len(spans) == 2
 
 
-def _stored(tmp_path: Path, src: Path, name: str = "built") -> Path:
-    """`src` compiled as it stands, by this test and not the survey: the stand-in for a work's stored PDF."""
+def _stored(tmp_path: Path, src: Path, name: str = "built", *, fenced: bool = True) -> Path:
+    """`src` compiled as it stands, by this test and not the survey: the stand-in for a work's stored PDF.
+
+    `fenced` False builds it as the person would outside loom, with the fence off (`loom.fence.OFF`), so a source that reads the machine's files prints them.
+    """
+    from loom import fence
     from loom.tex.runner import compile_tex
 
     copy = tmp_path / name
     shutil.copytree(src, copy)
-    res = compile_tex(copy, "main.tex", tmp_path / f"{name}-out")
+    with mock.patch.dict(os.environ, {} if fenced else {fence.OFF: "off"}):
+        res = compile_tex(copy, "main.tex", tmp_path / f"{name}-out")
     assert res.pdf is not None, res.errors
     return res.pdf
 
@@ -1020,8 +1027,8 @@ def test_no_byte_of_a_file_a_source_reads_from_outside_is_kept(tmp_path: Path, c
     )
     pdfs = [("sha256:" + "ef" * 32, _stored(tmp_path, clean, "elsewhere"))]
     if case == "a line at a time":
-        # and the worst case: a PDF built on this very machine from the same source, which shows what the source read
-        pdfs.append(("sha256:" + "fe" * 32, _stored(tmp_path, src, "here")))
+        # and the worst case: a PDF the person built on this very machine from the same source, outside loom's fence, which shows what the source read
+        pdfs.append(("sha256:" + "fe" * 32, _stored(tmp_path, src, "here", fenced=False)))
     for done in (
         survey.complete(quilt, TEX, src, "main.tex"),
         *(survey.complete(quilt, TEX, src, "main.tex", pdf=digest, pdf_path=path) for digest, path in pdfs),
