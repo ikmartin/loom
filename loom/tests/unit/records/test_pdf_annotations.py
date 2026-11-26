@@ -456,6 +456,20 @@ def test_a_selection_of_a_phrase_s_second_occurrence_is_recorded_and_drawn_on_it
 
 
 @pytest.mark.poppler
+def test_a_selection_covering_two_occurrences_on_one_line_is_recorded_on_the_first(tmp_path: Path) -> None:
+    """The third look's M-27: one rectangle across a line holding the selected words twice was recorded on the later, which it happened to cover a little more of; two occurrences covered alike take the earlier, as reading order would."""
+    from loom.render.endpoints.annotations import _review
+
+    q = showcase(tmp_path)
+    ref = _given(q, tmp_path, [["the map is flat and the map is flat too"]], "line.pdf")
+    top, bottom = _band(0)
+    body = {"target": ref, "page": 1, "quote": "the map is flat", "rects": [[0, top, 612, bottom]], "message": "On it."}
+    _review(q, "annotate", {**body, "author": "A. Author"})
+    anchor = log(q)[-1]["anchor"]
+    assert (anchor["basis"], anchor.get("start", 0), anchor["end"]) == ("text", 0, len("the map is flat")), anchor
+
+
+@pytest.mark.poppler
 def test_a_note_on_a_phrase_said_twice_alike_in_a_changed_copy_is_not_placed(tmp_path: Path) -> None:
     """Found again by its words and the words around them; where a changed copy holds that whole run twice, nothing says which the note was on, so it is listed as not placed, never drawn on a guess."""
     q = showcase(tmp_path)
