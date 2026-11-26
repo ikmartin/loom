@@ -1339,3 +1339,15 @@ def test_each_number_says_whether_its_words_found_it_or_its_place(
         ("l:b", "1.3", "words"),
     ]
     assert survey.Survey.from_json(done.to_json()).item("c:mid").found == "place"  # type: ignore[union-attr]
+
+
+def test_a_display_begun_on_the_line_after_a_heading_labels_itself(tmp_path: Path) -> None:
+    """The review's C-2, in the survey: the display's label is an equation's, so digest never writes the section's number for its `\\eqref`."""
+    src = (
+        "\\documentclass{article}\n\\usepackage{amsmath}\n\\numberwithin{equation}{section}\n\\begin{document}\n"
+        "\\section{Bounds}\nWe now record the bound \\begin{equation}\\label{eq:first} a = b \\end{equation} which we use often.\n"
+        "\\end{document}\n"
+    )
+    s = survey.read(_one_file(tmp_path, src), "main.tex", TEX)
+    assert s.sections[0].label is None and s.labels["eq:first"].kind == "equation"
+    assert s.labels["eq:first"].emulated == "1.1"

@@ -264,3 +264,15 @@ def test_a_dotted_name_kpsewhich_finds_with_tex_added_is_a_system_file(tmp_path:
     assert resolve_inclusion(root, "gone") == (None, "missing")
     assert resolve_inclusion(root, "pgfplots.revision") == (None, "system")
     assert kpsewhich.calls == ["gone.tex", "pgfplots.revision", "pgfplots.revision", "gone.tex pgfplots.revision"]
+
+
+def test_a_label_of_an_environment_begun_beside_a_heading_is_never_the_heading_s() -> None:
+    """The review's C-2: a display or a figure begun on the heading's line, or the line after, labels itself."""
+    clean = (
+        "\\section{Bounds}\nWe record \\begin{equation}\\label{eq:first} a = b \\end{equation} often.\n"
+        "\\section{Pictures} \\begin{figure}\\caption{Q}\\label{f:q}\\end{figure}\n"
+        "\\section{Both}\\label{sec:both} We record \\begin{equation}\\label{eq:both} c \\end{equation}\n"
+    )
+    assert heading_labels(clean, clean.index("{Bounds}") + 8) == []
+    assert heading_labels(clean, clean.index("{Pictures}") + 10) == []
+    assert heading_labels(clean, clean.index("{Both}") + 6) == ["sec:both"]
