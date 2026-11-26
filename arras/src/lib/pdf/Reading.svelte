@@ -5,7 +5,7 @@
 	//
 	// **A locator in the URL is drawn transiently** (§3, §6): `span=`, `box=` or `quote=` name a place a message or a link pointed at, lit while the URL carries it and not recorded; `annot=` names an annotation by id and focuses its mark.
 	//
-	// **The one reader**, in a pane of Docs' workspace (`WorkItem`) and in the Library's tab for a work alike, with the same annotations: a view adds its own layers over it, never a second reader (`overlay` on the pages, `more` beside Quote on a selection, `onpage` to follow the page in view).
+	// **The one reader**, in a pane of Docs' workspace (`WorkItem`) and in the Library's tab for a work alike, with the same annotations: a view adds its own layers over it, never a second reader (`overlay` on the pages, `more` after a selection's actions, `onpage` to follow the page in view).
 	//
 	// **It opens where the reader last was, unless a link sends it elsewhere.** A link's place wins for as long as it is in force, and where it lands is then where the reader is. Once they move by their own hand nothing sends them back to it, and once its page has left the view the link is done with: its place comes off the item and so off the URL, so a reload returns to where they went.
 	import { pdfUrl, places } from '$lib/library/api';
@@ -21,9 +21,9 @@
 	import { write, type WriteResult } from '$lib/write';
 	import { MarkDesk } from './desk.svelte';
 	import MarkedDoc from './MarkedDoc.svelte';
-	import { mergeLines } from './marks';
 	import type { PdfView } from './view.svelte';
-	import QuoteChip from '$lib/review/QuoteChip.svelte';
+	import { quoteLink } from '$lib/notes/link';
+	import { notes as notesWords } from '$lib/words/notes';
 	import { here } from '$lib/here.svelte';
 	import { library } from '$lib/words/library';
 	import type { Snippet } from 'svelte';
@@ -32,7 +32,6 @@
 	let {
 		ref,
 		pdf,
-		identifier = null,
 		short = null,
 		page,
 		seq = 0,
@@ -47,8 +46,6 @@
 		ref: string;
 		/** The stored PDF's hash, `sha256:<hex>` as the library gives it; null for a work holding none. */
 		pdf: string | null;
-		/** The first identifier the work's entry states, `scheme:value`, by which a quote links to it; null for none, and the quote links to the reference. */
-		identifier?: string | null;
 		/** The work's short name ("Smith 2024"), by which a quote names where its words came from; the reference where none is known. */
 		short?: string | null;
 		page: number;
@@ -64,7 +61,7 @@
 		overlay?: Snippet<[{ page: number; at: (r: Rect) => { left: string; top: string; width: string; height: string } }]>;
 		/** The page in view, each time it changes. */
 		onpage?: (e: { page: number }) => void;
-		/** A view's own actions beside Quote, on the words selected; `hold` keeps the offer while the selection goes (a field of its own taking the keyboard), `done` takes it away. */
+		/** A view's own actions after a selection's, on the words selected; `hold` keeps them while the selection goes (a field of its own taking the keyboard), `done` takes them away. */
 		more?: Snippet<[{ page: number; text: string; rects: number[][]; hold: () => void; done: () => void }]>;
 	} = $props();
 
@@ -107,20 +104,9 @@
 		};
 	});
 
-	$effect(() => {
-		const drop = () => {
-			if (offered && !kept && !window.getSelection()?.toString().trim()) offered = null;
-		};
-		document.addEventListener('selectionchange', drop);
-		return () => document.removeEventListener('selectionchange', drop);
-	});
 	let active = $state('');
-	/** The offer is kept by a view's own action, so the selection going does not take it away. */
-	let kept = $state(false);
-	/** A bare selection, offered Quote: selecting words is not a request to annotate them, which Annotate is for. */
-	let offered = $state<{ page: number; text: string; lines: number[][]; rects: number[][]; at: { left: number; top: number; width: number; height: number }; range?: Range } | null>(null);
-	/** Where a quote from page `n` came from, as a link an agent can follow: the work by its identifier at the page, else its reference, whole, as `loom link` prints it. */
-	const quoteHref = (n: number): string => (identifier ? `cited:${identifier}?page=${n}` : `quilt:${ref}`);
+	/** Words selected on page `n` are named by the work's short name and the page, and linked to as `loom link WORK --page N --quote` prints. */
+	const offer = $derived({ name: (n: number) => notesWords.page(short ?? ref, n), link: (n: number, text: string) => quoteLink(ref, `page=${n}`, text) });
 
 	/** The place the URL points at, mapped by loom into rectangles, while the URL carries it. */
 	let lit = $state<{ page: number; rects: number[][] } | null>(null);
@@ -173,12 +159,9 @@
 				focus={focusOn}
 				lands={!place.spent}
 				onselect={(e) => {
-					const sel = window.getSelection();
-					offered = { page: e.page, text: e.text, lines: mergeLines(e.rects), rects: e.rects, at: e.client, range: sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : undefined };
 					here.selection = { item: `work:${ref}`, page: e.page, text: e.text, rects: e.rects };
 				}}
 				onregion={(e) => {
-					offered = null;
 					here.region = { item: `work:${ref}`, page: e.page, rects: e.rects };
 				}}
 				onmoved={(e) => {
@@ -188,15 +171,12 @@
 				}}
 				{onpage}
 				{overlay}
+				{offer}
+				{more}
 			/>
 		</div>
 	{:else}
 		<p class="muted" data-testid="reading-absent">{library.reader.noPdf}</p>
-	{/if}
-	{#if offered}
-		{@const o = offered}
-		<QuoteChip at={o.at} range={o.range} words={o.text} name="{short ?? ref} p. {o.page}" href={quoteHref(o.page)} ondone={() => ((offered = null), (kept = false))} more={more ? extra : undefined} />
-		{#snippet extra()}{@render more?.({ page: o.page, text: o.text, rects: o.rects, hold: () => (kept = true), done: () => ((offered = null), (kept = false)) })}{/snippet}
 	{/if}
 </section>
 

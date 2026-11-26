@@ -119,17 +119,28 @@ def test_a_change_that_would_add_a_warning_is_refused(tmp_path: Path) -> None:
         ("quilt.history", "records", "read-only"),
         ("quilt.research_state", "state.md", "read-only"),
         ("basis.theorem", "proved", "not a setting"),
+        ("notes.dir", "build", "not a folder the viewer shows"),
+        ("notes.dir", "../elsewhere", "not a folder the viewer shows"),
+        ("notes.command", "touch x", "not a setting"),
     ],
 )
 def test_check_refuses(key: str, value: object, why: str) -> None:
     with pytest.raises(ValueError, match=why):
-        check(key, value, masters={"paper/main.tex"}, shown=lambda rel: rel == "README.md")
+        check(
+            key,
+            value,
+            masters={"paper/main.tex"},
+            shown=lambda rel: rel == "README.md",
+            folders=lambda rel: rel == "jots",
+        )
 
 
 def test_check_normalises() -> None:
     assert check("quilt.main", "", masters={"paper/main.tex"}) is None
     assert check("quilt.home", "/README.md", shown=lambda rel: rel == "README.md") == "README.md"
     assert check("quilt.home", "  ") is None
+    assert check("notes.dir", "/jots/", folders=lambda rel: rel == "jots") == "jots"
+    assert check("notes.dir", "") is None
     assert check("agents.deny", [" paper/ ", "paper/", ""]) == ["paper/"]
 
 

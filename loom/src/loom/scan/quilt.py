@@ -29,6 +29,8 @@ CONFIG_KEYS: dict[str, set[str]] = {
     # `deny`: where an agent may not write, gitignore-style, beside what is always protected (`loom.agents`)
     "agents": {"deny"},
     "author": {"name"},
+    # `dir`: where new notes go, a folder of the quilt; the new-note command is the person's (`loom.notes`), never the quilt's
+    "notes": {"dir"},
     # `[basis]` names environments, so any key is valid there and each value is checked instead
     "basis": set(),
 }
@@ -50,6 +52,9 @@ class NoAuthorError(Exception):
     """Raised when no author name can be resolved; str(exc) is NO_AUTHOR_MESSAGE."""
 
 
+#: Where New note puts a note when `[notes] dir` is unset.
+NOTES_DIR = "notes"
+
 # the `[quilt]` keys a person may set for every quilt in their user config; the quilt's own value wins
 USER_QUILT_KEYS = ("name", "history")
 
@@ -70,6 +75,7 @@ class QuiltConfig:
     lint_disable: list[str] = field(default_factory=list)
     agents_deny: list[str] = field(default_factory=list)  # [agents] deny: the patterns loom accepted, in order
     basis: dict[str, str] = field(default_factory=dict)  # [basis]: environment name -> basis, over the built-in names
+    notes_dir: str = NOTES_DIR  # [notes] dir: where New note puts a note, quilt-relative
     warnings: list[str] = field(default_factory=list)
 
     @classmethod
@@ -96,6 +102,11 @@ class QuiltConfig:
                 cfg.warnings.append(f"config.toml: unknown table [{table_name}]; ignored")
                 continue
             for key in keys:
+                if table_name == "notes" and key == "command":
+                    cfg.warnings.append(
+                        "config.toml: [notes] command is ignored: a command loom runs at your click is never the quilt's; set yours in Settings › Notes"
+                    )
+                    continue
                 if key not in known and table_name != "basis":
                     cfg.warnings.append(f"config.toml: unknown key {table_name}.{key}; ignored")
         q = dict(table("quilt"))
@@ -124,6 +135,13 @@ class QuiltConfig:
                 cfg.warnings.append(
                     f"config.toml: basis.{env_name} = {basis!r} is not one of {', '.join(NAMED_BASES)}; ignored"
                 )
+        notes_dir = str(table("notes").get("dir", "")).strip().rstrip("/")
+        if notes_dir.startswith("/") or ".." in notes_dir.split("/"):
+            cfg.warnings.append(
+                f"config.toml: [notes] dir = {notes_dir!r} is outside the quilt; new notes go in {NOTES_DIR}/"
+            )
+            notes_dir = ""
+        cfg.notes_dir = notes_dir or NOTES_DIR
         cfg.author_declared = isinstance(data.get("author"), dict)
         cfg.author = str(table("author").get("name", "")).strip()
         return cfg
@@ -239,6 +257,7 @@ def removed_in(root: Path, config: QuiltConfig) -> str | None:
         ("[quilt] research_state", config.research_state),
         ("[quilt] main", config.main),
         ("[quilt] home", config.home),
+        ("[notes] dir", config.notes_dir),
     ]
     real_root = Path(os.path.realpath(root))
     for setting, value in named:

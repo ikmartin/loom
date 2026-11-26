@@ -138,13 +138,13 @@ test('a document is written on the same way, and what is written there is filed 
 	await expect(markOf()).toHaveCount(0);
 });
 
-readOnly('Quote stays at the end of the selection as its pane scrolls, and is hidden while those words are scrolled out of the pane', async ({ page }) => {
+readOnly('the actions stay at the end of the selection as its pane scrolls, and is hidden while those words are scrolled out of the pane', async ({ page }) => {
 	await page.goto('/master/drafting/main');
 	const body = page.locator('[data-pane="0"] > .body');
 	const words = page.locator('[data-pane="0"] .fragment .env[data-id="sy-0008"] > p[data-src]').first();
 	await words.scrollIntoViewIfNeeded();
 	await select(words);
-	const chip = page.getByTestId('quote-offer');
+	const chip = page.getByTestId('selection-actions');
 	await expect(chip).toBeVisible();
 	// how far the chip stands from the words' top, which a chip fixed to the window changes by the distance scrolled; the chip is placed to whole pixels, so within one
 	const at = (await chip.boundingBox())!.y - (await words.boundingBox())!.y;

@@ -11,10 +11,13 @@
 	import { ui } from '$lib/ui.svelte';
 	import { can } from '$lib/write';
 	import { settledOn } from '$lib/annotations';
+	import { quoteLink } from '$lib/notes/link';
 
 	let { item, name }: { item: Item; name: string } = $props();
 
 	const node = $derived(store.manifest?.nodes[item.id]);
+	// New note on the whole result, by its key
+	const note = $derived({ link: quoteLink(item.id), title: name });
 	const held = $derived(nodeState(item));
 	// the settled control is offered wherever there is something for it to draw, so a node whose every annotation is settled — nothing drawn at rest — can still show them
 	const anySettled = $derived(!!store.manifest && !!node && settledOn(store.manifest, [item.id, ...node.proofs]));
@@ -35,7 +38,7 @@
 {#snippet writing()}<AnnotateBar notes={held.notes} of={name} part="write" writes={writes && !node?.external} />{/snippet}
 
 {#if node}
-	<ItemToolbar {name} bar={reading} tools={writes && !node.external ? writing : undefined} on={ui.showSettled || held.verbatim} hint={writes && !node.external ? hintFor(store.manifest, held.notes, hand.value) : ''}>
+	<ItemToolbar {name} {note} bar={reading} tools={writes && !node.external ? writing : undefined} on={ui.showSettled || held.verbatim} hint={writes && !node.external ? hintFor(store.manifest, held.notes, hand.value) : ''}>
 		{#snippet view()}
 			{#if held.notes.ready || anySettled}
 				<ToolbarItem

@@ -16,6 +16,7 @@
 	import Library from './settings/Library.svelte';
 	import Overleaf from './settings/Overleaf.svelte';
 	import Annotations from './settings/Annotations.svelte';
+	import Notes from './settings/Notes.svelte';
 	import { settingsAsked } from './settings/opener.svelte';
 
 	let { indexes = [] }: { indexes?: Index[] } = $props();
@@ -126,6 +127,7 @@
 				{:else if config && shown === 'general'}<General {config} editable={canSave} />
 				{:else if config && shown === 'documents'}<Documents {config} editable={canSave} />
 				{:else if shown === 'annotations'}<Annotations editable={canTypes} />
+				{:else if shown === 'notes'}<Notes editable={canSave} />
 				{:else if config && shown === 'agents'}<Agents {config} editable={canSave} {canUpdate} />
 				{:else if shown === 'library'}<Library editable={canSave} />
 				{:else if config && shown === 'overleaf'}<Overleaf {config} />

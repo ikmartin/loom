@@ -40,7 +40,7 @@
 {:else}
 	<div class="page item work reading" data-work={item.id} data-testid="work-item">
 		<div class="reader" data-testid="reader">
-			<Reading ref={item.id} pdf={row.holds.pdf} identifier={row.lookup?.identifier ?? null} short={row.short} page={reading} seq={named ? (item.seq ?? 0) : 0} {locator} view={pdf} onleft={() => workspace.update(itemKey(item), { place: undefined })} />
+			<Reading ref={item.id} pdf={row.holds.pdf} short={row.short} page={reading} seq={named ? (item.seq ?? 0) : 0} {locator} view={pdf} onleft={() => workspace.update(itemKey(item), { place: undefined })} />
 		</div>
 	</div>
 {/if}

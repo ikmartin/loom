@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.unit._pdfs import PROSE, lines_pdf
 from tests.unit._quilts import demo
 
@@ -79,3 +81,73 @@ def test_a_quilt_whose_files_link_nowhere_has_none(tmp_path: Path) -> None:
     q = demo(tmp_path)
     put(q, "notes/a.md", "# A\n\nNo links, and the word quilt: alone.\n")
     assert backlinks(open_scan(str(q)), q, {"notes/a.md": "markdown", "papers/x.pdf": "pdf"}) == []
+
+
+def test_a_link_whose_quoted_words_are_gone_is_a_problem_on_its_line(tmp_path: Path) -> None:
+    from loom.backlinks import backlinks
+    from loom.cli._quilt import open_scan
+    from loom.scan.diagnostics import LATEX, LOOM
+    from loom.scan.lint import link_words_missing
+    from loom.scan.owntext import own_text
+
+    q = demo(tmp_path)
+    result = open_scan(str(q))
+    assert "a finite set" in own_text(result, result.nodes["dm-0003"])
+    said = "a%20finite%20set"
+    put(
+        q,
+        "notes/a.org",
+        f"* A\n[[quilt:drafting/main.tex#dm-0003&quote={said}][kept]]\nquilt:dm-0003#quote=words%20nobody%20wrote\n",
+    )
+    put(
+        q,
+        "notes/b.md",
+        f"# B\n\n[whole](quilt:drafting/main.tex#quote={said}) and [gone](quilt:drafting/main.tex#quote=no%20such%20words)\n",
+    )
+    result = open_scan(str(q))
+    links = backlinks(result, q, {"notes/a.org": "text", "notes/b.md": "markdown"})
+    found = link_words_missing(result, links)
+    assert [(d.locations[0].file, d.locations[0].line) for d in found] == [("notes/a.org", 3), ("notes/b.md", 3)]
+    assert {d.code for d in found} == {"loom:link-words-missing"} and LOOM["loom:link-words-missing"].cls == LATEX
+    assert "“words nobody wrote”" in found[0].message and "“no such words”" in found[1].message
+    # a document's words are its own: words that stand only in another document do not keep a link to this one
+    put(q, "notes/c.md", "# C\n\n[elsewhere](quilt:drafting/outline.tex#quote=a%20finite%20set)\n")
+    result = open_scan(str(q))
+    assert "a finite set" not in result.expansions["drafting/outline.tex"].text
+    gone = link_words_missing(result, backlinks(result, q, {"notes/c.md": "markdown"}))
+    assert [(d.locations[0].file, d.locations[0].line) for d in gone] == [("notes/c.md", 3)]
+
+
+@pytest.mark.poppler
+def test_quoted_words_on_a_project_pdf_are_looked_for_on_the_page_named(tmp_path: Path) -> None:
+    from loom.backlinks import words_found
+    from loom.cli._quilt import open_scan
+
+    q = demo(tmp_path)
+    lines_pdf(q / "papers/median.pdf", [PROSE])
+    result = open_scan(str(q))
+    link = {"kind": "file", "key": "papers/median.pdf", "place": "page=1", "quote": "incidence matrix"}
+    assert words_found(result, q, link) is True
+    assert words_found(result, q, {**link, "quote": "no such words"}) is False
+    # a PDF with no page named is not judged
+    assert words_found(result, q, {**link, "place": ""}) is None
+
+
+def test_a_notebook_note_opens_at_the_heading_above_its_link(tmp_path: Path) -> None:
+    from loom.backlinks import backlinks
+    from loom.cli._quilt import open_scan
+
+    q = demo(tmp_path)
+    nb = {
+        "cells": [
+            {"cell_type": "markdown", "source": ["# Setup\n", "Nothing yet."]},
+            {"cell_type": "code", "source": ["# a comment, no heading\n", "x = 1"]},
+            {"cell_type": "markdown", "source": ["## Orbits\n", "See [it](quilt:dm-0003)."]},
+        ],
+        "metadata": {},
+        "nbformat": 4,
+        "nbformat_minor": 5,
+    }
+    put(q, "notes/book.ipynb", json.dumps(nb))
+    (link,) = backlinks(open_scan(str(q)), q, {"notes/book.ipynb": "notebook"})
+    assert (link["line"], link["at"]) == (6, "orbits")

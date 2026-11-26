@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from loom.render.endpoints import agents, changes, files, formal, library, review, sync, web
+from loom.render.endpoints import agents, changes, files, formal, library, notes, review, sync, web
 from loom.render.endpoints import annotations as annotating  # `annotations` is the name `from __future__` binds here
 from loom.render.endpoints.agents import forget_place, reading_place
 from loom.render.endpoints.base import ApiError, Handler, offer_scan
@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 #: The families of endpoints, a module each: its `HANDLERS`, and which of them are `READS`, `NO_REBUILD` and `RECORD_WRITES`.
-FAMILIES = (annotating, changes, library, agents, sync, review, files, web, formal)
+FAMILIES = (annotating, changes, library, agents, sync, review, files, notes, web, formal)
 #: Every endpoint's handler, from its family's table.
 HANDLERS: dict[str, Handler] = {name: serve for family in FAMILIES for name, serve in family.HANDLERS.items()}
 #: What this publisher serves. A viewer reads this rather than assuming the specification's table, so an endpoint that is not here answers 404 and a viewer that hides the affordance is right to. `open` is not here: `discovery` offers it only where loom can open an application.
@@ -56,7 +56,7 @@ NO_REBUILD = tuple(name for family in FAMILIES for name in family.NO_REBUILD)
 #: Writes that change records alone, which the scan never reads, or keep a version, whose landmark the build reads again (`build(reuse=…)`); their publication builds from the last scan (`ServeSession.rebuild`).
 RECORD_WRITES = tuple(name for family in FAMILIES for name in family.RECORD_WRITES)
 #: Writes that take their own locks and hold none while they wait on the network, so the publisher runs them outside the publication's lock.
-OWN_LOCK = ("here", *library.OWN_LOCK, *sync.OWN_LOCK)
+OWN_LOCK = ("here", *library.OWN_LOCK, *sync.OWN_LOCK, *notes.OWN_LOCK)
 
 
 def discovery() -> dict[str, Any]:

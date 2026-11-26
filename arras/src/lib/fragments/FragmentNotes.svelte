@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Annotating on the corpus's own text, a node's or a document's: what the toolbar's tools do here.
 	//
-	// **Annotate** on, selected words, widened to whole words where a drag stops partway through one, are marked at once in the look in hand, and Add comment stands at their end until the next selection: typing there starts the comment, so a letter meant for it never reaches a shortcut. A type that stays open until resolved asks something, so its words open the popup to say it first, since loom takes such an annotation only with words; that draft is not saved until its button is pressed, and leaving it with words in it asks first. **Comment** on, a click leaves a comment at the place clicked, on the result it is in, and turns the tool off. With neither on, a selection offers **Quote**, which copies the words and where they came from and writes nothing. Alt-drag draws a box round what a selection cannot hold: a labelled equation is noted as itself, anything else as the words of the block under the box.
+	// **Annotate** on, selected words, widened to whole words where a drag stops partway through one, are marked at once in the look in hand, and Add comment stands at their end until the next selection: typing there starts the comment, so a letter meant for it never reaches a shortcut. A type that stays open until resolved asks something, so its words open the popup to say it first, since loom takes such an annotation only with words; that draft is not saved until its button is pressed, and leaving it with words in it asks first. **Comment** on, a click leaves a comment at the place clicked, on the result it is in, and turns the tool off. With neither on, a selection offers its actions (`SelectionMenu`): **Quote**, which copies the words and where they came from and writes nothing, **Annotate**, which marks them as the tool would, and **New note**; after Annotate, the tool's or the menu's, Add comment stands at the words with the actions beside it, Annotate left out. Alt-drag draws a box round what a selection cannot hold: a labelled equation is noted as itself, anything else as the words of the block under the box.
 	//
 	// A quote is what was selected with each formula it touches given as its TeX, the form loom finds in the source, so a selection across `$c$` anchors where the words on screen alone would not.
 	import { untrack, type Snippet } from 'svelte';
@@ -11,8 +11,8 @@
 	import { annotate as record } from '$lib/review/history.svelte';
 	import { linkName } from '$lib/workspace/names';
 	import AnnotationPopup from '$lib/review/AnnotationPopup.svelte';
-	import AtSelection from '$lib/review/AtSelection.svelte';
-	import QuoteChip from '$lib/review/QuoteChip.svelte';
+	import SelectionMenu from '$lib/review/SelectionMenu.svelte';
+	import { quoteLink } from '$lib/notes/link';
 	import { commentSeed, hand, handPayload, typeById, type Annotating, type Draft } from '$lib/review/annotating.svelte';
 	import { say } from '$lib/review/toasts.svelte';
 	import { placeAt } from './popup';
@@ -46,14 +46,14 @@
 
 	const m = $derived(store.manifest);
 
-	/** A bare selection, offered Quote. */
+	/** A bare selection, offered its actions. */
 	let offered = $state<{ words: string; target: string; at: Box; range: Range } | null>(null);
 	/** A new annotation being written in the popup, and where the popup stands. */
 	let drafting = $state<{ draft: Draft; at: Box } | null>(null);
 	/** The draft's popup, which says whether it may close. */
 	let popup = $state<ReturnType<typeof AnnotationPopup> | undefined>();
-	/** Words just marked by Annotate, with Add comment at their end until the next selection. */
-	let marked = $state<{ id: string; at: Box } | null>(null);
+	/** Words just marked by Annotate, with Add comment and the actions at their end until the next selection. */
+	let marked = $state<{ id: string; at: Box; words: string; target: string } | null>(null);
 
 	// what the hint under the toolbar says follows the draft and the words just marked
 	$effect(() => {
@@ -155,10 +155,10 @@
 		return linkName(m, `quilt:${key}`);
 	}
 
-	/** A link to a place: in a document, the document at the result; on a node's page, the result. */
-	function hrefFor(key: string): string {
-		if (inDoc && key !== inDoc) return `quilt:${inDoc}#${key}`;
-		return `quilt:${key}`;
+	/** A link to words at a place: in a document, the document at the result; on a node's page, the result. */
+	function linkFor(key: string, words: string): string {
+		if (inDoc && key !== inDoc) return quoteLink(inDoc, key, words);
+		return quoteLink(key, '', words);
 	}
 
 	function rectOfRange(range: Range): Box {
@@ -210,7 +210,7 @@
 			return;
 		}
 		const id = (res.result ?? '').split(/\s+/)[0] ?? '';
-		marked = id ? { id, at } : null;
+		marked = id ? { id, at, words: quote, target } : null;
 	}
 
 	/** Open the popup on an annotation just written, once the manifest that holds it has been drawn. Add comment stands, and keeps the keys typed, until it opens. */
@@ -225,6 +225,15 @@
 		}
 		if (marked?.id === id) marked = null;
 		if (commentSeed.id === id) commentSeed.id = '';
+	}
+
+	/** Annotate, from the actions at a bare selection: its words widened to whole words and marked as the tool marks them. */
+	function annotateOffered(): void {
+		const o = offered;
+		if (!o) return;
+		offered = null;
+		snapToWords(o.range);
+		void annotate(o.target, quoteOf(o.range) || o.words, o.range);
 	}
 
 	function openDraft(draft: Draft, at: Box): void {
@@ -373,13 +382,13 @@
 	<div class="drawn" style="left: {b.left}px; top: {b.top}px; width: {b.width}px; height: {b.height}px;" data-testid="drawn-box"></div>
 {/if}
 {#if offered && !drafting}
-	<QuoteChip at={offered.at} range={offered.range} words={offered.words} name={nameFor(offered.target)} href={hrefFor(offered.target)} ondone={() => (offered = null)} />
+	<SelectionMenu at={offered.at} range={offered.range} text={offered.words} name={nameFor(offered.target)} link={linkFor(offered.target, offered.words)} annotate={allowed ? annotateOffered : undefined} ondone={() => (offered = null)} />
 {/if}
-{#if marked}
+{#if marked && !drafting}
 	{@const id = marked.id}
-	<AtSelection at={marked.at}>
-		<button type="button" class="chip" data-testid="add-comment" onclick={() => void openWritten(id)}>Add comment</button>
-	</AtSelection>
+	<SelectionMenu at={marked.at} text={marked.words} name={nameFor(marked.target)} link={linkFor(marked.target, marked.words)} ondone={() => (marked = null)}>
+		{#snippet before()}<button type="button" class="chip" data-testid="add-comment" onclick={() => void openWritten(id)}>Add comment</button>{/snippet}
+	</SelectionMenu>
 {/if}
 {#if drafting}
 	<aside class="ann-popup-host" use:placed={drafting.at} data-testid="draft-host">

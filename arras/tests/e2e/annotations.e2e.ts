@@ -282,7 +282,13 @@ test.describe('the toolbar', () => {
 		expect(sent.annotate).not.toHaveProperty('look');
 		expect(sent.annotate).not.toHaveProperty('message');
 		await expect(page.getByTestId('add-comment')).toBeVisible();
-		await expect(page.getByTestId('quote-offer')).toHaveCount(0);
+		// the words are marked already, so the actions beside Add comment are Quote and New note alone
+		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
+		await page.getByTestId('selection-actions').click();
+		await expect(page.getByTestId('quote-offer')).toBeVisible();
+		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
+		await page.keyboard.press('Escape');
+		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
 		await expect(tool).toHaveAttribute('aria-pressed', 'true');
 		// Add comment stands until the next selection, not for a moment
 		await page.waitForTimeout(4500);
@@ -1101,20 +1107,74 @@ test.describe('Quote', () => {
 		// Quote stands at the end of the words, so they are scrolled to as a reader would have them on screen
 		await markOf(page, 'a-2026-09-16-ecnav2').scrollIntoViewIfNeeded();
 		await selectWithin(markOf(page, 'a-2026-09-16-ecnav2'));
+		await page.getByTestId('selection-actions').click();
 		await page.getByTestId('quote-offer').click();
 		const toast = page.getByTestId('toast');
 		await expect(toast).toContainText('Quoted for your agent');
 		await expect(toast).toContainText('“finite widget”');
 		const copied = await page.evaluate(() => (window as unknown as { copied: string[] }).copied);
-		expect(copied).toEqual(['> finite widget\n— [main.tex, Theorem 2.1](quilt:drafting/main.tex#sy-0003)']);
-		await expect(page.getByTestId('quote-offer')).toHaveCount(0);
+		expect(copied).toEqual(['> finite widget\n— [main.tex, Theorem 2.1](quilt:drafting/main.tex#sy-0003&quote=finite%20widget)']);
+		await expect(page.getByTestId('selection-actions')).toHaveCount(0);
 		expect(Object.keys(sent)).toEqual([]);
 	});
 
 	test('is offered without a publisher, since it writes nothing', async ({ page }) => {
 		await page.goto('/node/sy-0003');
 		await selectWithin(markOf(page, 'a-2026-09-16-ecnav2'));
+		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
+		// annotating and New note need a publisher that takes them
+		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
+		await expect(page.getByTestId('selection-new-note')).toHaveCount(0);
+	});
+});
+
+// The actions at a selection: a button at the end of the words, opened by a click and never by a hover, which keeps the words selected while it is open.
+test.describe('the actions at a selection', () => {
+	test('open on a click and never on a hover, keep the selection, and close on Escape with the tool left in hand', async ({ page }) => {
+		await writes(page, ['annotate', 'new-note']);
+		await page.goto('/master/drafting/main');
+		await markOf(page, 'a-2026-09-16-ecnav2').scrollIntoViewIfNeeded();
+		await selectWithin(markOf(page, 'a-2026-09-16-ecnav2'));
+		const opener = page.getByTestId('selection-actions');
+		await opener.hover();
+		await page.waitForTimeout(400);
+		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
+		await opener.click();
+		await expect(page.getByTestId('selection-menu')).toBeVisible();
+		await expect(page.getByTestId('selection-menu').getByRole('menuitem')).toHaveText(['Quote', 'Annotate', 'New note']);
+		expect(await page.evaluate(() => getSelection()!.toString())).toContain('finite widget');
+		// a reasonable size: the button and each action are tall enough to hit
+		for (const at of [opener, page.getByTestId('selection-new-note')]) expect((await at.boundingBox())!.height).toBeGreaterThanOrEqual(26);
+		await page.keyboard.press('Escape');
+		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
+		await expect(opener).toBeVisible();
+	});
+
+	test('Annotate marks the words in the look in hand, and Add comment then stands with the other actions', async ({ page }) => {
+		const sent = await writes(page, ['annotate', 'new-note']);
+		await page.goto('/master/drafting/main');
+		await markOf(page, 'a-2026-09-16-ecnav2').scrollIntoViewIfNeeded();
+		await selectWithin(markOf(page, 'a-2026-09-16-ecnav2'));
+		await page.getByTestId('selection-actions').click();
+		await page.getByTestId('selection-annotate').click();
+		await expect.poll(() => sent.annotate).toBeTruthy();
+		expect(sent.annotate).toMatchObject({ target: 'sy-0003', quote: 'finite widget' });
+		await expect(page.getByTestId('add-comment')).toBeVisible();
+		await page.getByTestId('selection-actions').click();
+		await expect(page.getByTestId('selection-menu').getByRole('menuitem')).toHaveText(['Quote', 'New note']);
+	});
+
+	test('New note sends a link carrying the words, with a name for the place, and says it went to the editor', async ({ page }) => {
+		const sent = await writes(page, ['annotate', 'new-note']);
+		await page.goto('/master/drafting/main');
+		await markOf(page, 'a-2026-09-16-ecnav2').scrollIntoViewIfNeeded();
+		await selectWithin(markOf(page, 'a-2026-09-16-ecnav2'));
+		await page.getByTestId('selection-actions').click();
+		await page.getByTestId('selection-new-note').click();
+		await expect.poll(() => sent['new-note']).toEqual({ link: 'quilt:drafting/main.tex#sy-0003&quote=finite%20widget', quote: 'finite widget', title: 'main.tex, Theorem 2.1' });
+		await expect(page.getByTestId('toast')).toContainText('New note sent to your editor');
+		await expect(page.getByTestId('selection-actions')).toHaveCount(0);
 	});
 });
 

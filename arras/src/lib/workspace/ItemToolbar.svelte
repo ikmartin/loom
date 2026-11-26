@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A pane's toolbar, in the pane's own flow beneath its tabs, drawn by every pane for every kind, dimmer in the one not focused. Its first row reads: at its left the item's views; at its right **Annotate**, which shows or puts away the annotation row where the kind has tools that write, then the kind's bar, a document's **history ▾**, compare's counter and stop while the two panes are compared, then **view ▾**, the menu holding every other control in full words, which always ends with turning every annotation in this pane off or on, a control with no key, since a stray letter must never hide what a reader is looking at. The annotation row beneath holds the tools that write, and at its right what the tool in hand does; while it is put away that line stands under the toolbar instead, over the page's head. Each control acts on its own pane only; compare, started from a draft's history, is the one that reaches across.
+	// A pane's toolbar, in the pane's own flow beneath its tabs, drawn by every pane for every kind, dimmer in the one not focused. Its first row reads: at its left the item's views; at its right **New note**, for the whole item, where the kind can be linked to and a publisher runs it, then **Annotate**, which shows or puts away the annotation row where the kind has tools that write, then the kind's bar, a document's **history ▾**, compare's counter and stop while the two panes are compared, then **view ▾**, the menu holding every other control in full words, which always ends with turning every annotation in this pane off or on, a control with no key, since a stray letter must never hide what a reader is looking at. The annotation row beneath holds the tools that write, and at its right what the tool in hand does; while it is put away that line stands under the toolbar instead, over the page's head. Each control acts on its own pane only; compare, started from a draft's history, is the one that reaches across.
 	import { untrack, type Snippet } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { annotationRow } from './annotationRow.svelte';
@@ -10,6 +10,9 @@
 	import { getPane } from './state.svelte';
 	import { setStrip, strips } from './strip.svelte';
 	import { workspace } from './store.svelte';
+	import { newNote } from '$lib/notes/newNote';
+	import { notes as notesWords } from '$lib/words/notes';
+	import { can } from '$lib/write';
 
 	let {
 		name,
@@ -18,7 +21,8 @@
 		history,
 		view,
 		hint = '',
-		on = false
+		on = false,
+		note
 	}: {
 		/** The item's name, for every control's accessible name. */
 		name: string;
@@ -34,7 +38,14 @@
 		on?: boolean;
 		/** What the tool in hand does, at the annotation row's right, or a line under the bar while the row is put away; '' for none. */
 		hint?: string;
+		/** The whole item as New note is given it: a `quilt:` link and a name; omitted where the kind has no link. */
+		note?: { link: string; title: string };
 	} = $props();
+
+	let notes = $state(false);
+	$effect(() => {
+		void can('new-note').then((ok) => (notes = ok));
+	});
 
 	const pane = getPane();
 	const hidden = $derived(workspace.hidesNotes(pane.index));
@@ -60,6 +71,10 @@
 <div class="toolbar">
 	<PaneViews index={pane.index} />
 	<span class="end">
+		{#if note && notes}
+			{@const n = note}
+			<button type="button" class="row-toggle" title={notesWords.toolbar.hover(n.title)} aria-label={notesWords.toolbar.hover(n.title)} data-testid="toolbar-new-note" onclick={() => void newNote(n)}><Icon name="note" size={14} /><span>{notesWords.toolbar.label}</span></button>
+		{/if}
 		{#if tools}
 			<button type="button" class="row-toggle" class:on={annotationRow.open} aria-expanded={annotationRow.open} title={annotationRow.open ? 'Put the annotation tools away' : 'Show the annotation tools'} aria-label="annotation tools for {name}" data-testid="toggle-annotation-row" onclick={() => annotationRow.set(!annotationRow.open)}
 				><Icon name="highlighter" size={14} /><span>Annotate</span><span class="caret" class:up={annotationRow.open}><Icon name="caret" size={11} /></span></button

@@ -12,11 +12,14 @@
 	import ToolbarItem from '../ToolbarItem.svelte';
 	import { openOutside } from '../links';
 	import { fileState } from '../state.svelte';
+	import { quoteLink } from '$lib/notes/link';
 
 	let { item, name }: { item: Item; name: string } = $props();
 
 	const file = $derived(store.manifest?.files?.find((f) => f.path === item.id));
 	const held = $derived(fileState(item));
+	// New note on the whole file, by its path
+	const note = $derived(file ? { link: quoteLink(file.path), title: name } : undefined);
 
 	let writes = $state(false);
 	let opens = $state(false);
@@ -35,7 +38,7 @@
 {#snippet writing()}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="write" {writes} />{/snippet}
 
 {#if file?.kind === 'pdf'}
-	<ItemToolbar {name} bar={reading} tools={writes ? writing : undefined} on={ui.showSettled} hint={writes ? hintFor(store.manifest, held.notes, hand.value) : ''}>
+	<ItemToolbar {name} {note} bar={reading} tools={writes ? writing : undefined} on={ui.showSettled} hint={writes ? hintFor(store.manifest, held.notes, hand.value) : ''}>
 		{#snippet view()}
 			<ToolbarItem
 				label={ui.showSettled ? 'hide settled annotations' : 'show settled annotations'}
@@ -48,5 +51,5 @@
 		{/snippet}
 	</ItemToolbar>
 {:else}
-	<ItemToolbar {name} />
+	<ItemToolbar {name} {note} />
 {/if}

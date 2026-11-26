@@ -28,7 +28,7 @@ Three of the views' rules reach the backend. No id and no command is drawn, so e
 
 ## 2. Conventions
 
-**Transport.** A read is `POST /_api/<name>` with a JSON body and a JSON answer, as `locate` and `compare` are: a handler in its family's module under `loom/src/loom/render/endpoints/`, listed in that module's `READS`, so the publisher does not rebuild after it, with the token and the checks every request to `/_api` takes (`write-api.md` §3), and a case in `cases_<family>.py`. The names follow `reserved.md`'s prefixes: `library-` for the library, `review-` for Review, `formal-` for formalization; the Web's reads take a prefix of their own, `web-`, and the notes' read is `notes`, which `reserved.md` gains when they are built. Each is named in `GET /_api`'s `capabilities` once it is served, and a viewer that does not find one draws nothing that needs it (`write-api.md` §1). Rendered content is never in an answer (`write-api.md` §2): a draft's result is drawn from its fragment, whose path an answer gives, a change from fragments marked as `compare` marks them, and a library node from its LaTeX, which the viewer draws (§3.4).
+**Transport.** A read is `POST /_api/<name>` with a JSON body and a JSON answer, as `locate` and `compare` are: a handler in its family's module under `loom/src/loom/render/endpoints/`, listed in that module's `READS`, so the publisher does not rebuild after it, with the token and the checks every request to `/_api` takes (`write-api.md` §3), and a case in `cases_<family>.py`. The names follow `reserved.md`'s prefixes: `library-` for the library, `review-` for Review, `formal-` for formalization; the Web's reads take a prefix of their own, `web-`. Each is named in `GET /_api`'s `capabilities` once it is served, and a viewer that does not find one draws nothing that needs it (`write-api.md` §1). Rendered content is never in an answer (`write-api.md` §2): a draft's result is drawn from its fragment, whose path an answer gives, a change from fragments marked as `compare` marks them, and a library node from its LaTeX, which the viewer draws (§3.4).
 
 **Bytes.** What never changes once made is a `GET` at a content address, as `/build/` is: no token, since pdf.js and an `<img>` fetch by URL and send none, served with `Cache-Control: immutable` and, as everything outside the viewer's bundle is, `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` (`write-api.md` §3). A hash in an address is its 64 hexadecimal digits, without the `sha256:` an answer's field carries. `GET /_api/library/pdf/<hex>` is a stored PDF by its `pdf` hash; `GET /_api/library/thumb/<hex>.png` its first page (§3.1); `GET /_api/library/drawn/<node-hex>-<macros-hex>.svg` a node drawn by TeX, named by its own hash and its macros node's (`none` for a work with none), drawn only through an `<img>`, since it is TeX's output from a source nobody at loom wrote (§3.4).
 
@@ -413,15 +413,11 @@ What Docs draws of the library is the picker, a work beside a draft with a citat
 
 **Open 29.** A citation whose locator names a result the work's source does not print. Proposal: a stub, as for any locator (`library.md`: "if that result has no node yet it gets a stub"), listed in Review as "not found in its TeX source".
 
-### 6.3 The notes tab (8b, 8b work)
+### 6.3 The notes tab
 
-**Drawn.** A tab "All notes", 760 pixels wide whatever its sort: `sort by work | date` and "show orphaned notes (2)". By work: "Orphaned · their document is gone, or their words are not found" first, each note with `place it again` and `delete`; then a group for each document and each work, with its count, its latest notes and "6 more". A note draws its type's colour, the words it is on, its text, who wrote it and when, and its tags ("summary"); a click on a placed note opens it at its place, in Docs.
+**Drawn.** A tab "All notes", 760 pixels wide, opened by Notes in Docs' column, which is offered once a file of the quilt links into it: every file whose `quilt:` links name a place the viewer shows (`docs/design/model.md`, "Notes"), by path, from the manifest's `backlinks` (`manifest.md`). A row names the file, its folder faint, and how many links it holds, and opens it at its first link, as the Notes list beside an item opens a note; under it each link names the place it points at, as the viewer names a link, with the words it quotes, and opens that place. A note is a file of the person's own: the tab writes nothing and nobody edits it.
 
-**Read `notes`.** Given `{"sort": "work"|"date", "orphaned": true, "group"?: DOC or REF or "orphaned", "offset"?: N}`. By work, `{"gen", "orphaned": 2, "groups": [{"group": {"doc"} or {"ref", "short"} or "orphaned", "n": 9, "notes": [NOTE…], "more": 6}]}`, three notes a group; by date, `{"gen", "notes": [NOTE…], "more": 11}`, twenty at a time; `group` with `offset` sends the rest of one. A `NOTE` is `{"annotation", "color", "quote", "message", "by": "you" or the agent's name, "at", "tags": [], "at_place": {"doc", "key"} or {"ref", "page"} or null, "was"?: "old-intro.tex, deleted 14 Nov"}`; `message` is the annotation's text as the log holds it, drawn as the viewer draws annotations today, and `at_place` is null for an orphan. From: annotations; orphaned are those whose words are not found, whose document is gone, or whose PDF was replaced. Cost: hundreds of notes, under 20 KB, 20 ms. The tab needs no part of the manifest's annotations.
-
-**Writes.** `place it again`: the person clicks where the note belongs or selects its words, `place` with `{"annotation", "target", "quote"?, "page"?, "rects"?}`. `delete` is `delete`, as built. **Open 30.** Today's `edit` moves only a mark drawn on a PDF page. Proposal: `place`, beside `annotate` and `edit`, anchors a note again on any target by its quote, or on a page by its region, and records that it was placed again.
-
-**Open 31.** Tags on a note. Annotations have a type and no tags; `library.md` says what an agent wants to say of a work is "a note on the work, with tags". Proposal: an annotation gains `tags`, written by `annotate`; "summary" in 8b is such a tag. As for a node's tags (ruled with the node store), a tag keeps the case it was typed in, two equal ignoring case are one tag, and it is shown as first written.
+**Reads and writes.** None: the tab is drawn from the manifest. An annotation is listed beside its place (Comments), never here.
 
 ### 6.4 Lean marks in a draft's margin (8, 11a)
 
@@ -502,7 +498,6 @@ Every write the views make, in one place. "Built" marks one that exists today. T
 | `web-list`, `web-group` | 40 KB at most | 20 ms | send a folded group's rows |
 | `web-search` | 50 hits | 100 ms | |
 | `web-focus`, `web-graph` | under 10 KB | 20 ms | send the fold unasked |
-| `notes` | under 20 KB | 20 ms | |
 | `formal-marks`, `formal-markers` | under 5 KB | 10 ms | |
 | `formal-plan` | under 20 KB | 50 ms | |
 
@@ -541,8 +536,8 @@ The manifest carries nothing of the library but `arriving`, the drops that wait 
 | 27 | §5.4 | what a statement's proofs use, with two proofs | the union, each row naming its proof |
 | 28 | §6.1 | "[1]", the label a draft cites a work by | closed: `read_cite_labels` gives it |
 | 29 | §6.2 | a citation of a number the source does not print | a stub, "not found in its TeX source" |
-| 30 | §6.3 | placing a note again | `place` |
-| 31 | §6.3 | tags on a note | annotations gain `tags`, kept in the case typed, equal ignoring case being one |
+| 30 | §6.3 | placing a note again | closed: a note is a file of the person's own, which loom never rewrites; a link whose words are gone is listed in Problems |
+| 31 | §6.3 | tags on a note | closed: a note is a file of the person's own, tagged as their editor tags it |
 | 32 | §6.4 | formalization on for a quilt | `formal-enable`, with a Lean project loom checks |
 | 33 | §6.6 | requesting a formalization over unchecked results | closed: ruled after round six, allowed; the gate is on what reads formalized |
 | 34 | §4.2 | Review's kinds against `library.md`'s list | closed: `evidence.md` writes the rule for each kind |

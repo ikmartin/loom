@@ -82,7 +82,7 @@ export interface Backlink {
   from: string;
   /** Its 1-based line there. */
   line: number;
-  /** In a Markdown file, the id of the heading above it, where the note opens; '' for none. Absent from an older publisher. */
+  /** In a Markdown file or a notebook, the id of the heading above it, where the note opens; '' for none. Absent from an older publisher. */
   at?: string;
   href: string;
   /** What it names: `document`, `node`, `work`, `file`, `annotation`, `session`, `page` or `library`. */
@@ -637,6 +637,8 @@ export interface QuiltSettings {
   read_only: string[];
   quilt: { name: string; main: string; home: string; prefix: string; engine: string; history: string; research_state: string };
   library: { online: boolean };
+  /** `dir`: where New note puts a note, '' for the default folder `default` names. Absent from an older loom's manifest. */
+  notes?: { dir: string; default: string };
   /** `codes`: every diagnostic code that can be silenced. */
   lint: { disable: string[]; codes: string[] };
   agents: {
