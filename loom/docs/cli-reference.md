@@ -370,7 +370,7 @@ Run alone, `loom formal` is a command; its subcommands follow its options.
 
 Say whether formalization is on for this quilt on this machine, and whether loom can check its Lean here.
 
-The person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom "LABEL"]`, and asks loom to check it (`loom formal check`). What Lean said is loom's own record, never an agent's.
+The person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom "LABEL"]`, and asks loom to check it (`loom formal check`); a second agent, which did not write it, reads it in ordinary mathematics for the person (`loom formal read`). What Lean said is loom's own record, never an agent's.
 
 | option | description |
 |---|---|
@@ -411,6 +411,26 @@ Kept on this machine and never in the quilt, so a co-author who opens the quilt 
 
 | option | description |
 |---|---|
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom formal read`
+
+`loom formal read [OPTIONS] RESULT`
+
+Read a result's Lean in ordinary mathematics, for the person to read beside it before attesting. RESULT is a draft's label or a node's id.
+
+Without a reading, list the Lean to read: the latest record of loom's check stating the result, and each declaration the person reads there, as Lean printed it. With one, record your reading as yours, part by part, each part naming one of those declarations. Nothing checks a reading against the Lean, and it is stale once loom records a newer Lean for the result. Write it only for Lean you did not write.
+
+| option | description |
+|---|---|
+| `--declaration` `NAME` | The declaration a part reads, one of those the command lists without a reading; once for each part, in order. |
+| `--reading` `LATEX` | Your reading of that declaration in ordinary mathematics, as LaTeX; once for each part, in the order of --declaration. |
+| `--part` `NAME` | Each part's name, as (i) or a notion's word, in the same order; needed where there are several parts. |
+| `--draft` `LATEX` | What the statement says in each part, as LaTeX, in the same order; '' where nothing in it answers. |
+| `--difference` | Where the Lean and the statement differ; leave it out if you found nothing. |
+| `--record` `ID` | The Lean record you read, as listed; refused once a newer one states the result. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 

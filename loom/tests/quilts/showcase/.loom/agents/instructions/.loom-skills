@@ -1,7 +1,7 @@
 .agents/skills/loom-audit/SKILL.md 63afb0cb6a171494acd1750e48f47d027baa010bd3d3616b87b32323c5e34279
 .agents/skills/loom-draft/SKILL.md 0e179b0e0bfb0554cea97ba447610c8dc0d9da7668344938de2001f5ed42d127
 .agents/skills/loom-flow/SKILL.md 4fb62cfa153b24520d58294bc8ea2df3f81156cd93f53d03e0e2dc4190b2b140
-.agents/skills/loom-formalize/SKILL.md d3a9a3c8063e87dad3e36ef711ed90f3e85032e6218d75cca06413de827449ef
+.agents/skills/loom-formalize/SKILL.md 3f12a964bca166185d852dff4773c9d58d42e8bc9fda62f788605dafdbadad60
 .agents/skills/loom-question/SKILL.md 82d035d3ea6fa5c74e2e41c7fe82a7563e578997ba2c38b4e8446b3353fe7d6a
 .agents/skills/loom-quick/SKILL.md 47e47f4836f05b2dfb21eacb13eccabc21280d8218408fbe91bf06aa96347e78
 .agents/skills/loom-referee/SKILL.md e7a4b117846d131c124febaa5ca8589fc85435983e5c7250207a9de6872989dd
@@ -10,7 +10,7 @@
 .claude/skills/loom-audit/SKILL.md 63afb0cb6a171494acd1750e48f47d027baa010bd3d3616b87b32323c5e34279
 .claude/skills/loom-draft/SKILL.md 0e179b0e0bfb0554cea97ba447610c8dc0d9da7668344938de2001f5ed42d127
 .claude/skills/loom-flow/SKILL.md 4fb62cfa153b24520d58294bc8ea2df3f81156cd93f53d03e0e2dc4190b2b140
-.claude/skills/loom-formalize/SKILL.md d3a9a3c8063e87dad3e36ef711ed90f3e85032e6218d75cca06413de827449ef
+.claude/skills/loom-formalize/SKILL.md 3f12a964bca166185d852dff4773c9d58d42e8bc9fda62f788605dafdbadad60
 .claude/skills/loom-question/SKILL.md 82d035d3ea6fa5c74e2e41c7fe82a7563e578997ba2c38b4e8446b3353fe7d6a
 .claude/skills/loom-quick/SKILL.md 47e47f4836f05b2dfb21eacb13eccabc21280d8218408fbe91bf06aa96347e78
 .claude/skills/loom-referee/SKILL.md e7a4b117846d131c124febaa5ca8589fc85435983e5c7250207a9de6872989dd
