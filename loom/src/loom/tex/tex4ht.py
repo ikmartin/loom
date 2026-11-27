@@ -481,22 +481,40 @@ def _html_once(
         )
 
 
+#: Each figure's `.xbb` as `extractbb` wrote it, by the tool, the figure's name and its bytes' hash; None where it failed. Every run stages a fresh copy, so without it each run asked again of every figure in the folder.
+_XBB: dict[tuple[str, str, str], bytes | None] = {}
+
+
+def _bounding_boxes(cwd: Path) -> None:
+    """Write `extractbb`'s `.xbb` beside each figure under `cwd`, from `_XBB` where this process already asked of the same figure.
+
+    A hit writes what the run wrote then; one that failed then leaves the folder as a failing run would. The memo holds a few hundred bytes a figure and lives as long as the process.
+    """
+    tool = shutil.which("extractbb")
+    if not tool:
+        return
+    for f in sorted(cwd.rglob("*")):
+        if not (f.is_file() and f.suffix.lower() in FIGURES):
+            continue
+        key = (tool, f.name, hashlib.sha256(f.read_bytes()).hexdigest())
+        xbb = f.with_suffix(".xbb")
+        if key in _XBB:
+            kept = _XBB[key]
+            if kept is not None:
+                xbb.write_bytes(kept)
+            continue
+        done = subprocess.run(
+            ["extractbb", f.name], cwd=f.parent, capture_output=True, timeout=60, check=False, env=tex_env()
+        )
+        _XBB[key] = xbb.read_bytes() if done.returncode == 0 and xbb.is_file() else None
+
+
 def _prepare(stage: Path, cwd: Path, envs: Sequence[str], *, snippets: bool = False, math: str = "mathjax") -> None:
     """Make a staged copy ready for a run: what a quilt carries for TeX4ht removed, bounding boxes beside its figures, and loom's configuration and build file in `cwd`."""
     for f in sorted(stage.rglob("*")):
         if f.is_file() and CARRIED.search(f.name):
             f.unlink()
-    if shutil.which("extractbb"):
-        for f in sorted(cwd.rglob("*")):
-            if f.is_file() and f.suffix.lower() in FIGURES:
-                subprocess.run(
-                    ["extractbb", f.name],
-                    cwd=f.parent,
-                    capture_output=True,
-                    timeout=60,
-                    check=False,
-                    env=tex_env(),
-                )
+    _bounding_boxes(cwd)
     (cwd / "loom-html.cfg").write_text(configuration(envs, snippets=snippets, math=math), encoding="utf-8")
     (cwd / "loom-html.mk4").write_text("-- loom's build file: make4ht's defaults and nothing else\n", encoding="utf-8")
     if not private.ghostscript_available():

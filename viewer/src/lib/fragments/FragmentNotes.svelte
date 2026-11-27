@@ -55,6 +55,8 @@
 	let popup = $state<ReturnType<typeof AnnotationPopup> | undefined>();
 	/** Words just marked by Annotate, with Add comment and the actions at their end until the next selection. */
 	let marked = $state<{ id: string; at: Box; words: string; target: string } | null>(null);
+	/** Keys typed after words were marked and before loom answered the mark, kept for its comment; `live` goes false when the reader moves on first. */
+	let awaiting = $state.raw<{ started: boolean; text: string; live: boolean } | null>(null);
 
 	// what the hint under the toolbar says follows the draft and the words just marked
 	$effect(() => {
@@ -84,19 +86,33 @@
 				return leaveDraft();
 			}
 			marked = null;
+			drop();
 			if (notes.tool && !notes.open) notes.tool = null;
 		};
 		document.addEventListener('keydown', key);
 		return () => document.removeEventListener('keydown', key);
 	});
 
-	/** Typing while Add comment stands starts the comment: the keys are kept until the popup opens and its field takes them (`commentSeed`). A number still switches type and a space still scrolls, until the first letter. Listened for before anything else, so no key meant for the comment reaches a shortcut. */
+	/** Typing while Add comment stands starts the comment: the keys are kept until the popup opens and its field takes them (`commentSeed`). A number still switches type and a space still scrolls, until the first letter. Listened for before anything else, so no key meant for the comment reaches a shortcut. Keys typed while loom has yet to answer the mark are kept in `awaiting`, and start the comment once the answer names it. */
 	$effect(() => {
 		const id = marked?.id;
-		if (!id) return;
+		const early = awaiting;
+		if (!id && !early) return;
 		const typed = (e: KeyboardEvent) => {
 			if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
 			if ((e.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable]')) return;
+			if (!id && early) {
+				if (e.key === 'Backspace' && early.started) early.text = early.text.slice(0, -1);
+				else if (e.key === 'Enter' && !early.started) early.started = true;
+				else if (e.key.length === 1 && (early.started || !/[\s0-9]/.test(e.key))) {
+					early.started = true;
+					early.text += e.key;
+				} else return;
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+			if (!id) return;
 			const started = commentSeed.id === id;
 			if (e.key === 'Backspace' && started) commentSeed.text = commentSeed.text.slice(0, -1);
 			else if (e.key === 'Enter' && !started) {
@@ -132,6 +148,7 @@
 		untrack(() => {
 			offered = null;
 			marked = null;
+			drop();
 		});
 	});
 
@@ -181,6 +198,7 @@
 		// only the text's own words: a popup, the margin or compare's drawing stands in the fragment without being its text
 		if ([range.startContainer, range.endContainer, range.commonAncestorContainer].some(notText)) return;
 		marked = null;
+		drop();
 		// Annotate marks whole words: a drag that stops partway through one takes the rest of it, and the selection shows what is marked
 		if (notes.tool === 'annotate' && allowed && snapToWords(range)) {
 			sel.removeAllRanges();
@@ -205,13 +223,32 @@
 		}
 		const at = endOf(range);
 		window.getSelection()?.removeAllRanges();
-		const res = await record({ target, quote, ...(inDoc ? { in: inDoc } : {}), ...handPayload(m, h) });
+		const early = { started: false, text: '', live: true };
+		awaiting = early;
+		let res: Awaited<ReturnType<typeof record>>;
+		try {
+			res = await record({ target, quote, ...(inDoc ? { in: inDoc } : {}), ...handPayload(m, h) });
+		} finally {
+			if (awaiting === early) awaiting = null;
+		}
 		if (!res.ok) {
 			say({ title: 'Not annotated', lines: [res.error?.message ?? 'the publisher refused it'] });
 			return;
 		}
 		const id = (res.result ?? '').split(/\s+/)[0] ?? '';
+		if (!early.live) return;
 		marked = id ? { id, at, words: quote, target } : null;
+		if (id && early.started) {
+			commentSeed.id = id;
+			commentSeed.text = early.text;
+			void openWritten(id);
+		}
+	}
+
+	/** Forget the keys kept for a mark loom has yet to answer: the reader moved on first. */
+	function drop(): void {
+		if (awaiting) awaiting.live = false;
+		awaiting = null;
 	}
 
 	/** Open the popup on an annotation just written, once the manifest that holds it has been drawn; a draft opened meanwhile ends the trying. Add comment stands, and keeps the keys typed, until it opens. */

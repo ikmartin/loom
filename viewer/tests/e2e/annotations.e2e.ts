@@ -357,6 +357,39 @@ test.describe('the toolbar', () => {
 		await expect(page.getByTestId('toolbar-view-on')).toHaveCount(0);
 	});
 
+	test('keys typed straight after marking, before loom has answered the mark, all reach its comment', async ({ page }) => {
+		await writes(page);
+		// loom answers the mark a moment later, as a server under load does
+		await page.route('**/_api/annotate', async (r) => {
+			await new Promise((done) => setTimeout(done, 800));
+			await r.fulfill({ json: { ok: true, result: 'a-2026-09-16-ecnav2  sy-0003  untyped  (you)' } });
+		});
+		await page.goto('/node/sy-0003');
+		await page.getByTestId('tool-annotate').click();
+		await selectWithin(pane(page, 0).locator('.fragment .env[data-id="sy-0003"] > p[data-src]').first());
+		await page.keyboard.type('asdf');
+		const field = popup(page).getByTestId('popup-comment-field');
+		await expect(field).toBeFocused();
+		await page.keyboard.type('gh');
+		await expect(field).toHaveValue('asdfgh');
+		await expect(page.getByTestId('toolbar-view-on')).toHaveCount(0);
+	});
+
+	test('keys typed while loom answers a mark it then refuses start nothing', async ({ page }) => {
+		await writes(page);
+		await page.route('**/_api/annotate', async (r) => {
+			await new Promise((done) => setTimeout(done, 400));
+			await r.fulfill({ status: 409, json: { error: { code: 'refused', message: 'no' } } });
+		});
+		await page.goto('/node/sy-0003');
+		await page.getByTestId('tool-annotate').click();
+		await selectWithin(pane(page, 0).locator('.fragment .env[data-id="sy-0003"] > p[data-src]').first());
+		await page.keyboard.type('as');
+		await expect(page.getByText('Not annotated')).toBeVisible();
+		await expect(popup(page)).toHaveCount(0);
+		await expect(page.getByTestId('add-comment')).toHaveCount(0);
+	});
+
 	test('a type that stays open asks something, so words marked with it open the popup to say it, and are written with what is said', async ({ page }) => {
 		const sent = await writes(page);
 		await page.addInitScript(() => localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
