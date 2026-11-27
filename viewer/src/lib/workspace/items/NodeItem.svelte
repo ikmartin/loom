@@ -44,7 +44,7 @@
 		<p class="muted">{docs.node.gone}</p>
 	{:else if node.conflict?.length}
 		<p class="conflicted" data-testid="conflicted">
-			{docs.node.twice(node.conflict)}
+			{docs.node.twice.lead(node.conflict.length)}{#each node.conflict as f, i (f)}{#if i}{docs.node.twice.and}{/if}<code>{f}</code>{/each}{docs.node.twice.then}
 		</p>
 	{:else if held.verbatim && held.source}
 		<pre class="verbatim" data-testid="verbatim" aria-label={docs.node.verbatim}>{held.source}</pre>

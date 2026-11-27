@@ -248,8 +248,12 @@ export const docs = {
 		closedRead: 'Read its saved text and annotations',
 		/** A result's page, and its context beside it, for a result the quilt no longer holds. */
 		gone: 'This result is not in the quilt now.',
-		/** A result's page for a label defined twice: where, and what then. */
-		twice: (files: string[]) => `Defined twice, ${files.length > 1 ? `in ${files.join(' and ')}` : `both times in ${files[0]}`}. It has no text until one definition remains.`,
+		/** A result's page for a label defined twice: the words around the person's own files that define it, each drawn as a file, and what then. */
+		twice: {
+			lead: (files: number) => (files > 1 ? 'Defined twice, in ' : 'Defined twice, both times in '),
+			and: ' and ',
+			then: '. It has no text until one definition remains.'
+		},
 		/** The result's LaTeX, shown in its page in place of its typesetting: its accessible name. */
 		verbatim: 'the LaTeX behind this block',
 		/** Under a result whose proof is missing, where the proof would be. */
