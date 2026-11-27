@@ -202,7 +202,6 @@
     "kind": "edits",
     "rows": [
      {
-      "broke": null,
       "by": null,
       "change": "c-0f621ccf",
       "doc": "drafting/main.tex",
@@ -217,7 +216,6 @@
       "where": "Definition 1.1"
      },
      {
-      "broke": null,
       "by": "agent",
       "change": "e-2026-09-16-r2hw0m",
       "doc": "drafting/main.tex",
@@ -232,7 +230,6 @@
       "where": "Proof 2"
      },
      {
-      "broke": null,
       "by": "agent",
       "change": "e-2026-09-17-zwvx4m",
       "doc": "drafting/main.tex",
