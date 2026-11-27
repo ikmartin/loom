@@ -489,11 +489,11 @@ test("accept all on an adoption's row in Review accepts exactly the blocks it to
 	writeFileSync(join(compileFolder(served.root, document), 'adopt-all.pdf'), '%PDF-1.4\n');
 	type Waiting = { key: string; cause: string; contribution?: string; refusal: string };
 	const taken = (): Waiting[] => (JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8')).unresolved ?? []).filter((u: Waiting) => u.cause === 'adopted' && u.contribution === copy);
-	await expect.poll(() => taken().length, { timeout: 60_000 }).toBeGreaterThan(2);
+	// a build that scanned the document before the adopt wrote it, and read the adopt's record after, lists all three without a refusal until the next build; so wait for the second's refusal, not for the rows alone
+	await expect.poll(() => taken().filter((u) => u.refusal).map((u) => u.key), { timeout: 60_000 }).toContain('sy-0921');
 	const can = taken().filter((u) => !u.refusal).map((u) => u.key);
 	const cannot = taken().filter((u) => u.refusal).map((u) => u.key);
 	expect(can.length).toBeGreaterThan(1);
-	expect(cannot).toContain('sy-0921');
 	const ledger = acceptedKeys(served);
 	const posted: unknown[] = [];
 	page.on('request', (r) => {
