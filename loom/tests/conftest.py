@@ -48,8 +48,8 @@ REAL_POPPLER_BIN = _real_bin("pdftotext")
 NOTES = Path.home() / "notes"
 
 
-#: What a tier reads to decide whether to run: the paper tier's sources, permission to use the network, and permission to call a hosted model through the real client.
-TIER_GATES = ("LOOM_PAPER_FIXTURES", "LOOM_NETWORK", "LOOM_CLIENT_TESTS")
+#: What a tier reads to decide whether to run: the paper tier's sources, permission to use the network, permission to call a hosted model through the real client, and the Lake project with Mathlib's build the Lean tier clones.
+TIER_GATES = ("LOOM_PAPER_FIXTURES", "LOOM_NETWORK", "LOOM_CLIENT_TESTS", "LOOM_LEAN_MATHLIB")
 
 
 def leaking(environ: dict[str, str] | os._Environ[str]) -> list[str]:

@@ -94,8 +94,9 @@ def _lean(q: Path, label: str) -> str:
 def test_loom_checks_the_lean_itself_and_records_what_it_saw(quilt: Path) -> None:
     """The real build, probe and replay, fenced: the theorem marked for sh-0007 is proved on standard axioms, the definition it uses is stated as sh-0003's and listed among its uses, the lemma between them supports it; a second check records nothing new."""
     done = check.check(quilt)
-    assert sorted(done.written) == ["sh-0003", "sh-0007"] and done.errors == [] and done.unknown == []
-    [record] = replay(quilt).about("label", "sh-0007", of="lean")
+    assert sorted(done.written) == ["sh-0003", "sh-0007"] and done.errors == [] and done.unknown == [] and done.unprinted == []  # fmt: skip
+    verdict, record = replay(quilt).about("label", "sh-0007", of="lean")
+    assert verdict.get("print") == "missing" and record.get("print") is None
     assert record.by.kind == "loom" and record.get("ok") is True and record.get("replay")["exit"] == 0
     rows = {d["name"]: d for d in record.get("declarations")}
     assert rows["Formal.double_even"]["role"] == "states" and rows["Formal.double_even"]["sorry"] is False
@@ -113,6 +114,23 @@ def test_loom_checks_the_lean_itself_and_records_what_it_saw(quilt: Path) -> Non
     assert check.check(quilt).written == []
 
 
+def test_a_print_stopped_past_its_time_leaves_the_verdict_recorded(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real print, stopped at once: the verdict is recorded, the record says its print is missing, and the next check prints it."""
+    monkeypatch.setattr(check, "PRINT_TIMEOUT", 0.01)
+    done = check.check(quilt)
+    assert sorted(done.unprinted) == sorted(done.written) == ["sh-0003", "sh-0007"]
+    [record] = replay(quilt).about("label", "sh-0007", of="lean")
+    assert record.get("replay")["exit"] == 0 and record.get("print") == "missing"
+    assert _lean(quilt, "sh-0007") == "unattested"
+    monkeypatch.setattr(check, "PRINT_TIMEOUT", check.TIMEOUT)
+    again = check.check(quilt)
+    assert again.written == [] and again.unprinted == []
+    rows = {d["name"]: d for d in replay(quilt).about("label", "sh-0007", of="lean")[-1].get("declarations")}
+    assert rows["Formal.double_even"]["shown"] == "theorem Formal.double_even (n : Nat) : Formal.double n % 2 = 0"
+
+
 def test_a_changed_lean_file_or_statement_stops_the_record_standing(quilt: Path) -> None:
     check.check(quilt)
     lean = install.project(quilt) / "Formal" / "Double.lean"
@@ -128,7 +146,7 @@ def test_a_changed_lean_file_or_statement_stops_the_record_standing(quilt: Path)
 def test_a_sorry_is_recorded_and_reads_failed(quilt: Path) -> None:
     (install.project(quilt) / "Formal" / "Unfinished.lean").write_text(SORRY, encoding="utf-8")
     check.check(quilt)
-    [record] = replay(quilt).about("label", "sh-0004", of="lean")
+    record = replay(quilt).about("label", "sh-0004", of="lean")[-1]
     assert record.get("declarations")[0]["sorry"] is True
     assert _lean(quilt, "sh-0004") == "failed"
 
@@ -195,7 +213,7 @@ def test_a_module_in_loom_s_own_library_is_replayed_too(quilt: Path) -> None:
     (proj / "Formal" / "Boom.lean").write_text('import Loom\nimport Loom.Helper\n\n@[loom "sh-0005"]\ntheorem Formal.boom : 1 = 2 := Loom.bad.elim\n', encoding="utf-8")  # fmt: skip
     assert "Loom.Helper" in check.modules(proj)
     check.check(quilt)
-    [record] = replay(quilt).about("label", "sh-0005", of="lean")
+    record = replay(quilt).about("label", "sh-0005", of="lean")[-1]
     assert record.get("replay")["exit"] != 0
     assert _lean(quilt, "sh-0005") == "failed"
 

@@ -121,6 +121,7 @@ def test_off_here_with_no_fence_or_while_a_job_runs_nothing_starts(quilt: Path, 
     looker = _looker(quilt)
     looker.look(time.time())
     assert not looker.look(time.time() + LATER) and ran == []
-    assert len(replay(quilt).of_kind("lean")) == 3
+    # the first check's: a verdict and its print for each of three results
+    assert len(replay(quilt).of_kind("lean")) == 6
     if why == "running":
         _settled(quilt)

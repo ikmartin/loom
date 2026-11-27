@@ -413,7 +413,11 @@ def _subjects(value: Any, what: str, kinds: tuple[str, ...]) -> list[Subject]:
 
 
 def _lean(raw: dict[str, Any], by: Who) -> Subject:
-    _keys(raw, {"on", "project", "files", "declarations", "assumed", "uses", "replay", "ok"}, frozenset({"errors"}))
+    _keys(
+        raw,
+        {"on", "project", "files", "declarations", "assumed", "uses", "replay", "ok"},
+        frozenset({"errors", "print"}),
+    )
     on = Subject.from_dict(raw["on"], ("node", "label"))
     project = raw["project"]
     if not isinstance(project, dict) or set(project) != {"root", "toolchain", "mathlib", "manifest"}:
@@ -445,6 +449,11 @@ def _lean(raw: dict[str, Any], by: Who) -> Subject:
         raise ValueError("ok is true or false")
     if "errors" in raw:
         _string_list(raw["errors"], "errors")
+    if "print" in raw:
+        if raw["print"] != "missing":
+            raise ValueError("print is 'missing' where present")
+        if any(d.get("shown") is not None for d in declarations):
+            raise ValueError("a record whose print is missing shows no declaration")
     return on
 
 

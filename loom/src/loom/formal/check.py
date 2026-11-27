@@ -1,4 +1,4 @@
-"""Loom's certifying check of the quilt's Lean: a clean rebuild of the project, then loom's own probe, which replays the build in Lean's kernel and reads what it states, every step inside the fence under Lean's own profile (`fence.lean_argv`), recorded as one `lean` record for each result a declaration names (`docs/specs/evidence.md` §3.4).
+"""Loom's certifying check of the quilt's Lean: a clean rebuild of the project, then loom's own probe, which replays the build in Lean's kernel and reads what it states, then the probe again to print it in the notation of what it imports, every step inside the fence under Lean's own profile (`fence.lean_argv`), recorded for each result a declaration names as a `lean` record of the verdict and then one with the print, which never decides the verdict (`docs/specs/evidence.md` §3.4).
 
 What a record says is read from what loom ran and nothing an agent wrote about it: which declaration states which result is the marker `@[loom "NAME"]` as the built project holds it, the axioms are those Lean's own constants reach, and the verdict is the build's and the replay's exit. A record names every Lean file it rests on by its hash, so it stops standing when any of them changes (`status.files_unchanged`), and names the result's text by its hash, so it is no longer current once the statement changes; a definition's text that changed moves the person's attestation, which names it.
 """
@@ -28,6 +28,8 @@ PROBE = Path(__file__).parent.parent / "assets" / "lean" / "Probe.lean"
 CONFIG = ("lakefile.toml", "lean-toolchain", "lake-manifest.json")
 #: The longest a step may run, in seconds: a rebuild of a project whose Mathlib is whole, on a loaded machine.
 TIMEOUT = 3600
+#: The longest the print may run, in seconds: loading the extensions of `import Mathlib` and printing, on a loaded machine; past it the records keep the verdict without the print.
+PRINT_TIMEOUT = 900
 #: The most of the replay's output a record keeps.
 OUTPUT = 20_000
 #: The longest declaration, as Lean prints it, a record keeps; a longer one is kept as null, unprinted.
@@ -39,6 +41,7 @@ STEPS = {
     "mathlib": "checking that Mathlib's build is whole",
     "build": "building the Lean project from clean",
     "probe": "replaying the build in Lean's kernel and reading what it states",
+    "print": "printing what it states in the notation of what it imports",
 }
 _ERROR = re.compile(r"^error: (?:\./)?(?P<path>[^:\s]+\.lean):(?P<rest>.*)$")
 
@@ -49,12 +52,13 @@ class Refused(Exception):
 
 @dataclass
 class Checked:
-    """What a check did: the records written, the results already observed as they stand, the markers that name nothing loom knows, Lean's errors, and each step's seconds."""
+    """What a check did: the records written, the results already observed as they stand, the markers that name nothing loom knows, Lean's errors, the results whose record holds no print because the print failed or ran past its time, and each step's seconds."""
 
     written: list[str] = field(default_factory=list)
     unchanged: list[str] = field(default_factory=list)
     unknown: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    unprinted: list[str] = field(default_factory=list)
     steps: list[tuple[str, float]] = field(default_factory=list)
 
 
@@ -113,7 +117,7 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
     toolchain = install.toolchain_folder(name)
     if not (toolchain / "bin" / "lake").is_file():
         raise Refused(f"the toolchain {name} is not installed here; turning formalization on again installs it")
-    missing = [p for p in _packages(proj) if not (proj / paths.LAKE_PACKAGES / p).is_dir()]
+    missing = [p for p in install.packages(proj) if not (proj / paths.LAKE_PACKAGES / p).is_dir()]
     if missing:
         raise Refused(
             f"{', '.join(missing)} is not installed in the Lean project here; turning formalization on again fetches it"
@@ -154,7 +158,7 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
             raise
         finally:
             lock.__exit__(None, None, None)
-    switch.remember_check(root, {"written": len(done.written), "unchanged": len(done.unchanged), "unknown": len(done.unknown), "errors": len(done.errors)})  # fmt: skip
+    switch.remember_check(root, {"written": len(done.written), "unchanged": len(done.unchanged), "unknown": len(done.unknown), "errors": len(done.errors), "unprinted": len(done.unprinted)})  # fmt: skip
     return done
 
 
@@ -168,7 +172,7 @@ def _check(
     probe: Path,
     say: Callable[[str], None],
 ) -> Checked:
-    """`check` once its preconditions hold: the fenced steps, then the records."""
+    """`check` once its preconditions hold: the fenced steps to the replay, the records of its verdict, then the print and the records that carry it."""
     done = Checked()
     if not install.marker_is_loom_s(root):
         raise Refused(
@@ -199,16 +203,16 @@ def _check(
         "LANG": "en_US.UTF-8",
     }
 
-    def run(step: str, argv: list[str]) -> subprocess.CompletedProcess[str]:
+    def run(step: str, argv: list[str], timeout: float = TIMEOUT) -> subprocess.CompletedProcess[str]:
         say(step)
         t = time.monotonic()
         try:
-            got = _fenced(argv, places, proj, env)
+            got = _fenced(argv, places, proj, env, timeout)
         finally:
             done.steps.append((STEPS[step], time.monotonic() - t))
         return got
 
-    if "mathlib" in _packages(proj):
+    if "mathlib" in install.packages(proj):
         whole = run("mathlib", [lake, "build", "--no-build", "Mathlib"])
         if whole.returncode != 0:
             raise Refused(
@@ -221,11 +225,11 @@ def _check(
     if not ready:
         raise Refused("no module of the Lean project built:\n" + "\n".join(done.errors[:12] or [built.stdout[-2000:]]))
     lib = Path("lib") / "lean"
-    deps = [f"path={(proj / paths.LAKE_PACKAGES / p / paths.LAKE_BUILD / lib).resolve()}" for p in _packages(proj)]
-    probed = run(
-        "probe",
-        [str(toolchain / "bin" / "lean"), "--run", str(probe), f"own={(build / lib).resolve()}", *deps, *ready],
-    )
+    deps = [
+        f"path={(proj / paths.LAKE_PACKAGES / p / paths.LAKE_BUILD / lib).resolve()}" for p in install.packages(proj)
+    ]
+    argv = [str(toolchain / "bin" / "lean"), "--run", str(probe), f"own={(build / lib).resolve()}", *deps, *ready]
+    probed = run("probe", argv)
     if probed.returncode != 0:
         # the probe never answered, as when the machine was short of memory: no observation, so nothing is recorded
         raise Refused(
@@ -243,27 +247,46 @@ def _check(
     after = {p: _digest(proj / p) for p in read}
     if after != before or set(modules(proj)) != set(mods):
         raise Refused("the Lean changed while loom checked it; check again once it is still")
-    _record(root, name, mods, before, found, errors, replayed, done)
+    unprinted = _record(root, name, mods, before, found, errors, replayed, done)
+    if unprinted:
+        try:
+            printed: subprocess.CompletedProcess[str] | None = run("print", [*argv, "mode=print"], PRINT_TIMEOUT)
+        except Refused:
+            printed = None  # past its time: the verdict stands as recorded, its print missing
+        shown = _shown(printed, found)
+        if shown is None:
+            done.unprinted = [s.name for s, _ in unprinted]
+        else:
+            _record_prints(root, unprinted, shown)
     return done
 
 
-def _packages(proj: Path) -> list[str]:
-    """The packages the project's manifest pins, by name."""
+def _shown(printed: subprocess.CompletedProcess[str] | None, found: dict[str, Any]) -> dict[str, str | None] | None:
+    """What each declaration says as Lean prints it, from the print's output, by name; None where the print failed or said nothing loom can read.
+
+    A print is taken only for a declaration whose statement the print read as the replay did, so a build changed between the two steps prints nothing of what it changed.
+    """
+    if printed is None or printed.returncode != 0:
+        return None
     try:
-        manifest = json.loads((proj / "lake-manifest.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    return (
-        [str(p.get("name")) for p in manifest.get("packages", []) if isinstance(p, dict)]
-        if isinstance(manifest, dict)
-        else []
-    )
+        rows = json.loads(printed.stdout.strip().splitlines()[-1])["shown"]
+        replayed = {str(d["name"]): d["statement"] for d in found.get("declarations", [])}
+        return {
+            str(r["name"]): r["shown"]
+            if replayed.get(str(r["name"])) == r["statement"]
+            and isinstance(r["shown"], str)
+            and 0 < len(r["shown"]) <= SHOWN
+            else None
+            for r in rows
+        }
+    except (ValueError, IndexError, KeyError, TypeError):
+        return None
 
 
 def _fenced(
-    argv: list[str], places: dict[str, str], cwd: Path, env: dict[str, str]
+    argv: list[str], places: dict[str, str], cwd: Path, env: dict[str, str], timeout: float = TIMEOUT
 ) -> subprocess.CompletedProcess[str]:
-    """Run one step inside the fence, in its own process group, stopped whole at `TIMEOUT`."""
+    """Run one step inside the fence, in its own process group, stopped whole at `timeout` seconds."""
     from loom.tex.runner import stop_run
 
     proc = subprocess.Popen(
@@ -277,11 +300,11 @@ def _fenced(
         start_new_session=True,
     )
     try:
-        out, err = proc.communicate(timeout=TIMEOUT)
+        out, err = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         stop_run(proc)
         proc.communicate()
-        raise Refused(f"a step of the check ran past {TIMEOUT // 60} minutes and was stopped") from None
+        raise Refused(f"a step of the check ran past {timeout / 60:g} minutes and was stopped") from None
     return subprocess.CompletedProcess(argv, proc.returncode, out, err)
 
 
@@ -305,7 +328,6 @@ class _Decl:
     uses: list[str]
     internal: bool
     means: list[str]
-    shown: str | None = None
 
 
 def _statement_hashes(decls: dict[str, _Decl]) -> dict[str, str]:
@@ -375,8 +397,8 @@ def _record(
     errors: dict[str, list[str]],
     replayed: dict[str, Any],
     done: Checked,
-) -> None:
-    """Write one `lean` record for each text of each result a declaration's marker names, unless the latest record on it says the same."""
+) -> list[tuple[Subject, dict[str, Any]]]:
+    """Write one `lean` record of the replay's verdict, its print missing, for each text of each result a declaration's marker names, unless the latest record on it says the same but for the print; each text whose latest record now lacks the print, with the fields its printed record takes."""
     from loom.evidence import log
 
     decls: dict[str, _Decl] = {}
@@ -394,7 +416,6 @@ def _record(
             list(d["uses"]),
             bool(d["internal"]),
             list(d.get("means", [])),
-            d["shown"] if isinstance(d.get("shown"), str) and 0 < len(d["shown"]) <= SHOWN else None,
         )
     imports: dict[str, list[str]] = {m: list(v) for m, v in found.get("modules", {}).items()}
     statements = _statement_hashes(decls)
@@ -418,6 +439,7 @@ def _record(
         "manifest": hashes["lake-manifest.json"],
     }
     evidence = log.replay(root)
+    unprinted: list[tuple[Subject, dict[str, Any]]] = []
     for decl, subjects in named.items():
         for subject in subjects:
             if by_result[subject.key][0] != decl:
@@ -425,12 +447,27 @@ def _record(
             cone = _cone(by_result[subject.key], decls)
             fields = _fields(subject, cone, decls, markers, named, mods, imports, hashes, errors, project, statements)
             fields["replay"] = replayed
+            fields["print"] = "missing"
             latest = evidence.about(*subject.key, of="lean")
             if latest and latest[-1].on == subject and _same(latest[-1].fields, fields):
                 done.unchanged.append(subject.name)
-                continue
-            log.write(root, "lean", Who("loom"), on=subject, **fields)
-            done.written.append(subject.name)
+                if latest[-1].get("print") is None:
+                    continue
+            else:
+                log.write(root, "lean", Who("loom"), on=subject, **fields)
+                done.written.append(subject.name)
+            unprinted.append((subject, fields))
+    return unprinted
+
+
+def _record_prints(root: Path, unprinted: list[tuple[Subject, dict[str, Any]]], shown: dict[str, str | None]) -> None:
+    """Write each record of `_record` again with each declaration as Lean prints it (`shown`) and its print no longer missing."""
+    from loom.evidence import log
+
+    for subject, fields in unprinted:
+        rows = [{**d, "shown": shown.get(d["name"])} for d in fields["declarations"]]
+        kept = {k: v for k, v in fields.items() if k not in ("print", "declarations")}
+        log.write(root, "lean", Who("loom"), on=subject, declarations=rows, **kept)
 
 
 def _cone(start: list[str], decls: dict[str, _Decl]) -> list[str]:
@@ -480,7 +517,7 @@ def _fields(
                 "names": names,
                 "statement": statements[name],
                 "means": _named(name, decls),
-                "shown": d.shown,
+                "shown": None,
                 "axioms": d.axioms,
                 "sorry": "sorryAx" in d.axioms,
             }
@@ -516,8 +553,12 @@ def _fields(
 
 
 def _same(old: Any, new: dict[str, Any]) -> bool:
-    """Whether a record already says what `new` would: every field the same, the replay's output aside."""
-    keys = set(new) | {"on"}
-    a = {k: old.get(k) for k in keys if k not in ("on", "replay")}
-    b = {k: new.get(k) for k in keys if k not in ("on", "replay")}
-    return a == b and (old.get("replay") or {}).get("exit") == new["replay"]["exit"]
+    """Whether a record already says what `new` would: every field the same, the replay's output and the print aside."""
+    keys = (set(new) | set(old)) - {"on", "at", "id", "kind", "by", "replay", "print"}
+
+    def unprinted(fields: Any) -> dict[str, Any]:
+        out = {k: fields.get(k) for k in keys}
+        out["declarations"] = [{k: v for k, v in d.items() if k != "shown"} for d in fields.get("declarations") or []]
+        return out
+
+    return unprinted(old) == unprinted(new) and (old.get("replay") or {}).get("exit") == new["replay"]["exit"]

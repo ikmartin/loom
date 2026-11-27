@@ -170,10 +170,11 @@ def test_install_refuses_an_untrusted_project_before_running_anything(
     assert ran == []
 
 
+@pytest.mark.parametrize("mathlib", [False, True])
 def test_install_makes_the_project_and_fetches_through_the_toolchain_s_own_lake(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mathlib: bool
 ) -> None:
-    """With no project in the quilt, install makes one, installs the toolchain it names through elan, and runs that toolchain's own `lake update`."""
+    """With no project in the quilt, install makes one, installs the toolchain it names through elan, and runs that toolchain's own `lake update`; where that pins Mathlib, then `lake build --no-build Mathlib`, so Lake writes its hashes of Mathlib's build before the fenced check, which may not."""
     ran: list[list[str]] = []
     monkeypatch.setenv("ELAN_HOME", str(tmp_path / "elan"))
     monkeypatch.setattr(install, "find_elan", lambda: "/usr/bin/elan")
@@ -185,13 +186,14 @@ def test_install_makes_the_project_and_fetches_through_the_toolchain_s_own_lake(
             lake.parent.mkdir(parents=True)
             lake.write_text("", encoding="utf-8")
         if argv[1:] == ["update"]:
-            (cwd / "lake-manifest.json").write_text(json.dumps({"packages": []}), encoding="utf-8")
+            (cwd / "lake-manifest.json").write_text(json.dumps({"packages": [OWN, INHERITED] if mathlib else []}), encoding="utf-8")  # fmt: skip
 
     monkeypatch.setattr(install, "_run", fake)
     q = showcase(tmp_path)
     done = install.install(q)
     lake = str(install.toolchain_folder(install.TOOLCHAIN) / "bin" / "lake")
-    assert ran == [["/usr/bin/elan", "toolchain", "install", install.TOOLCHAIN], [lake, "update"]]
+    settle = [[lake, "build", "--no-build", "Mathlib"]] if mathlib else []
+    assert ran == [["/usr/bin/elan", "toolchain", "install", install.TOOLCHAIN], [lake, "update"], *settle]
     assert [s for s, _ in done.steps] == ["toolchain", "mathlib"]
     assert (q / install.LEAN / "lakefile.toml").is_file()
 
