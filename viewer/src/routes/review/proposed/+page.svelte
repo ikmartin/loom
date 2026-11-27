@@ -37,18 +37,14 @@
 	const opened = $derived(!!adoption);
 	const showing = $derived(adoption?.copy ?? '');
 
-	// the last answer from a copy: said by its bar while it is open, and by the list once it is not, with the undo of an Apply beside it; what that undo says is said here even once the copy it brought back is open again
-	let answer = $state<(Answer & { from: string }) | null>(null);
+	// the last answer: a copy's (`from` its path) is said by its bar while it is open and here once it is not, with the undo of an Apply beside it; an undo's (`from` null), pressed here or in the bar, is said here whatever is open, since the copy it brings back is a new review with an empty bar
+	let answer = $state<(Answer & { from: string | null }) | null>(null);
+	const undone = (x: Answer) => (answer = { ...x, from: null });
 
 	const name = (e: SuggestedEdit) => keyName(m, e.target.key);
 	const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 	const file = (p: string) => p.split('/').pop()?.replace(/\.tex$/, '') ?? p;
 </script>
-
-<!-- An answer the open copy's bar does not say: a copy's once it has left, and an undo's, whose copy may be back -->
-{#snippet answered(a: Answer)}
-	<div class="answer"><Said text={a.text} refused={a.refused} testid="proposed-answer" />{#if a.undo}<AppliedUndo undo={a.undo} onanswer={(x) => (answer = { ...x, from: '' })} />{/if}</div>
-{/snippet}
 
 {#snippet chips(names: { name: string; bad: boolean }[])}
 	<div class="chips" data-testid="proposed-chips">
@@ -86,12 +82,14 @@
 	<ReviewHeading title={rv.served ? reviewWords.kinds.edits.name : 'Proposed edits'} />
 	<!-- where Review's reads are served, a copy is opened from Proposed edits, and goes back there -->
 	{#if opened}<p class="back">{#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="proposed-back">{reviewWords.yours.back}</a>{:else}<a href={here} data-testid="proposed-back">‹ Everything proposed</a>{/if}</p>{/if}
+	<!-- An answer the open copy's bar does not say: a copy's once it has left, and an undo's; outside the copy's branch, so a pending undo pressed here outlives the copy coming back -->
+	{#if answer && answer.from !== showing}
+		<div class="answer"><Said text={answer.text} refused={answer.refused} testid="proposed-answer" />{#if answer.undo}<AppliedUndo undo={answer.undo} onanswer={undone} />{/if}</div>
+	{/if}
 	{#if adoption}
 		{@const copy = adoption.copy}
-		{#if answer?.from === ''}{@render answered(answer)}{/if}
-		{#key copy}<ContributionReview contribution={adoption} onanswer={(a) => (answer = a && { ...a, from: copy })} />{/key}
+		{#key copy}<ContributionReview contribution={adoption} onanswer={(a) => (answer = a && { ...a, from: copy })} onundone={undone} />{/key}
 	{:else}
-		{#if answer && answer.from !== showing}{@render answered(answer)}{/if}
 		{#if !cards.length}
 			<Empty text="Nobody has proposed anything." testid="proposed-none" />
 		{:else}

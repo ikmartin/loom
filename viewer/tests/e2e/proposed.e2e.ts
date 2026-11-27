@@ -205,11 +205,54 @@ test('an Apply is undone where it was applied: the version it kept is restored i
 	await expect(page.getByTestId('contribution')).toBeVisible();
 });
 
-test("an Apply's undo that loom refuses says why in the viewer's words, never loom's", async ({ page }) => {
+test("an Undo pressed in the copy's bar is said above the copy, even when the copy leaves and comes back while loom answers it", async ({ page }) => {
+	let applied = false;
+	let restored: unknown = null;
+	let press!: () => void;
+	const pressed = new Promise<void>((r) => (press = r));
+	let leave!: () => void;
+	const left = new Promise<void>((r) => (leave = r));
+	// taken whole, the copy leaves the manifest; undone, its change waits in it again
+	await applying(
+		page,
+		(body) => {
+			restored = body;
+			return { json: { ok: true, result: "loom's own sentence, never drawn" } };
+		},
+		() => applied && !restored
+	);
+	await page.route('**/_api/adopt-finish', async (route) => {
+		applied = true;
+		await route.fallback();
+	});
+	// Apply's answer arrives before the publication without the copy, which lands only once Undo is pressed in the bar
+	await page.route('**/build/manifest.json', async (route) => {
+		if (applied) await pressed;
+		await route.fallback();
+	});
+	await page.route('**/_api/history-restore', async (route) => {
+		press();
+		await left;
+		await route.fallback();
+	});
+	await page.goto('/review/proposed?copy=' + encodeURIComponent(COPY));
+	await page.getByTestId('apply').click();
+	await page.getByTestId('contribution-bar').getByTestId('applied-undo').click();
+	await expect(page.getByTestId('contribution')).toHaveCount(0);
+	leave();
+	await expect.poll(() => restored).toEqual({ document: 'drafting/main.tex', version: 'main-before-adopt-aidoc', quilt: 'q-applied' });
+	await expect(page.getByTestId('contribution')).toBeVisible();
+	await expect(page.getByTestId('proposed-answer')).toHaveText("Put main.tex back as it was before you applied. Its text with the copy's changes is kept as a version in History, and the changes you took wait in the copy again.");
+	await expect(page.getByTestId('applied-undo')).toHaveCount(0);
+});
+
+test("an Apply's undo that loom refuses says why in the viewer's words, never loom's, above the copy rather than in its bar", async ({ page }) => {
 	await applying(page, () => ({ status: 409, json: { ok: false, error: { code: 'other-quilt', message: "loom's own words" } } }));
 	await page.goto('/review/proposed?copy=' + encodeURIComponent(COPY));
 	await page.getByTestId('apply').click();
-	await page.getByTestId('applied-undo').click();
-	await expect(page.getByTestId('contribution-bar-said')).toHaveText('It could not be undone. Loom serves another quilt here now, so nothing was put back.');
+	// the copy stays open, so this Undo is the bar's
+	await page.getByTestId('contribution-bar').getByTestId('applied-undo').click();
+	await expect(page.getByTestId('proposed-answer')).toHaveText('It could not be undone. Loom serves another quilt here now, so nothing was put back.');
+	await expect(page.getByTestId('contribution-bar-said')).toHaveCount(0);
 	await expect(page.getByTestId('applied-undo')).toHaveCount(0);
 });

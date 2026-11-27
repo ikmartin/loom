@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The Undo beside Apply's answer on an agent's copy (`applied.ts`): puts the document back as it was before Apply, and hands what to say to whoever said Apply's answer, which replaces it and this with it.
+	// The Undo beside Apply's answer on an agent's copy (`applied.ts`): puts the document back as it was before Apply, and hands what to say to `onanswer`, whose answer replaces Apply's and this with it.
 	import { review as words } from '$lib/words/review';
 	import { undoApplied, type Answer, type Applied } from './applied';
 

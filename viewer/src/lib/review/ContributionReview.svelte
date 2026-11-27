@@ -22,12 +22,18 @@
 	/** A refusal of loom's in the viewer's words: one for the step where loom refused the copy, else the frame's sentence for its code. */
 	const refusal = (e: ApiError | undefined, step: keyof typeof words.refused): string => (!e || e.code === 'adoption-refused' ? words.refused[step] : said(e));
 
-	let { contribution: c, onanswer }: { contribution: AdoptionReview; onanswer?: (a: Answer | null) => void } = $props();
+	let { contribution: c, onanswer, onundone }: { contribution: AdoptionReview; onanswer?: (a: Answer | null) => void; onundone?: (a: Answer) => void } = $props();
 	// the last answer, said in the bar and handed to the page, which keeps saying it once this contribution is gone
 	let answer = $state<Answer | null>(null);
 	function say(a: Answer | null): void {
 		answer = a;
 		onanswer?.(a);
+	}
+	/** What the bar's Undo says: the page's to say where it listens (`onundone`), since the copy may leave while loom answers and come back as a new review; else the bar's. */
+	function undone(a: Answer): void {
+		if (!onundone) return say(a);
+		say(null);
+		onundone(a);
 	}
 
 	const m = $derived(store.manifest!);
@@ -128,7 +134,7 @@
 				<button class="btn" disabled={!!busy || n.undecided + n.left === 0} onclick={() => save(takeAll(items))} data-testid="take-all">{words.takeAll}</button>
 				<button class="btn primary" disabled={!!busy || !n.taken} onclick={apply} data-testid="apply">{busy === 'apply' ? words.applying : words.apply(n.taken)}</button>
 			{/if}
-			{#if answer?.undo}<AppliedUndo undo={answer.undo} onanswer={say} />{/if}
+			{#if answer?.undo}<AppliedUndo undo={answer.undo} onanswer={undone} />{/if}
 		{/snippet}
 		{#snippet below()}
 			<div class="step">
