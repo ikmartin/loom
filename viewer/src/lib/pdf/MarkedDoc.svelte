@@ -329,7 +329,7 @@
 			{onmoved}
 			{overlay}
 			ondraw={drawn}
-			onpick={(e) => (e.id && paper ? popup?.open(paper, e.id, false) : popup?.close())}
+			onpick={(e) => desk.pick(e.id, (id) => (id && paper && !drafting ? popup?.open(paper, id, false) : popup?.close()))}
 			onmove={(e) => {
 				desk.move(e);
 				// the popup stands against the mark where it now is, clear of its handles

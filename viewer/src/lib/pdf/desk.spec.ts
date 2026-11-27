@@ -79,3 +79,43 @@ describe('the notes on words drawn on no page', () => {
 		expect(on({ stands: () => undefined }).nowhere).toEqual({ unread: [], unfound: [] });
 	});
 });
+
+describe('a mark picked', () => {
+	const row = (id: string) => ({ id, target: { work: 'Bellamy19', page: 2, key: '' }, rects: [[10, 20, 60, 30]], status: 'open', author: { id: 'me' }, created: '2026-11-12T10:00:00Z', body_html: '' });
+
+	it('drawn from the write before the manifest holds its annotation opens its popup once the manifest does, not at once, where the popup would close itself', async () => {
+		const { store } = await import('$lib/manifest/client.svelte');
+		const annotations = (store.manifest as { annotations: Record<string, unknown> }).annotations = {} as Record<string, unknown>;
+		hand.set({ type: 'aside', over: {}, plain: {} });
+		const d = desk();
+		d.markWords({ page: 2, text: 'incidence matrix', rects: [[10, 20, 60, 30]] });
+		await settle();
+		const id = 'a-2026-11-12-new000';
+		expect(d.marks.map((m) => m.id)).toEqual([id]);
+		const told: string[] = [];
+		d.pick(id, (x) => told.push(x));
+		expect(told).toEqual(['']);
+		d.settle();
+		expect(told).toEqual(['']);
+		annotations[id] = row(id);
+		d.settle();
+		expect(told).toEqual(['', id]);
+		// once only
+		d.settle();
+		expect(told).toEqual(['', id]);
+	});
+
+	it('held by the manifest opens at once, and a pick elsewhere lets go of one waiting', async () => {
+		const { store } = await import('$lib/manifest/client.svelte');
+		const annotations = (store.manifest as { annotations: Record<string, unknown> }).annotations = { 'a-held': row('a-held') } as Record<string, unknown>;
+		const d = desk();
+		const told: string[] = [];
+		d.pick('a-held', (x) => told.push(x));
+		expect(told).toEqual(['a-held']);
+		d.pick('a-coming', (x) => told.push(x));
+		d.pick('', (x) => told.push(x));
+		annotations['a-coming'] = row('a-coming');
+		d.settle();
+		expect(told).toEqual(['a-held', '', '']);
+	});
+});

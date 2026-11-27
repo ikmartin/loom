@@ -65,6 +65,8 @@ export class MarkDesk {
 	#changed = $state<Record<string, Partial<PageMark>>>({});
 	#fresh = 0;
 	#ink: { id: string; page: number; timer: ReturnType<typeof setTimeout> } | null = null;
+	/** The mark picked whose annotation the manifest does not hold yet, and what opens its popup. */
+	#picked: { id: string; open: (id: string) => void } | null = null;
 
 	constructor(surface: () => Surface) {
 		this.#surface = surface;
@@ -113,7 +115,7 @@ export class MarkDesk {
 	/** The annotations in the file that one of loom's stands for, by reference; the pages leave them undrawn. */
 	hides = $derived<string[]>(this.rows.flatMap((a) => (a.hides ? [a.hides] : [])));
 
-	/** Let go of what the manifest and the places now say; called whenever either changes. */
+	/** Let go of what the manifest and the places now say, and open a mark picked before the manifest held its annotation (`pick`); called whenever either changes. */
 	settle(): void {
 		const live = new Map(this.rows.map((a) => [a.id, a]));
 		// one on words is let go only once where it stands is known, so it is not undrawn between the manifest and the places
@@ -127,6 +129,22 @@ export class MarkDesk {
 			if (row && !same) changed[id] = over;
 		}
 		if (Object.keys(changed).length !== Object.keys(this.#changed).length) this.#changed = changed;
+		const picked = this.#picked;
+		if (picked && store.manifest?.annotations[picked.id]) {
+			this.#picked = null;
+			picked.open(picked.id);
+		}
+	}
+
+	/**
+	 * Open the popup of the mark picked, through `open`, once the manifest holds its annotation; '' closes it.
+	 *
+	 * A mark is drawn with its id from the write's answer, before the publication carrying it, and a popup on an annotation the manifest does not hold closes itself at once; until then `open` is told '' and the pick waits for `settle`. Another pick lets go of one waiting.
+	 */
+	pick(id: string, open: (id: string) => void): void {
+		const now = !id || !!store.manifest?.annotations[id];
+		this.#picked = now ? null : { id, open };
+		open(now ? id : '');
 	}
 
 	/**
