@@ -11,5 +11,5 @@
 
 <main class="page">
 	<h1>{name}</h1>
-	<ul>{#each nodes as n (n.id)}<li><a href={keyUrl(m, n.id)}>{n.id}</a> {n.title ?? ''} <span class="muted">{n.state}</span></li>{:else}<li class="muted">No nodes of this taxon.</li>{/each}</ul>
+	<ul>{#each nodes as n (n.id)}<li><a href={keyUrl(m, n.id)}>{n.id}</a> {n.title ?? ''} <span class="muted">{n.state}</span></li>{:else}<li class="muted">No results of this kind.</li>{/each}</ul>
 </main>

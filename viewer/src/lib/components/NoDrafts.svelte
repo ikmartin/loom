@@ -14,7 +14,7 @@
 	<p class="head">{never ? 'This quilt has no documents.' : 'Nothing is being worked on.'}</p>
 	<p>
 		{#if never}
-			Its nodes stand on their own, so there are no {what}.
+			Its results stand on their own, so there are no {what}.
 		{:else}
 			No document is being worked on, so there are no {what}.
 		{/if}

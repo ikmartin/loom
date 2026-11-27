@@ -306,7 +306,7 @@
 	</header>
 
 	{#if !Object.keys(m.nodes).length}
-		<p class="faint">No nodes to draw.</p>
+		<p class="faint">No results to draw.</p>
 	{:else if error}
 		<p class="problem">{error}</p>
 	{:else if !drawing && laidMode !== 'reading'}
@@ -514,9 +514,9 @@
 			<p><a href={master ? readUrl(master, selected) : keyUrl(m, selected)}>Open in document</a> · <a href={route('/context/' + encodeURIComponent(selected))}>Context</a></p>
 			<p class="faint">Source: {node.file}</p>
 			{#if node.proofs.length}<p class="faint">Proofs: {#each node.proofs as proof, i}{#if i}, {/if}<a href={keyUrl(m, proof)} title={proof}>{displayNode(m, proof, master).name}</a>{/each}</p>{/if}
-			{#if !scopeGraph.nodes.some((n) => n.id === selected)}<p class="faint">Selected node is outside this scope.</p>{/if}
+			{#if !scopeGraph.nodes.some((n) => n.id === selected)}<p class="faint">Selected result is outside this scope.</p>{/if}
 			<p>Relationships in {master || 'Whole quilt'}</p>
-			{#if [...related].some(filteredOut)}<p class="faint">Some related nodes are hidden or dimmed by the current filters.</p>{/if}
+			{#if [...related].some(filteredOut)}<p class="faint">Some related results are hidden or dimmed by the current filters.</p>{/if}
 			<p>Direct {highlight === 'closure' ? 'dependencies' : 'dependents'}</p>
 			<ul class="relationship-list">{#each [...relation.direct].sort() as id}<li><button class="as-link" onclick={() => selected = id}>{name(id)}</button>{#if filteredOut(id)} <span class="faint">(filtered)</span>{/if}</li>{:else}<li class="faint">None recorded</li>{/each}</ul>
 			{#if relation.indirect.size}<details><summary>Indirect {highlight === 'closure' ? 'dependencies' : 'dependents'}</summary><ul class="relationship-list">{#each [...relation.indirect].sort() as id}<li><button class="as-link" onclick={() => selected = id}>{name(id)}</button>{#if filteredOut(id)} <span class="faint">(filtered)</span>{/if}</li>{/each}</ul></details>{/if}

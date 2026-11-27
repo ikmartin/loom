@@ -8,6 +8,6 @@
 
 <main class="page">
 	<h1>Not in any document</h1>
-	<p class="muted">Nodes that no document includes.</p>
-	<ul>{#each loose as n (n.id)}<li><a href={nodeUrl(n.id)}>{n.id}</a> {n.taxon} {n.title ?? ''} <span class="muted">{n.file}</span></li>{:else}<li class="muted">Every node is in a document.</li>{/each}</ul>
+	<p class="muted">Results that no document includes.</p>
+	<ul>{#each loose as n (n.id)}<li><a href={nodeUrl(n.id)}>{n.id}</a> {n.taxon} {n.title ?? ''} <span class="muted">{n.file}</span></li>{:else}<li class="muted">Every result is in a document.</li>{/each}</ul>
 </main>

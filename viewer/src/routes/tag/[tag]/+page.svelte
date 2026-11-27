@@ -10,5 +10,5 @@
 
 <main class="page">
 	<h1>#{tag}</h1>
-	<ul>{#each keys as k (k)}<li><a href={keyUrl(m, k)}>{k}</a> {m.nodes[k]?.taxon ?? ''} {m.nodes[k]?.title ?? ''}</li>{:else}<li class="muted">No nodes carry this tag.</li>{/each}</ul>
+	<ul>{#each keys as k (k)}<li><a href={keyUrl(m, k)}>{k}</a> {m.nodes[k]?.taxon ?? ''} {m.nodes[k]?.title ?? ''}</li>{:else}<li class="muted">No results carry this tag.</li>{/each}</ul>
 </main>

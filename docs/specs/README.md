@@ -13,6 +13,7 @@ This directory specifies what loom publishes into `.loom/cache/site/`, which the
 - `reserved.md` : the names work in progress will add to all of the above, none of them built yet.
 - `nodes.md` : the library's nodes, one file each: ids, the header, the body, references, macros and proofs, the edges a file states, the checks, the index and the tag log. The file, its checks, the index, the tag log and the references and macros nodes made from the works a quilt holds are built; nothing makes a statement or a proof from a work yet.
 - `library-views.md` : what the viewer's four views ask of the publisher for the rebuilt library, read by read and write by write. Not built yet; when it is, the library leaves the manifest, and the publisher's obligation 3 and the viewer's 1 and 2 below take in its reads and the stream's `library` event.
+- `names.md` : the names a person reads in the viewer, one for each thing, frozen for v0.1.
 - `evidence.md` : the evidence log and the asks log under `.loom/records/`: what someone did to a text, by its hash, and what a person and an agent asked of each other.
 - `tools/validate-dialect.py` : the fragment validator both codebases vendor; `tools/refresh-fixture.sh` : regenerates `fixture/` and both vendored snapshots.
 
