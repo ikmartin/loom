@@ -87,6 +87,7 @@ The viewer draws `matches` as round six's filled circle ("matches the paper"), `
 ]}
 ```
 
+- `title` is the entry's title, decoded; an entry naming neither title nor author, as a `\bibitem` of a paper's `.bbl` makes, is titled by its `note`, the reference as the paper printed it.
 - `holds.pdf` is the stored PDF's hash, which addresses its thumbnail and its document, or null; `holds.tex` says loom holds the work's TeX source.
 - `digested` is null when nothing of the work is digested. `statements` counts the work's statements that are not stubs, `compared` those whose `paper` is `matches`, `stubs` its stubs, and `of` the results its TeX source holds, from the survey (§3.2), null until a survey exists.
 - `used_in` is the documents that cite the work, by an entry key their bibliography resolves to its reference.

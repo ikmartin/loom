@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from loom.library import log
 from loom.library.body import pointers
-from loom.library.entries import identifiers, link, read_entry, short, surnames, title, year
+from loom.library.entries import decode, identifiers, link, read_entry, short, surnames, title, year
 from loom.library.index import NodeIndex
 from loom.paths import LIBRARY_LOG
 
@@ -72,16 +72,20 @@ def cite_labels(root: Path, doc: str | None) -> dict[str, str]:
 
 @lru_cache(maxsize=4096)
 def _words(body: str) -> tuple[str, str, str, list[str], str, str | None, str | None, list[str]] | None:
-    """What a row says of a reference's entry, made once for each text: its key, short name, title, surnames, year, link, version and identifiers; None for a body holding no entry."""
+    """What a row says of a reference's entry, made once for each text: its key, short name, title, surnames, year, link, version and identifiers; None for a body holding no entry.
+
+    An entry naming neither title nor author, as a `\\bibitem` makes, is titled by its `note`, the reference as the paper printed it, so its row says something and a search finds it.
+    """
     entry = read_entry(body)
     if entry is None:
         return None
     fields = entry.fields
+    names = surnames(fields)
     return (
         entry.key,
         short(fields, entry.key),
-        title(fields),
-        surnames(fields),
+        title(fields) or ("" if names else decode(fields.get("note", ""))),
+        names,
         year(fields),
         link(fields),
         fields.get("version") or None,
