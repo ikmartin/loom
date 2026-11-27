@@ -1,5 +1,6 @@
 <script lang="ts">
 	// The setup card, to use an agent's app here; where agents may not write, a draft until Save, with how far that holds for the apps set up here (which cannot edit there, which are only asked); what is always protected; whether their edits in place wait in Your Changes; the apps that start loom here, each not set up with Set up beside it; and what any agent here is told, sees and never does. A saved list the permission file Claude Code reads has not caught up with is said at the top, with the act that rewrites it.
+	import { refusalOf } from '$lib/library/said';
 	import { landed } from '$lib/manifest/updating.svelte';
 	import type { QuiltSettings } from '$lib/manifest/types';
 	import { can, write } from '$lib/write';
@@ -35,7 +36,7 @@
 		error = '';
 		const answer = await write('agents-update', {});
 		if (answer.ok) await landed();
-		else error = answer.error?.message ?? 'Could not rewrite the permission files';
+		else error = refusalOf(answer.error, 'Could not rewrite the permission files');
 		busy = false;
 	}
 </script>

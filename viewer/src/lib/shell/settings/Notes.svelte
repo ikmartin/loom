@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Settings › Notes: the folder new notes go in, picked from the quilt's folders and saved in config.toml with the other quilt settings (a draft until Save); and the new-note command, the person's own, read and saved at once through `notes-settings`, never through config.toml or the manifest, and set by no agent.
+	import { refusalOf } from '$lib/library/said';
 	import { store } from '$lib/manifest/client.svelte';
 	import { notes as words } from '$lib/words/notes';
 	import { can, write, type WriteResult } from '$lib/write';
@@ -36,7 +37,7 @@
 			if (res.ok) {
 				command = saved = res.command ?? '';
 				kept = res.kept ?? '';
-			} else refused = res.error?.message ?? '';
+			} else refused = refusalOf(res.error);
 		});
 	});
 
@@ -47,7 +48,7 @@
 		if (res.ok) {
 			command = saved = res.command ?? '';
 			kept = res.kept ?? kept;
-		} else refused = res.error?.message ?? '';
+		} else refused = refusalOf(res.error);
 		busy = false;
 	}
 </script>

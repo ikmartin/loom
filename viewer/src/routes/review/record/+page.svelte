@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › History › Versions (plan 0.25.5): one document's versions, oldest to newest and then Now, each kept at an act (the import, an edit kept, the text an undo set aside, changes taken in, one recorded by hand, the text a restore replaced), each opened, compared with now, or put back after asking; and a version recorded here by name. Under them, each version of a file no document's version holds (`FileVersions`). Versions no live document leads to are listed apart, since this is where they are reached from.
+	import { refusalOf } from '$lib/library/said';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -53,7 +54,7 @@
 			await landed();
 			after?.();
 		}
-		said = { at, text: done.ok ? capital(done.result ?? 'done') : (done.error?.message ?? 'The publisher refused it.'), refused: !done.ok };
+		said = { at, text: done.ok ? capital(done.result ?? 'done') : refusalOf(done.error), refused: !done.ok };
 		busy = '';
 		asking = '';
 	}

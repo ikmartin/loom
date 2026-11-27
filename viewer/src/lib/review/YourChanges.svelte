@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last keep or discard of a suggestion is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar. Drawn only where the source does not serve Review's reads; where it does, Review's own rows draw the same from the manifest (`views/review/Accepting.svelte`, `Keeping.svelte`).
+	import { refusalOf } from '$lib/library/said';
 	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { onMount, tick } from 'svelte';
@@ -121,7 +122,7 @@
 		let text: string;
 		let refused: boolean;
 		if (!done.ok) {
-			text = done.error?.message ?? 'The publisher refused it.';
+			text = refusalOf(done.error);
 			refused = true;
 		} else {
 			const ok = done.accepted ?? [];
@@ -146,7 +147,7 @@
 		const done = res.done?.length;
 		const refused = res.refused ?? [];
 		const verb = how === 'keep' ? 'Kept' : 'Discarded';
-		const text = !res.ok ? (res.error?.message ?? 'The publisher refused it.') : [done !== undefined ? `${verb} ${done} ${done === 1 ? 'change' : 'changes'} in ${g.label}.` : `${verb} the changes in ${g.label}.`, ...refused.map((r) => r.why)].join('\n');
+		const text = !res.ok ? refusalOf(res.error) : [done !== undefined ? `${verb} ${done} ${done === 1 ? 'change' : 'changes'} in ${g.label}.` : `${verb} the changes in ${g.label}.`, ...refused.map((r) => r.why)].join('\n');
 		said = { at: '*', text, refused: !res.ok || (done === 0 && refused.length > 0) };
 		busy = '';
 	}

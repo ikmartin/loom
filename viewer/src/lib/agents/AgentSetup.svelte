@@ -1,5 +1,6 @@
 <script lang="ts">
 	// The setup card: Use with Claude and Use with Codex, nothing written until one is pressed, which asks the publisher's `agents-setup`. For an app set up, the steps that connect it, then it waits for the app's first conversation to start loom here, says when one has, and after a minute with none says what to check. The trust step is there because Claude Code applies none of loom's permissions until the folder is trusted. A quilt whose agents reach loom in a shell is told that no app shows as connected there.
+	import { refusalOf } from '$lib/library/said';
 	import { onMount } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { copyText } from '$lib/clipboard';
@@ -35,7 +36,7 @@
 		refused = '';
 		setup.waitFor(o.key);
 		const done = await write('open', { app: o.open });
-		if (!done.ok) refused = done.error?.message ?? words.setup.openFailed(o.open);
+		if (!done.ok) refused = refusalOf(done.error, words.setup.openFailed(o.open));
 	}
 
 	async function copy(): Promise<void> {

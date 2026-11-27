@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Page edits (plan 0.28): turn, delete, reorder and insert pages, into a new file. Nothing here touches the PDF being read (P7): the result is saved beside it under a name the person gives, or handed to the browser, and marks go into it as a saved copy's do. Editing a page's own text is for its application.
+	import { refusalOf } from '$lib/library/said';
 	import type { PDFDocumentProxy } from 'pdfjs-dist';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -149,7 +150,7 @@
 		act(async (bytes) => {
 			const res = await write('pdf-save', { path: path.trim(), data: base64(bytes) });
 			if (!res.ok) {
-				said = res.error?.message ?? 'the publisher refused it';
+				said = refusalOf(res.error);
 				return;
 			}
 			const saved = (res as typeof res & { path?: string }).path ?? path.trim();

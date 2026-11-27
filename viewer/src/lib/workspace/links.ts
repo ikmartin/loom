@@ -3,6 +3,7 @@
 // Two link forms name things (specs/dialect.md §2.13): `quilt:KEY[#PLACE]` for what the quilt owns — a node, a document, an annotation, a session, a project file by its path — and `cited:SCHEME:VALUE` for a place in a work, which opens at the identifier's own service, outside the viewer, since nothing the manifest says names the work's pages. The viewer's own paths are read too. `app:NAME` asks the publisher to open an application, on this click; any other scheme opens outside the viewer, whose tab it never replaces.
 //
 // One capture-phase listener for the whole viewer, so no renderer decides for itself and a link the router would otherwise follow is answered before it does.
+import { refusalOf } from '$lib/library/said';
 
 import { goto } from '$app/navigation';
 import type { Manifest } from '$lib/manifest/types';
@@ -162,7 +163,7 @@ export function previewOfHref(m: Manifest, href: string): Item | null {
  */
 export async function openOutside(target: { app: string } | { file: string }): Promise<string> {
 	const done = await write('open', target);
-	return done.ok ? '' : (done.error?.message ?? 'loom could not open it');
+	return done.ok ? '' : refusalOf(done.error, 'Loom could not open it.');
 }
 
 /** The address a `cited:` link opens outside the viewer, its identifier's own service; '' for a scheme none resolves, or an href that is no `cited:` link. */

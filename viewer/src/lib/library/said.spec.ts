@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { frame } from '$lib/words/frame';
-import { said } from './said';
+import { refusalOf, said } from './said';
 
 const ROOT = new URL('../../../../', import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, ROOT), 'utf8');
@@ -27,6 +27,16 @@ function loomCodes(): Set<string> {
 
 /** Refusals that are the viewer's own fault, a request it built wrongly, said in the plain sentence on purpose. */
 const PLAIN = new Set(['bad-field', 'missing-field', 'bad-request', 'refused']);
+
+describe('a refusal said in place', () => {
+	it("is the frame's sentence for its code, else the place's own words, never loom's message", () => {
+		expect(refusalOf({ code: 'no-such-change', status: 404 })).toBe(frame.refused['no-such-change']);
+		expect(refusalOf({ code: 'refused', status: 400 }, 'Not written.')).toBe('Not written.');
+		expect(refusalOf({ code: 'refused', status: 400 })).toBe(frame.errors.failed);
+		expect(refusalOf({ code: 'unreachable' })).toBe(frame.errors.unreachable);
+		expect(refusalOf(undefined, 'Not written.')).toBe('Not written.');
+	});
+});
 
 describe('a refusal of the library', () => {
 	const codes = [...new Set([...specCodes(), ...loomCodes()])].sort();

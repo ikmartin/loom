@@ -3,6 +3,7 @@
 // Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so from loom's answer, which comes once it has recorded them, while the page updates (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A Keep step names the quilt the server says it serves, and none is made where the server has said none; it is kept in the tab's session storage under that quilt, so a reload still offers its undo in that quilt and no other; loom says, when it is pressed, whether it still can be. A step loom says can no longer be undone leaves the history. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in History rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
 //
 // A delete also stands at the foot of the window (`DeletedBar`) while it is done, since its mark goes with the annotation; its Undo there undoes that delete, wherever it is in the history.
+import { refusalOf } from '$lib/library/said';
 
 import { store } from '$lib/manifest/client.svelte';
 import type { Annotation, Look } from '$lib/manifest/types';
@@ -223,7 +224,7 @@ export const remove = recorded(async (id: string, said: string): Promise<string>
 		return res;
 	};
 	const res = await del();
-	if (!res.ok) return res.error?.message ?? 'the publisher refused it';
+	if (!res.ok) return refusalOf(res.error);
 	push({ label: 'delete', undo: () => run('restore', { events: removed }), redo: del, deleted: { id, said } });
 	return '';
 });
@@ -369,7 +370,7 @@ async function move(from: 'done' | 'undone', step: Step): Promise<string> {
 			if (step.deleted) history.deletions = history.deletions.filter((d) => d !== step.deleted);
 			save();
 		}
-		return res.error?.message ?? 'the publisher refused it';
+		return refusalOf(res.error);
 	}
 	if (from === 'done') {
 		history.done = history.done.filter((s) => s !== step);

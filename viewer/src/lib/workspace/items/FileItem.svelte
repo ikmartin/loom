@@ -2,6 +2,7 @@
 	// A file of the project (plan 0.22.7), drawn by its kind: a Markdown file or a notebook as the publisher drew it, an HTML page in its own frame, a PDF by pdf.js, an image, text as text. Anything else is named, with "Open in its application" where the publisher can open it, and loom never opens a file that runs code.
 	// A PDF's pages carry annotations (`pdf/desk.svelte.ts`), made and read as a document's are from the toolbar (`FileControls`); words selected with no tool on are offered their actions.
 	// A Markdown file's page is drawn as a document's fragment is (`Fragment`), its blocks carrying their lines in the file: its annotations are marked and open their popups, its pending changes are marked in the margin, words a link quotes are lit, and selected words are offered their actions and the tools (`FragmentNotes`), all on the file by its path.
+	import { refusalOf } from '$lib/library/said';
 	import { store } from '$lib/manifest/client.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
 	import FragmentNotes from '$lib/fragments/FragmentNotes.svelte';
@@ -169,7 +170,7 @@
 		if (!got.ok) {
 			if (asked.get(task) === done) asked.delete(task);
 			box.checked = !done;
-			tickRefused = got.error?.message ?? 'That box could not be changed.';
+			tickRefused = refusalOf(got.error, 'That box could not be changed.');
 			return;
 		}
 		setTimeout(() => {

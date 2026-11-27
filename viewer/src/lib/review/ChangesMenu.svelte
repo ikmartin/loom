@@ -1,5 +1,6 @@
 <script lang="ts">
 	// **Changes** on a document's toolbar, with how many changes wait in its text, and its menu: how the text shows them (Markup, every change in place, removed words struck and new words underlined; Final, the text with every change made), and Keep all and Discard all, each saying what it would do. With annotations alone listed the text is as kept, so the views wait. Keep all and Discard all act on the document's changes that are ready, through the same writes as a change's own Keep and Discard (`history.svelte.ts`).
+	import { refusalOf } from '$lib/library/said';
 	import Icon from '$lib/components/Icon.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { can } from '$lib/write';
@@ -89,7 +90,7 @@
 		notes.close();
 		const res = how === 'keep' ? await keepChanges({ all: true, document }) : await discardChanges({ all: true, document });
 		const refused = res.refused ?? [];
-		if (!res.ok) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [res.error?.message ?? 'the publisher refused it'] });
+		if (!res.ok) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refusalOf(res.error)] });
 		else if (refused.length) say({ title: `${refused.length} ${refused.length === 1 ? 'change was' : 'changes were'} not ${how === 'keep' ? 'kept' : 'discarded'}`, lines: refused.slice(0, 3).map((r) => r.why) });
 	}
 </script>

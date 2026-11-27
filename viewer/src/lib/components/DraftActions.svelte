@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { refusalOf } from '$lib/library/said';
  import type { Master } from '$lib/manifest/types';
  import { store } from '$lib/manifest/client.svelte';
  import { landed } from '$lib/manifest/updating.svelte';
@@ -21,7 +22,7 @@
    const result = answer.result as unknown as {confirmation_required?: boolean; message?: string; pdf?: string; conflicts?: string[]};
    if (result.confirmation_required) confirmation = result.message ?? 'Close with unapplied changes?';
    else { confirmation = ''; message = result.message ?? (result.conflicts?.length ? 'Some edits conflict. Resolve them in your editor before incorporating.' : 'Draft updated.'); pdf = result.pdf ?? ''; await landed(); }
-  } else error = answer.error?.message ?? 'Could not update the draft';
+  } else error = refusalOf(answer.error, 'Could not update the draft');
   busy = false;
  }
 </script>

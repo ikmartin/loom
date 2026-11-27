@@ -2,6 +2,7 @@
 	// The one popup, for every annotation wherever it is drawn: its type and look (changeable from the head, with "Changed from" its type, or Plain, when the look differs from that one's) and beside them, where its type stays open, Open or Resolved; when the words it was written on are gone the words as they were and the version that holds them, its comment (edited in place), the replies and a reply, then at the foot's right Resolve (or Reopen) and Delete. Given a `draft` instead of an id, it writes a new one: a comment at a place, or words marked with a type that asks something, which loom takes only with words. A draft starts from the hand and keeps its own type and look, so choosing them here changes this annotation and not what the next one is marked with; leaving a draft with words in it asks first (`leave`).
 	//
 	// It reads the annotation from the manifest by id, so a write that comes back on the next poll is shown without the popup being made again, and an annotation deleted elsewhere closes it. Every write goes through the history (`history.svelte.ts`), so the toolbar's Undo takes it back. Each verb is offered only where the publisher serves its endpoint.
+	import { refusalOf } from '$lib/library/said';
 	import { onMount, tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
@@ -137,7 +138,7 @@
 		const res = await act();
 		busy = false;
 		if (!res.ok) {
-			said = res.error?.message ?? 'the publisher refused it';
+			said = refusalOf(res.error);
 			return null;
 		}
 		return res.result ?? '';

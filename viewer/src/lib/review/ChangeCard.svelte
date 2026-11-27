@@ -1,5 +1,6 @@
 <script lang="ts">
 	// One pending change as a card: what it is and who made it, its words out and in (struck and underlined in teal; new words that hold an environment or a paragraph break as TeX made them, `new_html`), what a suggestion's writer says of it and the annotation it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard (Copy new text and Done in Overleaf in place of Keep on a document that mirrors Overleaf, `MirroredActs`), which act as its popup's do (`history.svelte.ts`). In the list beside a text a click opens it at its words; on the page of Your Changes it names where it is, with a link there; in a row of Review's Proposed edits it is drawn bare, the row naming where it is.
+	import { refusalOf } from '$lib/library/said';
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
@@ -64,7 +65,7 @@
 		const res = how === 'keep' ? await keepChanges({ changes: [c.id] }) : await discardChanges({ changes: [c.id] });
 		if (onanswer) return onanswer(how, res);
 		const refused = res.refused?.find((r) => r.id === c.id)?.why;
-		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? res.error?.message ?? 'the publisher refused it'] });
+		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? refusalOf(res.error)] });
 	}
 </script>
 

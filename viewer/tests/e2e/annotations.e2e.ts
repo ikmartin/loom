@@ -661,7 +661,8 @@ test.describe('the popup', () => {
 		await page.reload();
 		const p = await openPopup(page, 'a-2026-09-16-ecnav2');
 		await p.getByTestId('popup-delete').click();
-		await expect(p.getByTestId('popup-said')).toHaveText('an agent deletes only its own annotations');
+		// loom's own message is for the command line; the popup says the viewer's sentence
+		await expect(p.getByTestId('popup-said')).toHaveText('Loom could not do that.');
 		await expect(page.getByTestId('deleted')).toHaveCount(0);
 	});
 });

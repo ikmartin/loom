@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Settings › Annotations: Plain, the look of an annotation with no type, and then the quilt's annotation types, one at a time, the list at the left and the chosen one at the right: Plain has a look and nothing else; a type has its name, its look with a sample, whether it stays open until resolved or only informs, its instructions for agents, and the modes that use it. A draft until Save, which writes the types file whole, Plain with it, through `types-save`; Restore defaults writes loom's defaults. Deleting a type a mode uses asks first. A type started from a format menu or a popup (Add new…, Save as new type) is taken by what started it once it is saved. What a type says is only its own name and instructions. Display, beneath, holds how annotations are shown in this browser, kept in its preferences rather than the quilt.
+	import { refusalOf } from '$lib/library/said';
 	import { untrack } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { landed } from '$lib/manifest/updating.svelte';
@@ -123,7 +124,7 @@
 		const res = await write('types-save', body);
 		busy = false;
 		if (!res.ok) {
-			said = res.error?.message ?? 'the publisher refused it';
+			said = refusalOf(res.error);
 			return;
 		}
 		// the new type a format menu or a popup started goes to what started it, by the id loom gave it

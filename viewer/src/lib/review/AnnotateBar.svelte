@@ -2,6 +2,7 @@
 	// A text's annotating, in two halves (`part`). The half that writes stands on the annotation row: Annotate, Comment and the format menu beside them, and Undo and Redo, where the publisher takes writes. The half that reads stands on the toolbar's own row: a document's Changes menu where its text has pending changes (`changes`); the stepper over the annotations and changes in reading order (the arrows, J and K); Comments, counting the annotations here, and Notes, counting and listing the files of the quilt that link here (`backlinks.ts`), which open the list beside the text. The keys are the reading half's, since it is always drawn, and putting the annotation row away puts the tool in hand down.
 	//
 	// Annotate stays on until it is turned off, and selecting words while it is on marks them in the look in hand. Comment leaves a comment at the next place clicked. The format menu sets the look in hand: the Type list (Add new… starts a type the hand takes), the look controls, the line saying what the look was changed from, a type or Plain (Reset, Update it), Save as new type, and Customize, which opens Settings › Annotations. Number keys choose a type while Annotate is on, 0 for Plain. Undo and Redo, and ⌘Z and ⇧⌘Z, go back and forth over this page's annotation writes (`history.svelte.ts`); Delete or Backspace removes the annotation open, with the same undo.
+	import { refusalOf } from '$lib/library/said';
 	import Icon from '$lib/components/Icon.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { getPane } from '$lib/workspace/state.svelte';
@@ -120,7 +121,7 @@
 	async function update(): Promise<void> {
 		if (!from) return;
 		const res = await write('types-save', current ? { types: typesPayload(m, current, look) } : { types: typesPayload(m), plain: look });
-		if (!res.ok) return say({ title: 'Not updated', lines: [res.error?.message ?? 'the publisher refused it'] });
+		if (!res.ok) return say({ title: 'Not updated', lines: [refusalOf(res.error)] });
 		void store.refresh();
 		reset();
 	}
