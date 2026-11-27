@@ -360,8 +360,8 @@ export const review = {
 		discardedAll: (n: number) => (n === 1 ? 'Discarded 1 change.' : `Discarded ${n} changes.`),
 		/** Over Proposed edits: undoes the last keep or discard, named as the document's toolbar names it. */
 		undoLast: (what: string) => `undo ${what}`,
-		/** Over Proposed edits: shows the open annotations from others beneath the changes, with their count. */
-		todo: (n: number) => `to do ${n}`,
+		/** Over Proposed edits: shows the open annotations from others beneath the changes, named by what it counts. */
+		todo: (n: number) => (n === 1 ? '1 open annotation from others' : `${n} open annotations from others`),
 		/** Hover text on it. */
 		todoHover: 'The open annotations from others, beneath the changes',
 		/** In place of those annotations, where there are none. */

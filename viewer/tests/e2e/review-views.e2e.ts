@@ -479,6 +479,8 @@ test('nothing in Results to accept or Proposed edits leaves Review, and see it o
 	for (const row of await kindRows(page, 'accepted-changed').all()) await openRow(row);
 	expect(await leaving()).toEqual([]);
 	await page.getByTestId('review-kind-edits').click();
+	// To do says what it counts
+	await expect(page.getByTestId('your-todo')).toHaveText(/^\d+ open annotations? from others$/);
 	await page.getByTestId('your-todo').click();
 	for (const row of await page.locator('[data-testid="review-row"]:is([data-change], [data-file])').all()) await openRow(row);
 	await expect(page.getByTestId('todo-row').first()).toBeVisible();
