@@ -16,6 +16,8 @@
 	import Empty from '$lib/review/Empty.svelte';
 	import ReviewHeading from '$lib/review/ReviewHeading.svelte';
 	import Said from '$lib/review/Said.svelte';
+	import AppliedUndo from '$lib/review/AppliedUndo.svelte';
+	import type { Answer } from '$lib/review/applied';
 	import { itemsOf, tally } from '$lib/review/contribution';
 	import { adoptionsOf, cardsOf, copySays } from '$lib/review/proposed';
 	import { documentOf, writerOf } from '$lib/review/suggestions';
@@ -35,13 +37,18 @@
 	const opened = $derived(!!adoption);
 	const showing = $derived(adoption?.copy ?? '');
 
-	// the last answer from a copy: said by its bar while it is open, and by the list once it is not
-	let answer = $state<{ text: string; refused: boolean; from: string } | null>(null);
+	// the last answer from a copy: said by its bar while it is open, and by the list once it is not, with the undo of an Apply beside it; what that undo says is said here even once the copy it brought back is open again
+	let answer = $state<(Answer & { from: string }) | null>(null);
 
 	const name = (e: SuggestedEdit) => keyName(m, e.target.key);
 	const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 	const file = (p: string) => p.split('/').pop()?.replace(/\.tex$/, '') ?? p;
 </script>
+
+<!-- An answer the open copy's bar does not say: a copy's once it has left, and an undo's, whose copy may be back -->
+{#snippet answered(a: Answer)}
+	<div class="answer"><Said text={a.text} refused={a.refused} testid="proposed-answer" />{#if a.undo}<AppliedUndo undo={a.undo} onanswer={(x) => (answer = { ...x, from: '' })} />{/if}</div>
+{/snippet}
 
 {#snippet chips(names: { name: string; bad: boolean }[])}
 	<div class="chips" data-testid="proposed-chips">
@@ -81,9 +88,10 @@
 	{#if opened}<p class="back">{#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="proposed-back">{reviewWords.yours.back}</a>{:else}<a href={here} data-testid="proposed-back">‹ Everything proposed</a>{/if}</p>{/if}
 	{#if adoption}
 		{@const copy = adoption.copy}
+		{#if answer?.from === ''}{@render answered(answer)}{/if}
 		{#key copy}<ContributionReview contribution={adoption} onanswer={(a) => (answer = a && { ...a, from: copy })} />{/key}
 	{:else}
-		{#if answer && answer.from !== showing}<div class="answer"><Said text={answer.text} refused={answer.refused} testid="proposed-answer" /></div>{/if}
+		{#if answer && answer.from !== showing}{@render answered(answer)}{/if}
 		{#if !cards.length}
 			<Empty text="Nobody has proposed anything." testid="proposed-none" />
 		{:else}
@@ -124,6 +132,10 @@
 		font-size: 13px;
 	}
 	.answer {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--gap-tight) var(--gap);
 		margin-bottom: var(--gap);
 	}
 	.lead {

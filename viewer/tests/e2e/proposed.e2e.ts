@@ -148,3 +148,53 @@ test('what taking a copy in did is said even when the copy leaves the manifest b
 	answer();
 	await expect(page.getByTestId('proposed-answer')).toContainText('Took 1 change into main: 0 accepted, 1 wait to be accepted.');
 });
+
+/** Serve the fixture's copy with one change taken, and Apply answered as loom answers it, keeping main as `main-before-adopt-aidoc`; `restore` answers the undo. */
+async function applying(page: import('@playwright/test').Page, restore: (body: unknown) => object, gone: () => boolean = () => false): Promise<void> {
+	await page.route('**/build/manifest.json', async (route) => {
+		const m = structuredClone(manifest);
+		const c = m.contributions.find((x: { kind: string }) => x.kind === 'adopt');
+		c.choices = { ...c.choices, keys: ['sy-0002'] };
+		if (gone()) m.contributions = m.contributions.filter((x: { kind: string }) => x.kind !== 'adopt');
+		await route.fulfill({ json: m });
+	});
+	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: ['adopt-decision', 'adopt-preview', 'adopt-finish', 'history-restore'], token: 't', quilt: 'q-applied' } }));
+	await page.route('**/_api/adopt-preview', (route) => route.fulfill({ json: { ok: true, result: { token: 'p', review: { token: 'r', items: [] } } } }));
+	await page.route('**/_api/adopt-finish', (route) => route.fulfill({ json: { ok: true, result: { landmark: 'main-before-adopt-aidoc', accepted: [], pending: ['sy-0002'] } } }));
+	await page.route('**/_api/history-restore', (route) => route.fulfill(restore(route.request().postDataJSON())));
+}
+
+test('an Apply is undone where it was applied: the version it kept is restored in the quilt it was applied in, and what that did is said once the copy is back', async ({ page }) => {
+	let applied = false;
+	let restored: unknown = null;
+	// taken whole, the copy leaves the manifest; undone, its change waits in it again
+	await applying(
+		page,
+		(body) => {
+			restored = body;
+			return { json: { ok: true, result: "loom's own sentence, never drawn" } };
+		},
+		() => applied && !restored
+	);
+	await page.route('**/_api/adopt-finish', async (route) => {
+		applied = true;
+		await route.fallback();
+	});
+	await page.goto('/review/proposed?copy=' + encodeURIComponent(COPY));
+	await page.getByTestId('apply').click();
+	await expect(page.getByTestId('proposed-answer')).toContainText('Took 1 change into main');
+	await page.getByTestId('applied-undo').click();
+	await expect.poll(() => restored).toEqual({ document: 'drafting/main.tex', version: 'main-before-adopt-aidoc', quilt: 'q-applied' });
+	await expect(page.getByTestId('proposed-answer')).toHaveText("Put main.tex back as it was before you applied. Its text with the copy's changes is kept as a version in History, and the changes you took wait in the copy again.");
+	await expect(page.getByTestId('applied-undo')).toHaveCount(0);
+	await expect(page.getByTestId('contribution')).toBeVisible();
+});
+
+test("an Apply's undo that loom refuses says why in the viewer's words, never loom's", async ({ page }) => {
+	await applying(page, () => ({ status: 409, json: { ok: false, error: { code: 'other-quilt', message: "loom's own words" } } }));
+	await page.goto('/review/proposed?copy=' + encodeURIComponent(COPY));
+	await page.getByTestId('apply').click();
+	await page.getByTestId('applied-undo').click();
+	await expect(page.getByTestId('contribution-bar-said')).toHaveText('It could not be undone. Loom serves another quilt here now, so nothing was put back.');
+	await expect(page.getByTestId('applied-undo')).toHaveCount(0);
+});

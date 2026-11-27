@@ -474,6 +474,26 @@ test('an agent copy is taken back in one pass: Take it, then one Apply writes it
 	await expect(acceptRow(page, 'sy-0900')).toBeVisible();
 });
 
+test("an Apply is undone in one step where it was applied: the document's bytes come back, and the copy's change waits to be taken again", async ({ page, served }) => {
+	const document = 'drafting/undo-test.tex';
+	const text = '\\documentclass{article}\n\\newtheorem{lemma}{Lemma}\n\\begin{document}\nIntroduction.\n\\begin{lemma}\\label{sy-0901}\nOriginal statement.\n\\end{lemma}\n\\end{document}\n';
+	writeFileSync(join(served.root, document), text);
+	served.loom(['draft', document, '--ai', 'undo-proposal']);
+	const copy = join(served.root, '.loom/agents/copies/undo-proposal.tex');
+	writeFileSync(copy, readFileSync(copy, 'utf8').replace('Original statement.', 'Proposed statement.'));
+	await page.goto('/review/proposed?copy=' + encodeURIComponent('.loom/agents/copies/undo-proposal.tex'));
+	await pressUntil(page, () => expect(page.getByTestId('apply')).toHaveText('Apply 1 change', { timeout: 3000 }));
+	await page.getByTestId('apply').click();
+	await expect.poll(() => readFileSync(join(served.root, document), 'utf8')).toContain('Proposed statement.');
+	await page.getByTestId('applied-undo').click();
+	await expect.poll(() => readFileSync(join(served.root, document), 'utf8')).toBe(text);
+	await expect(page.getByTestId('proposed-answer')).toContainText('Put undo-test.tex back as it was before you applied.');
+	await expect(page.getByTestId('applied-undo')).toHaveCount(0);
+	// the change it took is offered again, in the copy's own review
+	await expect(page.getByTestId('contribution-bar')).toContainText('From undo-proposal into undo-test');
+	await expect(page.getByTestId('change-shown')).toContainText('Proposed statement');
+});
+
 test("accept all on an adoption's row in Review accepts exactly the blocks it took in that can be accepted, and none it cannot", async ({ page, served }) => {
 	const document = 'drafting/adopt-all.tex';
 	const lemma = (key: string, words: string) => `\\begin{lemma}\\label{${key}}\n${words}\n\\end{lemma}\n\\begin{proof}\nClear.\n\\end{proof}\n`;

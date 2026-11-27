@@ -392,6 +392,25 @@ export const review = {
 		/** The column's message when the last keep or discard could not be undone. */
 		notUndone: 'The last keep or discard could not be undone.'
 	},
+	/** Beside an agent's copy's Apply once it has written (`AppliedUndo`): the undo that puts the document back as it was before, from the version Apply kept, and what it says after. */
+	applied: {
+		/** The button. */
+		undo: 'Undo',
+		/** On it while loom answers. */
+		undoing: 'Undoing…',
+		/** Hover text on it. */
+		hover: (doc: string) => `Puts ${file(doc)} back as it was before you applied; its text now is kept as a version in History`,
+		/** Said once it is undone. */
+		undone: (doc: string) => `Put ${file(doc)} back as it was before you applied. Its text with the copy's changes is kept as a version in History, and the changes you took wait in the copy again.`,
+		/** Said when loom would not undo it, with why. */
+		notUndone: (why: string) => `It could not be undone. ${why}`,
+		/** Why, by the code loom refuses it with; a code not here is said by the frame's words. */
+		why: {
+			'other-quilt': 'Loom serves another quilt here now, so nothing was put back.',
+			'unknown-version': 'The version kept before you applied is no longer in History.',
+			'cannot-restore': 'The version kept before you applied cannot be put back; open it in History.'
+		} as Record<string, string>
+	},
 	accepted: {
 		/** Accepts a changed result again. */
 		accept: 'accept',

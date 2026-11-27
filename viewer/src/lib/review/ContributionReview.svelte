@@ -1,6 +1,8 @@
 <script lang="ts">
 	// One review of an agent's copy (plan 0.25.2): every change it makes, named as the person reads it and grouped by section in the list the counter opens (`ChangeList`), decided one at a time in a bar that never moves, the two texts compared across the page's full width. Take it and Leave it are saved at once and step to the next change to decide; Apply writes what was taken into the paper in one press, keeping the paper as it was first and accepting the blocks the person marked as checked. Whatever loom answers, done or refused, is said in the bar beside the controls that asked.
 	import ActionBar from './ActionBar.svelte';
+	import AppliedUndo from './AppliedUndo.svelte';
+	import { undoOf, type Answer } from './applied';
 	import Said from './Said.svelte';
 	import ChangeList from './ChangeList.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
@@ -12,10 +14,10 @@
 	import { onMount } from 'svelte';
 	import { acceptFor, decision, itemsOf, stateOf, takeAll, tally, type Decision, type Item } from './contribution';
 
-	let { contribution: c, onanswer }: { contribution: AdoptionReview; onanswer?: (a: { text: string; refused: boolean } | null) => void } = $props();
+	let { contribution: c, onanswer }: { contribution: AdoptionReview; onanswer?: (a: Answer | null) => void } = $props();
 	// the last answer, said in the bar and handed to the page, which keeps saying it once this contribution is gone
-	let answer = $state<{ text: string; refused: boolean } | null>(null);
-	function say(a: { text: string; refused: boolean } | null): void {
+	let answer = $state<Answer | null>(null);
+	function say(a: Answer | null): void {
 		answer = a;
 		onanswer?.(a);
 	}
@@ -96,7 +98,8 @@
 			const why = o.acceptance_error ? ` ${o.acceptance_error}` : dropped > 0 ? ` ${dropped} marked as checked wait too, since what they rest on was not accepted.` : '';
 			say({
 				text: `Took ${taken} ${taken === 1 ? 'change' : 'changes'} into ${into}: ${o.accepted?.length ?? 0} accepted, ${o.pending?.length ?? 0} wait to be accepted. ${into} as it was is kept as a version.${why}`,
-				refused: false
+				refused: false,
+				undo: await undoOf(source, o.landmark)
 			});
 			checked = [];
 			await landed();
@@ -122,6 +125,7 @@
 				<button class="btn" disabled={!!busy || n.undecided + n.left === 0} onclick={() => save(takeAll(items))} data-testid="take-all">Take all</button>
 				<button class="btn primary" disabled={!!busy || !n.taken} onclick={apply} data-testid="apply">{busy === 'apply' ? 'Applying…' : `Apply ${n.taken} ${n.taken === 1 ? 'change' : 'changes'}`}</button>
 			{/if}
+			{#if answer?.undo}<AppliedUndo undo={answer.undo} onanswer={say} />{/if}
 		{/snippet}
 		{#snippet below()}
 			<div class="step">
