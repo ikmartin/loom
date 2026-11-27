@@ -68,6 +68,15 @@ test("What it is told says in words what the line in the app's file asks, and sh
 	await expect(panel).not.toContainText(/loom_|loom ai|loom doctor/);
 });
 
+test("the panel's first heading follows who is connected: never Connected over no agent", async ({ page }) => {
+	await publisher(page, []);
+	await page.goto('/master/drafting/main');
+	await page.getByTestId('agent-chip').click();
+	const panel = page.getByTestId('agent-panel');
+	await expect(panel.getByTestId('agents-none')).toBeVisible();
+	await expect(panel.locator('h4').first()).toHaveText('Not connected');
+});
+
 test('folded, the chip is its dot inside the strip, its words its hover text', async ({ page }) => {
 	await page.setViewportSize({ width: 1100, height: 900 });
 	await publisher(page, [RECORD]);

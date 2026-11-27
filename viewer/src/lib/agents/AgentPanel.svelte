@@ -23,7 +23,7 @@
 <div class="panel" data-testid="agent-panel">
 	{#if has('connected')}
 		<section>
-			<h4>{words.panel.connected}</h4>
+			<h4>{records === null ? words.panel.connectedUnknown : records.length ? words.panel.connected : words.panel.connectedNone}</h4>
 			{#if records === null}
 				<p class="aside" data-testid="agents-unknown">{words.panel.unknown}</p>
 			{:else if !records.length}

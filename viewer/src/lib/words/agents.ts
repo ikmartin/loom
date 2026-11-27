@@ -43,8 +43,10 @@ export const agents = {
 	},
 	/** The panel the chip opens. */
 	panel: {
-		/** Its first part's heading: the conversations connected. */
+		/** Its first part's heading, following the state: conversations connected, none, or not known. */
 		connected: 'Connected',
+		connectedNone: 'Not connected',
+		connectedUnknown: 'Connection not known',
 		/** Under it while loom is not answering the page. */
 		unknown: 'Not known while loom is not answering this page.',
 		/** Under it with none connected, above the setup card. */
