@@ -154,3 +154,47 @@ def test_a_link_to_another_quilt_never_becomes_the_anchor(tmp_path: Path) -> Non
     with pytest.raises(own.Planted):
         own.mkdir(root / "hist/texts")
     assert sorted(p.name for p in other.iterdir()) == [".loom"]
+
+
+@pytest.mark.parametrize("make", [False, True])
+def test_a_folder_renamed_over_while_a_write_walks_is_walked_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make: bool) -> None:  # fmt: skip
+    """A concurrent maker renames a folder of its own over the one the write opened (`layout.stamp` does so with `.loom/`): the write walks again by name and makes its file in the folder now there, never in the one gone."""
+    root = tmp_path / "q"
+    (root / ".loom").mkdir(parents=True)
+    real, done = os.open, [False]
+
+    def racing(p: object, flags: int, *args: object, **kw: object) -> int:
+        if p == "x.lock" and not done[0]:
+            done[0] = True
+            (tmp_path / "fresh").mkdir()
+            os.rename(tmp_path / "fresh", root / ".loom")
+        return real(p, flags, *args, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "open", racing)
+    os.close(own.os_open(root / ".loom/x.lock", os.O_RDONLY | os.O_CREAT, 0o666, make=make))
+    monkeypatch.undo()
+    assert done[0] and (root / ".loom/x.lock").is_file()
+
+
+def test_two_makers_of_one_folder_at_once_both_write_in_it(tmp_path: Path) -> None:
+    """Locks taken at once by many threads in a quilt whose `.loom/local/` is not there yet: each makes its folder or finds the other's, and every lock file is made there."""
+    import threading
+
+    from loom.locks import locked
+
+    root = tmp_path / "q"
+    errors: list[BaseException] = []
+
+    def take(i: int) -> None:
+        try:
+            with locked(root / f".loom/local/deep/{i}.lock"):
+                pass
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=take, args=(i,)) for i in range(16)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors and len(list((root / ".loom/local/deep").iterdir())) == 16

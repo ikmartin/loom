@@ -195,9 +195,8 @@ def locked(
     if key in held:
         yield
         return
-    own.mkdir(path.parent, root=root)
-    # read-only is enough to lock, and never changes the file; never made through a link (`loom.own`)
-    fd = own.os_open(path, os.O_RDONLY | os.O_CREAT, 0o666, root=root)
+    # read-only is enough to lock, and never changes the file; made, with its folder, through no link (`loom.own`)
+    fd = own.os_open(path, os.O_RDONLY | os.O_CREAT, 0o666, root=root, make=True)
     try:
         took = _take(fd, path, WAIT if wait is None else wait, patience)
         held.add(key)

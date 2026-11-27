@@ -144,15 +144,22 @@ def parent(path: Path | str, *, root: Path | str | None = None, make: bool = Fal
 
 def mkdir(path: Path | str, *, root: Path | str | None = None, exist_ok: bool = True) -> None:
     """`path.mkdir(parents=True, exist_ok=exist_ok)`, without following a link; `Planted` where a part is one."""
-    anchor, parts = _split(path, root, folder=True)
-    with _named(path):
-        if not parts and not exist_ok:
-            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST))
-        if exist_ok:
-            with _walk(anchor, parts, make=True):
-                return
-        with _walk(anchor, parts[:-1], make=True) as at:
-            os.mkdir(parts[-1], 0o777, dir_fd=at)
+    for n in range(_AGAIN):
+        # walked again where a folder on the way vanished under it, as `_open_fd` does
+        anchor, parts = _split(path, root, folder=True)
+        try:
+            with _named(path):
+                if not parts and not exist_ok:
+                    raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST))
+                if exist_ok:
+                    with _walk(anchor, parts, make=True):
+                        return
+                with _walk(anchor, parts[:-1], make=True) as at:
+                    os.mkdir(parts[-1], 0o777, dir_fd=at)
+                    return
+        except FileNotFoundError:
+            if n == _AGAIN - 1:
+                raise
 
 
 #: The modes that write bytes.
@@ -222,13 +229,7 @@ def open(  # noqa: A001 - `Path.open`'s own name, for a write
     Planted
         Where the file or a folder on the way is a link.
     """
-    flags = _MODES[mode.replace("b", "").replace("t", "")] | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
-    with parent(path, root=root, make=make) as (at, name):
-        try:
-            fd = os.open(name, flags, perm, dir_fd=at)
-        except OSError:
-            _refuse(at, name, path)
-            raise
+    fd = _open_fd(path, _MODES[mode.replace("b", "").replace("t", "")], perm, root, make)
     try:
         return os.fdopen(fd, mode, encoding=None if "b" in mode else encoding, newline=newline)
     except BaseException:
@@ -240,12 +241,31 @@ def os_open(
     path: Path | str, flags: int, perm: int = 0o777, *, root: Path | str | None = None, make: bool = False
 ) -> int:
     """`os.open(path, flags, perm)` with `O_NOFOLLOW`, through folders opened without following a link; the descriptor, the caller's to close."""
-    with parent(path, root=root, make=make) as (at, name):
+    return _open_fd(path, flags, perm, root, make)
+
+
+#: How many times a write that makes something walks its way again after a folder on it vanished under it.
+_AGAIN = 5
+
+
+def _open_fd(path: Path | str, flags: int, perm: int, root: Path | str | None, make: bool) -> int:
+    """The descriptor of `path` opened with `flags` and `O_NOFOLLOW` in its folder reached without following a link.
+
+    A folder opened on the way can be renamed over by a concurrent maker (`layout.stamp` renames a made `.loom/` into place) or taken away and made again, which leaves the descriptor on a folder no longer there: an open that makes something, or makes its folders, then walks again from the anchor by name, up to `_AGAIN` times, so a folder another made meanwhile is used and a link is still refused.
+    """
+    again = _AGAIN if make or flags & os.O_CREAT else 1
+    for n in range(again):
         try:
-            return os.open(name, flags | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), perm, dir_fd=at)
-        except OSError:
-            _refuse(at, name, path)
-            raise
+            with parent(path, root=root, make=make) as (at, name):
+                try:
+                    return os.open(name, flags | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), perm, dir_fd=at)
+                except OSError:
+                    _refuse(at, name, path)
+                    raise
+        except FileNotFoundError:
+            if n == again - 1:
+                raise
+    raise AssertionError("unreachable")
 
 
 def write_bytes(path: Path | str, data: bytes, *, root: Path | str | None = None, make: bool = False) -> None:
