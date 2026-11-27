@@ -155,7 +155,7 @@
 {#snippet apartHead()}
 	<div class="apart" data-testid="apart-head">
 		<span class="sec">{APART}</span>
-		<p class="nsub">Notes written here that no block of the text holds now; each says why.</p>
+		<p class="nsub">Annotations written here that no block of the text holds now; each says why.</p>
 	</div>
 {/snippet}
 

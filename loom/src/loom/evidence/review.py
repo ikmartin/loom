@@ -663,7 +663,6 @@ def _edits(result: ScanResult, reviewer: str | None, manifest: dict[str, Any]) -
                     "where": _name(manifest, p.key, doc) if p.key else None,
                     "by": p.author,
                     "state": p.state,
-                    "broke": None,
                 },
             )
         )

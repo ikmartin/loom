@@ -12,7 +12,7 @@ export const overleaf = {
 		/** The section's name in the Settings panel. */
 		section: 'Overleaf',
 		/** Under the section's title: where the pairing and its parts are kept. */
-		where: "The pairing is recorded in .loom/records/source-sync.json and travels with the quilt. Who you are on Overleaf, your git token and loom's copy of the project stay on this computer.",
+		where: "The pairing is recorded in the quilt and travels with it. Who you are on Overleaf, your git token and loom's copy of the project stay on this computer.",
 		/** The setting's name. */
 		project: 'Overleaf project',
 		/** What it does. */

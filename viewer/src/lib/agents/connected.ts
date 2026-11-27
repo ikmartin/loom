@@ -65,11 +65,11 @@ export function clock(when: string): string {
 	return Number.isFinite(t) ? new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '';
 }
 
-/** What a call was: a tool as the command it runs (`loom_ai_orient` is `loom ai orient`), a prompt by its mode. */
+/** What a call was: a tool by its name with loom's prefix dropped (`loom_ai_orient` is "the ai orient tool"), never as a command; a prompt by its mode. */
 export function callOf(last: NonNullable<Connected['last']>): string {
 	if (last.kind === 'prompt') return words.call.prompt(last.name);
 	if (last.kind === 'resource') return words.call.resource;
-	return last.name.replace(/_/g, ' ');
+	return words.call.tool(last.name.replace(/^loom_/, '').replace(/_/g, ' '));
 }
 
 export type Tone = 'unknown' | 'none' | 'connected' | 'active';

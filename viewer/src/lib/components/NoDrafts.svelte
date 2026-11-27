@@ -11,15 +11,15 @@
 </script>
 
 <div class="empty" data-testid="no-drafts">
-	<p class="head">{never ? 'This corpus has no documents.' : 'Nothing is being worked on.'}</p>
+	<p class="head">{never ? 'This quilt has no documents.' : 'Nothing is being worked on.'}</p>
 	<p>
 		{#if never}
-			Its nodes stand on their own, so there are no {what}.
+			Its results stand on their own, so there are no {what}.
 		{:else}
 			No document is being worked on, so there are no {what}.
 		{/if}
 		{#if landmarks.length}
-			The corpus's landmarks are still here: <a href={canonUrl(landmarks[0].path)}>{landmarks[0].title || landmarks[0].stem}</a
+			The quilt's landmarks are still here: <a href={canonUrl(landmarks[0].path)}>{landmarks[0].title || landmarks[0].stem}</a
 			>{#if landmarks.length > 1}, and {landmarks.length - 1} older{/if}.
 		{/if}
 	</p>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review › Proposed Changes: everything someone proposes that the person decides in a pass of its own, one card each: an agent's copy, which the card opens here at its own address (`?copy=`). A suggested edit is a pending change, kept or discarded in its document and in Your Changes; one on an agent's copy is listed on the copy's card, with what it says and the annotation it answers, and comes in with the copy.
+	// Review › Proposed edits, where loom serves no lists of Review: everything someone proposes that the person decides in a pass of its own, one card each: an agent's copy, which the card opens here at its own address (`?copy=`). A suggested edit is a pending change, kept or discarded in its document and in Your Changes; one on an agent's copy is listed on the copy's card, with what it says and the annotation it answers, and comes in with the copy.
 	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { page } from '$app/state';
@@ -83,7 +83,7 @@
 {/snippet}
 
 <main class="page" use:barShown class:review-page={!opened} data-testid="proposed">
-	<ReviewHeading title={rv.served ? reviewWords.kinds.edits.name : 'Proposed Changes'} />
+	<ReviewHeading title={rv.served ? reviewWords.kinds.edits.name : 'Proposed edits'} />
 	<!-- where Review's reads are served, a copy is opened from Proposed edits, and goes back there -->
 	{#if opened}<p class="back">{#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="proposed-back">{reviewWords.yours.back}</a>{:else}<a href={here} data-testid="proposed-back">‹ Everything proposed</a>{/if}</p>{/if}
 	{#if adoption}

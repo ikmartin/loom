@@ -24,8 +24,6 @@ export interface Setting {
 	name: string;
 	/** What it does; `code` spans in backticks. */
 	what: string;
-	/** Where it is written, as config.toml names it. */
-	key?: string;
 }
 
 export const GROUPS: { id: Group; label: string }[] = [
@@ -42,7 +40,7 @@ export const SECTIONS: Section[] = [
 	{ id: 'files', label: 'Files', group: 'loom', where: `${BROWSER} What Docs shows of the project.`, icon: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z' },
 	{ id: 'general', label: 'General', group: 'quilt', where: QUILT, icon: 'M4 6h16M4 12h16M4 18h10' },
 	{ id: 'documents', label: 'Documents', group: 'quilt', where: QUILT, icon: 'M7 3h7l5 5v13H7zM14 3v5h5' },
-	{ id: 'annotations', label: 'Annotations', group: 'quilt', where: "Saved in this quilt's .loom/records/annotation-types.toml, shared with everyone who has the quilt. You change it here; an agent may edit the file.", icon: 'm9 11-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4' },
+	{ id: 'annotations', label: 'Annotations', group: 'quilt', where: "Saved in this quilt's records, shared with everyone who has the quilt. You change them here; an agent may change them too.", icon: 'm9 11-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4' },
 	{ id: 'notes', label: notes.settings.section, group: 'quilt', where: notes.settings.where, icon: 'M5 3h10l4 4v14H5zM15 3v4h4M9 12h6M9 16h4' },
 	{ id: 'agents', label: 'Agents', group: 'quilt', where: QUILT, icon: 'M7 7h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3M12 3v4M9 13h.01M15 13h.01' },
 	{ id: 'modes', label: modes.settings.section, group: 'quilt', where: modes.settings.where, icon: 'M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z' },
@@ -60,25 +58,25 @@ export const SETTINGS: Setting[] = [
 	{ id: 'ids', section: 'appearance', name: 'Show ids', what: "Each result's id and state in the left margin, for working on the quilt rather than reading it." },
 	{ id: 'hide-aux', section: 'files', name: 'Hide aux LaTeX files', what: 'Leave out what a compile writes for its next run: `.aux`, `.log`, `.synctex.gz`, `.bbl` and the rest. The compiled PDF stays.' },
 	{ id: 'hide-agent-config', section: 'files', name: 'Hide agent config documents', what: "Leave out the documents an agent's app reads its instructions from: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and the like, wherever they stand. The rest of an agent's config, such as `.mcp.json` and `.claude/`, is never shown." },
-	{ id: 'author', section: 'profile', name: 'Your name', what: 'Who your acceptances and annotations are recorded as. A different name selects a different review history.', key: '[author] name' },
-	{ id: 'quilt.name', section: 'general', name: 'Name', what: 'What the quilt is called, at the top of the column.', key: '[quilt] name' },
-	{ id: 'quilt.prefix', section: 'general', name: 'Id prefix', what: "Starts every new result's id.", key: '[quilt] prefix' },
-	{ id: 'quilt.engine', section: 'general', name: 'TeX engine', what: "The default; a document's own `% !TEX program` line wins.", key: '[quilt] engine' },
-	{ id: 'quilt.history', section: 'general', name: 'History folder', what: 'Where loom keeps every recorded version and landmark.', key: '[quilt] history' },
-	{ id: 'quilt.home', section: 'documents', name: 'Front door', what: "What the viewer opens when you have nothing open. Unset, the quilt's README.", key: '[quilt] home' },
-	{ id: 'quilt.main', section: 'documents', name: 'Default document', what: 'The LaTeX document loom compiles and reads macros from when the quilt holds several.', key: '[quilt] main' },
-	{ id: 'quilt.research_state', section: 'documents', name: 'Research state', what: 'The page an agent keeps on where the work stands, and you edit.', key: '[quilt] research_state' },
+	{ id: 'author', section: 'profile', name: 'Your name', what: 'Who your acceptances and annotations are recorded as. A different name selects a different review history.' },
+	{ id: 'quilt.name', section: 'general', name: 'Name', what: 'What the quilt is called, at the top of the column.' },
+	{ id: 'quilt.prefix', section: 'general', name: 'Id prefix', what: "Starts every new result's id." },
+	{ id: 'quilt.engine', section: 'general', name: 'TeX engine', what: "The default; a document's own `% !TEX program` line wins." },
+	{ id: 'quilt.history', section: 'general', name: 'History folder', what: 'Where loom keeps every recorded version and landmark.' },
+	{ id: 'quilt.home', section: 'documents', name: 'Front door', what: "What the viewer opens when you have nothing open. Unset, the quilt's README." },
+	{ id: 'quilt.main', section: 'documents', name: 'Default document', what: 'The LaTeX document loom compiles and reads macros from when the quilt holds several.' },
+	{ id: 'quilt.research_state', section: 'documents', name: 'Research state', what: 'The page an agent keeps on where the work stands, and you edit.' },
 	{ id: 'annotation-types', section: 'annotations', name: 'Annotation types', what: 'The types an annotation may carry: each one’s name and look, whether it stays open until resolved, and its instructions for agents.' },
 	{ id: 'margin-marks', section: 'annotations', name: 'Show annotation marker in margin', what: 'An icon in the right margin beside each annotation and pending change, which opens it. Off, the marks in the text still open them. Kept in this browser, for every quilt.' },
-	{ id: 'notes.dir', section: 'notes', name: notes.settings.dir, what: notes.settings.dirWhat, key: '[notes] dir' },
+	{ id: 'notes.dir', section: 'notes', name: notes.settings.dir, what: notes.settings.dirWhat },
 	{ id: 'notes.command', section: 'notes', name: notes.settings.command, what: notes.settings.commandWhat },
-	{ id: 'agents.deny', section: 'agents', name: 'Where agents may not write', what: "Patterns as in `.gitignore`, from the quilt's top. An agent may edit every other file in place; an edit to an accepted block shows it changed, and you keep or undo each edit in Review.", key: '[agents] deny' },
+	{ id: 'agents.deny', section: 'agents', name: 'Where agents may not write', what: "Patterns as in `.gitignore`, from the quilt's top. An agent may edit every other file in place; an edit to an accepted block shows it changed, and you keep or undo each edit in Review." },
 	{ id: 'agents.protected', section: 'agents', name: 'Always protected', what: "Loom's records, this file and the research state, which an agent writes only through loom." },
 	{ id: 'agents.setup', section: 'agents', name: 'Use an agent here', what: 'An app set up here starts loom whenever a conversation in it opens this folder.' },
 	{ id: 'agents.told', section: 'agents', name: 'What an agent is told and sees', what: 'The same for every agent working here, in any app.' },
 	{ id: 'agents.apps', section: 'agents', name: 'Apps', what: 'Which agent apps start loom here.' },
 	{ id: 'modes.list', section: 'modes', name: modes.settings.name, what: modes.settings.what },
-	{ id: 'library.online', section: 'library', name: 'Use the network', what: 'Let the library look identifiers up (zbMATH Open, Crossref) and fetch papers from arXiv. Off, it uses only what is on this computer.', key: '[library] online' },
+	{ id: 'library.online', section: 'library', name: 'Use the network', what: 'Let the library look identifiers up (zbMATH Open, Crossref) and fetch papers from arXiv. Off, it uses only what is on this computer.' },
 	{ id: 'lean.on', section: 'lean', name: lean.settings.name, what: lean.settings.what },
 	{ id: 'lean.check', section: 'lean', name: lean.settings.check, what: lean.settings.checkWhat },
 	{ id: 'overleaf', section: 'overleaf', name: overleaf.settings.project, what: overleaf.settings.projectWhat }

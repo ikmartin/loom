@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A node's context (plan 0.13.3 C1–C2, phase 4): what it is in, where its text came from, what it depends on and rests on, what uses it, which discussions touched it, its detached annotations, and the local graph, in one column opened beside the node by its `context` control. Everything about the node that is not the node: the node's own pane draws its statement and proofs alone.
 	//
-	// **Laid out as its design is** (phase 5): the lists first — where the node is, where it came from, what it depends on and what uses it — each result named as a reader names it (`Theorem 3.1`, a proof as the proof of its result), the key kept as each link's title; the local graph last and small, one expand away.
+	// **Laid out as its design is** (phase 5): the lists first — where the node is, where it came from, what it depends on and what uses it — each result named as a reader names it (`Theorem 3.1`, a proof as the proof of its result), its key in no title; the local graph last and small, one expand away.
 	//
 	// **Absences are omitted, not reported.** A node no document reaches shows no `in` heading, and one nothing depends on shows no `depends on`: nobody asks whether a thing is in nothing, and a heading over "nothing" is the system answering a question the reader has not got.
 	import { store } from '$lib/manifest/client.svelte';
@@ -17,6 +17,9 @@
 	import { lookVars, typeName } from '$lib/review/annotationTypes';
 	import { versionLabel } from '$lib/badges';
 	import type { Item } from '../item';
+	import { docs } from '$lib/words/docs';
+
+	const words = docs.context;
 
 	let { item }: { item: Item } = $props();
 
@@ -49,7 +52,7 @@
 		return [...out.entries()].map(([k, kinds]) => ({ key: k, kinds: [...kinds].sort() }));
 	}
 	const acceptances = $derived([key, ...(node?.proofs ?? [])].flatMap((k, index) =>
-		(m.keys[k]?.acceptances ?? []).map((acceptance) => ({ ...acceptance, key: k, label: index === 0 ? 'Statement' : (node?.proofs.length ?? 0) > 1 ? `Proof ${index}` : 'Proof' }))));
+		(m.keys[k]?.acceptances ?? []).map((acceptance) => ({ ...acceptance, key: k, label: index === 0 ? words.statement : words.proof(index, node?.proofs.length ?? 0) }))));
 	const deps = $derived(collapse(m.edges.filter((e) => e.from === key || node?.proofs.includes(e.from)), 'to'));
 	const usedBy = $derived(collapse(m.edges.filter((e) => e.to === key || (node?.proofs ?? []).includes(e.to)), 'from'));
 	// what a person is shown of the node's diagnostics, the problems in its LaTeX; `unreachable`, "in no document" in the system's words, is loom's model's, and an absence here (C2)
@@ -60,11 +63,11 @@
 	let restsOpen = $state(false);
 	// Where the text came from: the landmark each of the node's keys was recorded at, said once per key that has one.
 	const versions = $derived(
-		[key, ...(node?.proofs ?? [])].map((k) => ({ key: k, label: versionLabel(m.keys[k]) })).filter((v) => v.label)
+		[key, ...(node?.proofs ?? [])].map((k, index) => ({ key: k, part: index === 0 ? words.statement : words.proof(index, node?.proofs.length ?? 0), label: versionLabel(m.keys[k]) })).filter((v) => v.label)
 	);
-	/** A row's link text: a short preview of what the annotation says, the words it quoted when it says nothing, its id when it has neither. The row links rather than restates (A2); the box holds the rest. */
+	/** A row's link text: a short preview of what the annotation says, the words it quoted when it says nothing, else that it is an annotation. The row links rather than restates (A2); the box holds the rest. */
 	function preview(a: Annotation): string {
-		const text = a.body_html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || (a.quote ? `“${a.quote.trim()}”` : a.id);
+		const text = a.body_html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || (a.quote ? `“${a.quote.trim()}”` : words.untitled);
 		return text.length > 90 ? text.slice(0, 89).trimEnd() + '…' : text;
 	}
 	// Both directions of every declared relation, grouped by kind; an unknown kind renders as a labelled link list like any other.
@@ -83,31 +86,30 @@
 	const label = (k: string) => {
 		if (m.nodes[k]) return nodeName(m, k);
 		const owner = m.keys[k]?.node;
-		return owner && m.nodes[owner] ? `proof of ${nodeName(m, owner)}` : k;
+		return owner && m.nodes[owner] ? words.proofOf(nodeName(m, owner)) : words.untitledResult;
 	};
 	const file = (path: string) => path.split('/').pop() ?? path;
 </script>
 
 <div class="page item context" data-testid="context">
 	{#if !node}
-		<h1>Unknown key</h1>
-		<p class="muted">The manifest has no node <code>{key}</code>.</p>
+		<p class="muted">{docs.node.gone}</p>
 	{:else}
 		{#if acceptances.length}
 			<details class="acceptances">
-				<summary>Accepted by</summary>
+				<summary>{words.accepted}</summary>
 				{#each acceptances as acceptance (`${acceptance.key}:${acceptance.author}`)}
-					<p>{acceptance.label} · {acceptance.author} · {acceptance.date.slice(0, 10)} · {acceptance.fresh ? 'Current' : 'Stale'}</p>
+					<p>{acceptance.label} · {acceptance.author} · {acceptance.date.slice(0, 10)} · {acceptance.fresh ? words.current : words.stale}</p>
 				{/each}
 			</details>
 		{/if}
 		{#if node.reached_by.length}
-			<RailList label="in">
+			<RailList label={words.in}>
 				{#each node.reached_by as mp (mp)}
 					<p class="crumb">
 						<a href={readUrl(mp, key)} title={mp}>{file(mp)}</a>
 						{#each chain(mp) as ck (ck)}
-							<span class="sep">›</span><a href={nodeUrl(ck)} title={ck}>{m.nodes[ck]?.title ?? ck}</a>
+							<span class="sep">›</span><a href={nodeUrl(ck)}>{nodeName(m, ck)}</a>
 						{/each}
 					</p>
 				{/each}
@@ -115,45 +117,45 @@
 		{/if}
 
 		{#if versions.length || node.tags.length}
-			<RailList label="from">
-				{#each versions as v (v.key)}<p class="line" data-testid="version"><code>{v.key}</code> {v.label}</p>{/each}
+			<RailList label={words.from}>
+				{#each versions as v (v.key)}<p class="line" data-testid="version">{v.part} · {v.label}</p>{/each}
 				{#if node.tags.length}<p class="line">{#each node.tags as t (t)}<a class="tag" href={tagUrl(t)}>#{t}</a> {/each}</p>{/if}
 			</RailList>
 		{/if}
 
 		{#if deps.length}
-			<RailList label="depends on">
+			<RailList label={words.dependsOn}>
 				<ul class="plain">
 					{#each deps as d (d.key)}
-						<li><a href={keyUrl(m, d.key)} title={d.key}>{label(d.key)}</a> <span class="faint">{d.kinds.join(', ')}</span></li>
+						<li><a href={keyUrl(m, d.key)}>{label(d.key)}</a> <span class="faint">{d.kinds.join(', ')}</span></li>
 					{/each}
 				</ul>
-				{#if closure.length}<p class="faint">read first: {closure.length} more</p>{/if}
+				{#if closure.length}<p class="faint">{words.readFirst(closure.length)}</p>{/if}
 			</RailList>
 			<!-- The graph answers "what would this disturb"; the stack answers "what does this rest on". Built only once opened: it renders other results in full. -->
 			<details class="closure-open" data-testid="closure-open" bind:open={restsOpen}>
-				<summary>what this rests on</summary>
+				<summary>{words.restsOn}</summary>
 				{#if restsOpen}<ClosurePanel center={key} />{/if}
 			</details>
 		{/if}
 
 		{#if usedBy.length}
-			<RailList label="used by">
+			<RailList label={words.usedBy}>
 				<ul class="plain">
 					{#each usedBy as d (d.key)}
-						<li><a href={keyUrl(m, d.key)} title={d.key}>{label(d.key)}</a> <span class="faint">{d.kinds.join(', ')}</span></li>
+						<li><a href={keyUrl(m, d.key)}>{label(d.key)}</a> <span class="faint">{d.kinds.join(', ')}</span></li>
 					{/each}
 				</ul>
 			</RailList>
 		{/if}
 
 		{#each relations as [kind, items] (kind)}
-			<RailList label={kind === 'see' ? 'see also' : kind}>
+			<RailList label={words.relation(kind)}>
 				<ul class="plain" data-testid="relations-{kind}">
 					{#each items as k (k)}
 						<li>
-							<a href={keyUrl(m, k)} title={k}>{label(k)}</a>
-							<span class="faint">{m.nodes[k]?.reached_by?.length ? m.nodes[k].reached_by.join(', ') : m.publishes.documents ? 'no document' : ''}</span>
+							<a href={keyUrl(m, k)}>{label(k)}</a>
+							<span class="faint">{m.nodes[k]?.reached_by?.length ? m.nodes[k].reached_by.join(', ') : m.publishes.documents ? words.noDocument : ''}</span>
 						</li>
 					{/each}
 				</ul>
@@ -161,7 +163,7 @@
 		{/each}
 
 		{#if threads.length}
-			<RailList label="discussions">
+			<RailList label={words.discussions}>
 				<ul class="plain">
 					{#each threads as t (t.id)}<li><a href={threadUrl(t.id)}>{t.title}</a></li>{/each}
 				</ul>
@@ -169,17 +171,17 @@
 		{/if}
 
 		{#if detached.length}
-			<RailList label="detached annotations">
+			<RailList label={words.detached}>
 				<ul class="plain" data-testid="detached-list">
 					{#each detached as a (a.id)}
-						<li class="ann-row"><span class="ann-dot" style={lookVars(a.look)} role="img" aria-label={typeName(m, a)} title={typeName(m, a)}></span><a href="quilt:{a.id}" title={a.id}>{preview(a)}</a></li>
+						<li class="ann-row"><span class="ann-dot" style={lookVars(a.look)} role="img" aria-label={typeName(m, a)} title={typeName(m, a)}></span><a href="quilt:{a.id}">{preview(a)}</a></li>
 					{/each}
 				</ul>
 			</RailList>
 		{/if}
 
 		{#if diagnostics.length}
-			<RailList label="diagnostics">
+			<RailList label={words.problems}>
 				<Diagnostics items={diagnostics} />
 			</RailList>
 		{/if}

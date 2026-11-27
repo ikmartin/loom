@@ -331,12 +331,6 @@ export const review = {
 	edits: {
 		/** A proposed edit's quiet line. */
 		by: (by: string) => `proposed by ${by}`,
-		/** A proposed edit's quiet line when its document has not compiled since an agent made it in place. */
-		broke: (doc: string, line: number) => `${file(doc)} has not compiled since this edit (line ${line})`,
-		/** Under an edit made in place that stopped its document compiling: who made it, and TeX's reason in words. */
-		inPlace: (by: string | null, doc: string, why: string, line: number) => `${by ? `${by} made this edit in place` : 'This edit was made in place'}. ${file(doc)} has not compiled since: ${why} (line ${line}).`,
-		/** TeX's reasons, as that line says them; one not here is shown as TeX gives it. */
-		errors: { 'Undefined control sequence': 'the command it adds is not defined' } as Record<string, string>,
 		/** Keeps a proposed edit. */
 		keep: 'keep',
 		/** Discards a suggested edit. */
@@ -387,7 +381,10 @@ export const review = {
 			'not-utf8': 'its file is not text loom can read.',
 			'not-writable': 'its file cannot be written.',
 			'outside-quilt': 'its file is outside the quilt.',
-			mirrored: 'its document mirrors Overleaf: make the change there, then choose Done in Overleaf.'
+			mirrored: 'its document mirrors Overleaf: make the change there, then choose Done in Overleaf.',
+			'not-kept': 'it is open again, so there is no keep of it to undo.',
+			'not-written': 'loom cannot take its words back out from its record; an earlier version of the file can be restored instead.',
+			'other-quilt': 'it was kept in another quilt.'
 		} as Record<string, string>,
 		/** The column's message when the last keep or discard could not be undone. */
 		notUndone: 'The last keep or discard could not be undone.'
@@ -633,6 +630,93 @@ export const review = {
 		/** Everything recorded's words for a file's version put back. */
 		restored: (name: string) => `Put ${name} back as a version`
 	},
+	/** The review of an agent's copy, opened from its row: the bar, the change shown, and what loom answered. Loom's own refusal is never shown: it is written for the command line. */
+	contribution: {
+		lead: (copy: string, source: string) => ['From ', copy, ` into ${source} · `] as const,
+		counts: (taken: number, left: number, undecided: number, clash: number) => `${taken} taken · ${left} left · ${undecided} to decide${clash ? ` · ${clash} can't be taken` : ''}`,
+		/** A change's state in the list of changes. */
+		says: { taken: 'taken', left: 'left out', undecided: 'to decide' } as Record<string, string>,
+		cannot: "can't be taken",
+		merged: ' · merged',
+		takeAll: 'Take all',
+		applying: 'Applying…',
+		apply: (n: number) => `Apply ${n} ${n === 1 ? 'change' : 'changes'}`,
+		previous: 'Previous change',
+		next: 'Next change',
+		taken: 'Taken',
+		take: 'Take it',
+		left: 'Left out',
+		leave: 'Leave it',
+		acceptHover: "Records your acceptance of this block's mathematics as it is written in, when you apply",
+		accept: 'accept as checked',
+		refresh: 'Refresh the copy',
+		about: (source: string) => `An agent's copy of ${source}. Take or leave each change; Apply writes the ones you took into ${source}, keeping it as it was first.`,
+		read: 'Read the copy',
+		noName: 'Choose your reviewer name in Settings to take changes.',
+		/** In place of the changes where loom could not compare the copy with its document. */
+		unreadable: 'Loom cannot compare this copy with your document now, so nothing of it can be taken. Ask your agent to look at the copy.',
+		mergedNote: 'You both changed it, and the edits fall apart line by line: what would be written holds both.',
+		removes: (source: string) => `The copy removes it from ${source}.`,
+		separate: 'It belongs to another document, so it is taken as a result of its own.',
+		sourceOnly: 'This changes its source, not its mathematics.',
+		yours: 'Yours',
+		copys: "The copy's",
+		both: 'With both edits',
+		isNew: 'New in this copy.',
+		removed: 'Removed.',
+		shared: (docs: string) => `This result is shared: it changes in ${docs} too.`,
+		bears: 'May bear on: ',
+		proseSource: 'Source of the prose and ordering',
+		/** What Apply did. */
+		took: (n: number, into: string, accepted: number, pending: number) => `Took ${n} ${n === 1 ? 'change' : 'changes'} into ${into}: ${accepted} accepted, ${pending} wait to be accepted. ${into} as it was is kept as a version.`,
+		/** After it, where the acceptance could not be recorded. */
+		notRecorded: ' Your acceptance could not be recorded, so the blocks wait to be accepted.',
+		/** After it, where blocks marked as checked were not accepted. */
+		dropped: (n: number) => ` ${n} marked as checked wait too, since what they rest on was not accepted.`,
+		refreshed: 'The copy now has your latest text wherever you changed it alone; a clash stays until it is reconciled.',
+		/** Loom's refusal of each step, said in the viewer's words; a refusal with a sentence of its own in the frame's words says that. */
+		refused: {
+			decide: 'Loom did not save that choice: the copy changed, or you chose in another tab. Reload Review and choose again.',
+			prepare: 'Loom could not prepare these changes: the copy or your document changed since you chose, or a change you took needs another you left out, as a new result needs the prose that places it. Choose again.',
+			apply: 'Loom did not write these changes: a file changed since they were prepared, so nothing was written. Apply again.',
+			refresh: 'Loom did not refresh the copy.'
+		}
+	},
+	/** Review › History › Sessions: the question before a session is deleted. */
+	deleteSession: {
+		/** Its heading and accessible name. */
+		title: (name: string) => `Delete “${name}”?`,
+		/** Its question. */
+		ask: 'Are you sure you want to delete this session?',
+		/** What deleting does and does not touch. */
+		says: 'The session is removed from view. Annotations belong to no session, so none goes with it.',
+		cancel: 'Cancel',
+		confirm: 'Delete'
+	},
+	/** The question-mark circle beside a page's title (Review's page where loom serves no lists, and Problems): what the page shows and what each state means. */
+	help: {
+		review: {
+			title: 'What the Your Changes page shows',
+			body: "The mathematics first: every statement and proof you have not accepted as it stands, one document at a time, each listed once with every reason it waits. Accepting records your reading of the text against what it rests on; it goes stale when either changes. Blocks taken in from an agent's copy or a pull are grouped by where they came from; what loom cannot accept says why in its row. Then the changes waiting to be kept, by document: suggestions not yet kept or discarded and edits made since your look in the places agents may edit, each a few words out and a few words in. Your own places, the config and each place agents are denied (Settings › Agents), are not watched, so an edit there is never listed. Keep writes a suggestion into its file, or takes an edit into your look; Discard drops a suggestion, or writes your words back over an edit, its text kept as a version first. Neither says whether the mathematics is right, and each acts as it does in the document. To do adds the open annotations from others.",
+			states: [
+				['changed since you accepted', 'the text, or something it rests on, changed after you accepted it'],
+				['taken in', "it came in from an agent's copy or a pull, and you have not accepted it since"],
+				['never accepted', 'nothing has been recorded about this text; these are listed and not counted'],
+				["can't be accepted yet", 'it is marked incomplete, it is a conjecture or question, its basis is not said, or something it rests on cannot be identified; the row says which'],
+				['suggestion', 'words someone proposes in place of yours, not yet in the file'],
+				['edit in the file', 'words that differ from what you last saw, whoever changed them, where the quilt reviews edits made in place']
+			]
+		},
+		problems: {
+			title: 'What the problems page shows',
+			body: "What is wrong in your own LaTeX, a document that did not compile among it, by whose it is to put right. Your files come first, and are what Review counts; an agent's copy is the agent's, or yours to leave out when you take it back. What loom notices about its own picture of the quilt is your agent's to keep, and is not shown here.",
+			states: [
+				['error', 'a reader would notice it: a document that did not compile, a reference to nothing'],
+				['warning', 'probably a mistake, though the document still reads'],
+				['remark', 'worth knowing, and not wrong']
+			]
+		}
+	} as Record<string, { title: string; body: string; states: [string, string][] }>,
 	/** Names joined as a sentence lists them. */
 	listed
 } as const;

@@ -7,7 +7,7 @@ const routes: [string, string][] = [
 	['/node/sy-0200', 'Results'],
 	['/master/drafting/main', 'Widgets, gadgets'],
 	['/review', 'Your Changes'],
-	['/review/proposed', 'Proposed Changes'],
+	['/review/proposed', 'Proposed edits'],
 	['/review/record', 'History'],
 	['/review/record/sessions', 'History'],
 	['/review/record/acts', 'History'],

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// One review of an agent's copy (plan 0.25.2): every change it makes, named as the person reads it and grouped by section in the list the counter opens (`ChangeList`), decided one at a time in a bar that never moves, the two texts compared across the page's full width. Take it and Leave it are saved at once and step to the next change to decide; Apply writes what was taken into the paper in one press, keeping the paper as it was first and accepting the blocks the person marked as checked. Whatever loom answers, done or refused, is said in the bar beside the controls that asked.
+	// One review of an agent's copy (plan 0.25.2), its words Review's (`words/review.ts`, `contribution`): every change it makes, named as the person reads it and grouped by section in the list the counter opens (`ChangeList`), decided one at a time in a bar that never moves, the two texts compared across the page's full width. Take it and Leave it are saved at once and step to the next change to decide; Apply writes what was taken into the paper in one press, keeping the paper as it was first and accepting the blocks the person marked as checked. Whatever loom answers, done or refused, is said in the bar beside the controls that asked, in the viewer's words and never loom's message.
 	import ActionBar from './ActionBar.svelte';
 	import AppliedUndo from './AppliedUndo.svelte';
 	import { undoOf, type Answer } from './applied';
@@ -13,6 +13,14 @@
 	import { can, write } from '$lib/write';
 	import { onMount } from 'svelte';
 	import { acceptFor, decision, itemsOf, stateOf, takeAll, tally, type Decision, type Item } from './contribution';
+	import { keyName } from '$lib/workspace/names';
+	import { said } from '$lib/library/said';
+	import type { ApiError } from '$lib/library/api';
+	import { review } from '$lib/words/review';
+
+	const words = review.contribution;
+	/** A refusal of loom's in the viewer's words: one for the step where loom refused the copy, else the frame's sentence for its code. */
+	const refusal = (e: ApiError | undefined, step: keyof typeof words.refused): string => (!e || e.code === 'adoption-refused' ? words.refused[step] : said(e));
 
 	let { contribution: c, onanswer }: { contribution: AdoptionReview; onanswer?: (a: Answer | null) => void } = $props();
 	// the last answer, said in the bar and handed to the page, which keeps saying it once this contribution is gone
@@ -38,8 +46,7 @@
 	const index = $derived(Math.max(0, items.findIndex((i) => i.key === active)));
 	const current = $derived<Item | undefined>(items[index]);
 	const standing = $derived(current ? stateOf(c, current) : 'undecided');
-	const SAYS: Record<string, string> = { taken: 'taken', left: 'left out', undecided: 'to decide' };
-	const says = (i: Item) => (i.can ? SAYS[stateOf(c, i)] : "can't be taken") + (i.change?.class === 'merged' ? ' · merged' : '');
+	const says = (i: Item) => (i.can ? words.says[stateOf(c, i)] : words.cannot) + (i.change?.class === 'merged' ? words.merged : '');
 	const listed = $derived(items.map((i) => ({ key: i.key, name: i.name, says: says(i), state: i.can ? stateOf(c, i) : 'clash', section: i.section, also: i.detail })));
 
 	function go(to: number): void {
@@ -61,7 +68,7 @@
 			say(null);
 			if (from) onward(from);
 		} else {
-			say({ text: done.error?.message ?? 'Loom did not save that choice.', refused: true });
+			say({ text: refusal(done.error, 'decide'), refused: true });
 			await landed();
 		}
 		busy = '';
@@ -83,7 +90,7 @@
 		const taken = n.taken;
 		const prepared = await write('adopt-preview', { copy, fingerprint });
 		if (!prepared.ok) {
-			say({ text: prepared.error?.message ?? 'Loom could not prepare these changes.', refused: true });
+			say({ text: refusal(prepared.error, 'prepare'), refused: true });
 			busy = '';
 			return;
 		}
@@ -93,23 +100,19 @@
 		if (done.ok) {
 			const o = done.result as unknown as IncorporationOutcome;
 			const into = file(source);
-			// marked as checked yet not accepted: loom says why when recording failed, and otherwise it is because what they rest on was not accepted
+			// marked as checked yet not accepted: recording failed, or what they rest on was not accepted
 			const dropped = checked.filter((k) => choices.keys.includes(k)).length - accept.length;
-			const why = o.acceptance_error ? ` ${o.acceptance_error}` : dropped > 0 ? ` ${dropped} marked as checked wait too, since what they rest on was not accepted.` : '';
-			say({
-				text: `Took ${taken} ${taken === 1 ? 'change' : 'changes'} into ${into}: ${o.accepted?.length ?? 0} accepted, ${o.pending?.length ?? 0} wait to be accepted. ${into} as it was is kept as a version.${why}`,
-				refused: false,
-				undo: await undoOf(source, o.landmark)
-			});
+			const why = o.acceptance_error ? words.notRecorded : dropped > 0 ? words.dropped(dropped) : '';
+			say({ text: words.took(taken, into, o.accepted?.length ?? 0, o.pending?.length ?? 0) + why, refused: false, undo: await undoOf(source, o.landmark) });
 			checked = [];
 			await landed();
-		} else say({ text: done.error?.message ?? 'Loom did not write these changes.', refused: true });
+		} else say({ text: refusal(done.error, 'apply'), refused: true });
 		busy = '';
 	}
 	async function refreshCopy(): Promise<void> {
 		busy = 'refresh';
 		const done = await write('adopt-refresh', { copy: c.copy });
-		say({ text: done.ok ? 'The copy now has your latest text wherever you changed it alone; a clash stays until it is reconciled.' : (done.error?.message ?? 'Loom did not refresh the copy.'), refused: !done.ok });
+		say({ text: done.ok ? words.refreshed : refusal(done.error, 'refresh'), refused: !done.ok });
 		if (done.ok) await landed();
 		busy = '';
 	}
@@ -118,39 +121,39 @@
 <section class="contribution" data-testid="contribution" data-copy={c.copy}>
 	<ActionBar testid="contribution-bar" said={answer?.text ?? ''} refused={answer?.refused}>
 		{#snippet lead()}
-			<b>From {file(c.copy)}</b> into {file(c.source)} · {n.taken} taken · {n.left} left · {n.undecided} to decide{#if n.clash}{' · '}{n.clash} can't be taken{/if}
+			{@const [from, copy, into] = words.lead(file(c.copy), file(c.source))}{from}<b>{copy}</b>{into}{words.counts(n.taken, n.left, n.undecided, n.clash)}
 		{/snippet}
 		{#snippet actions()}
 			{#if acts}
-				<button class="btn" disabled={!!busy || n.undecided + n.left === 0} onclick={() => save(takeAll(items))} data-testid="take-all">Take all</button>
-				<button class="btn primary" disabled={!!busy || !n.taken} onclick={apply} data-testid="apply">{busy === 'apply' ? 'Applying…' : `Apply ${n.taken} ${n.taken === 1 ? 'change' : 'changes'}`}</button>
+				<button class="btn" disabled={!!busy || n.undecided + n.left === 0} onclick={() => save(takeAll(items))} data-testid="take-all">{words.takeAll}</button>
+				<button class="btn primary" disabled={!!busy || !n.taken} onclick={apply} data-testid="apply">{busy === 'apply' ? words.applying : words.apply(n.taken)}</button>
 			{/if}
 			{#if answer?.undo}<AppliedUndo undo={answer.undo} onanswer={say} />{/if}
 		{/snippet}
 		{#snippet below()}
 			<div class="step">
-				<button class="btn small quiet" disabled={index <= 0} onclick={() => go(index - 1)} aria-label="Previous change" data-testid="prev-change">‹</button>
+				<button class="btn small quiet" disabled={index <= 0} onclick={() => go(index - 1)} aria-label={words.previous} data-testid="prev-change">‹</button>
 				<ChangeList changes={listed} active={current?.key ?? ''} onpick={(key) => (active = key)} findable />
-				<button class="btn small quiet" disabled={index >= items.length - 1} onclick={() => go(index + 1)} aria-label="Next change" data-testid="next-change">›</button>
+				<button class="btn small quiet" disabled={index >= items.length - 1} onclick={() => go(index + 1)} aria-label={words.next} data-testid="next-change">›</button>
 				<span class="now">{current?.name ?? ''}</span>
 				{#if acts && current}
 					{#if current.can}
-						<button class="btn small" class:primary={standing === 'taken'} aria-pressed={standing === 'taken'} disabled={!!busy} onclick={() => choose(current, true)} data-testid="take-it">{standing === 'taken' ? 'Taken' : 'Take it'}</button>
-						<button class="btn small" aria-pressed={standing === 'left'} disabled={!!busy} onclick={() => choose(current, false)} data-testid="leave-it">{standing === 'left' ? 'Left out' : 'Leave it'}</button>
+						<button class="btn small" class:primary={standing === 'taken'} aria-pressed={standing === 'taken'} disabled={!!busy} onclick={() => choose(current, true)} data-testid="take-it">{standing === 'taken' ? words.taken : words.take}</button>
+						<button class="btn small" aria-pressed={standing === 'left'} disabled={!!busy} onclick={() => choose(current, false)} data-testid="leave-it">{standing === 'left' ? words.left : words.leave}</button>
 						{#if current.kind === 'result'}
-							<label class="accept" title="Records your acceptance of this block's mathematics as it is written in, when you apply"><input type="checkbox" checked={checked.includes(current.key)} disabled={standing !== 'taken' || !!busy} onchange={(e) => toggle(current.key, e.currentTarget.checked)} data-testid="accept-checked" /> accept as checked</label>
+							<label class="accept" title={words.acceptHover}><input type="checkbox" checked={checked.includes(current.key)} disabled={standing !== 'taken' || !!busy} onchange={(e) => toggle(current.key, e.currentTarget.checked)} data-testid="accept-checked" /> {words.accept}</label>
 						{/if}
 					{:else}
 						<span class="why" data-testid="cannot-take">{current.why}</span>
-						<button class="btn small" disabled={!!busy} onclick={refreshCopy} data-testid="refresh-copy">Refresh the copy</button>
+						<button class="btn small" disabled={!!busy} onclick={refreshCopy} data-testid="refresh-copy">{words.refresh}</button>
 					{/if}
 				{/if}
 			</div>
 		{/snippet}
 	</ActionBar>
-	<p class="lead">An agent's copy of {file(c.source)}. Take or leave each change; Apply writes the ones you took into {file(c.source)}, keeping it as it was first. <a href={masterUrl(c.copy)}>Read the copy</a></p>
-	{#each c.issues as issue, i (i)}<Said text={issue} refused />{/each}
-	{#if writable && !reviewer}<p class="muted">Choose your reviewer name in Settings to take changes.</p>{/if}
+	<p class="lead">{words.about(file(c.source))} <a href={masterUrl(c.copy)}>{words.read}</a></p>
+	{#if c.issues.length}<Said text={words.unreadable} refused />{/if}
+	{#if writable && !reviewer}<p class="muted">{words.noName}</p>{/if}
 	<div>
 		<div class="change" data-testid="change-shown">
 			{#if current}
@@ -158,29 +161,29 @@
 				{#if current.detail}<p class="detail">{current.detail}</p>{/if}
 				{#if current.kind === 'result' && current.change}
 					{@const ch = current.change}
-					{#if ch.class === 'merged'}<p class="note" data-testid="merged-note">You both changed it, and the edits fall apart line by line: what would be written holds both.</p>{/if}
-					{#if ch.class === 'removed'}<p class="note">The copy removes it from {file(c.source)}.</p>{/if}
-					{#if ch.class === 'separate-result'}<p class="note">It belongs to another document, so it is taken as a result of its own.</p>{/if}
-					{#if !ch.math_changed && ch.class !== 'new' && ch.class !== 'removed'}<p class="note">This changes its source, not its mathematics.</p>{/if}
+					{#if ch.class === 'merged'}<p class="note" data-testid="merged-note">{words.mergedNote}</p>{/if}
+					{#if ch.class === 'removed'}<p class="note">{words.removes(file(c.source))}</p>{/if}
+					{#if ch.class === 'separate-result'}<p class="note">{words.separate}</p>{/if}
+					{#if !ch.math_changed && ch.class !== 'new' && ch.class !== 'removed'}<p class="note">{words.sourceOnly}</p>{/if}
 					<div class="pair">
-						<div><h4>Yours</h4>{#if ch.local}<Fragment path={ch.local} />{:else}<p class="muted">New in this copy.</p>{/if}</div>
-						<div><h4>{ch.class === 'merged' ? 'With both edits' : "The copy's"}</h4>{#if ch.incoming}<Fragment path={ch.incoming} macroSet={ch.incoming_macros} isolatedMacros />{:else}<p class="muted">{ch.class === 'removed' ? 'Removed.' : ch.proposed}</p>{/if}</div>
+						<div><h4>{words.yours}</h4>{#if ch.local}<Fragment path={ch.local} />{:else}<p class="muted">{words.isNew}</p>{/if}</div>
+						<div><h4>{ch.class === 'merged' ? words.both : words.copys}</h4>{#if ch.incoming}<Fragment path={ch.incoming} macroSet={ch.incoming_macros} isolatedMacros />{:else}<p class="muted">{ch.class === 'removed' ? words.removed : ch.proposed}</p>{/if}</div>
 					</div>
-					{#if ch.documents.length > 1}<p class="muted">This result is shared: it changes in {ch.documents.filter((d) => d !== c.source).map(file).join(', ')} too.</p>{/if}
-					{#if ch.affected.length}<p class="muted">May bear on: {#each ch.affected as a, i (a.key)}{i ? ', ' : ''}<a href={placeUrl(m, a.key)}>{a.key}</a>{/each}</p>{/if}
+					{#if ch.documents.length > 1}<p class="muted">{words.shared(ch.documents.filter((d) => d !== c.source).map(file).join(', '))}</p>{/if}
+					{#if ch.affected.length}<p class="muted">{words.bears}{#each ch.affected as a, i (a.key)}{i ? ', ' : ''}<a href={placeUrl(m, a.key)}>{keyName(m, a.key)}</a>{/each}</p>{/if}
 				{:else if current.kind === 'prose'}
 					{#if c.document_comparison}
 						{@const pair = c.document_comparison}
 						<div class="pair">
-							<div><h4>Yours</h4>{#if pair.local}<Fragment path={pair.local} />{:else}<pre>{pair.current}</pre>{/if}</div>
-							<div><h4>The copy's</h4>{#if pair.incoming}<Fragment path={pair.incoming} macroSet={pair.incoming_macros} isolatedMacros />{:else}<pre>{pair.proposed}</pre>{/if}</div>
+							<div><h4>{words.yours}</h4>{#if pair.local}<Fragment path={pair.local} />{:else}<pre>{pair.current}</pre>{/if}</div>
+							<div><h4>{words.copys}</h4>{#if pair.incoming}<Fragment path={pair.incoming} macroSet={pair.incoming_macros} isolatedMacros />{:else}<pre>{pair.proposed}</pre>{/if}</div>
 						</div>
 					{/if}
-					<details><summary>Source of the prose and ordering</summary><pre>{c.document_diff}</pre></details>
+					<details><summary>{words.proseSource}</summary><pre>{c.document_diff}</pre></details>
 				{:else if current.kind === 'preamble'}
 					<div class="pair">
-						<div><h4>Yours</h4><pre>{c.preamble_current}</pre></div>
-						<div><h4>The copy's</h4><pre>{c.preamble_proposed}</pre></div>
+						<div><h4>{words.yours}</h4><pre>{c.preamble_current}</pre></div>
+						<div><h4>{words.copys}</h4><pre>{c.preamble_proposed}</pre></div>
 					</div>
 				{/if}
 			{/if}

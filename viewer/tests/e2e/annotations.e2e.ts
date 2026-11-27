@@ -661,7 +661,8 @@ test.describe('the popup', () => {
 		await page.reload();
 		const p = await openPopup(page, 'a-2026-09-16-ecnav2');
 		await p.getByTestId('popup-delete').click();
-		await expect(p.getByTestId('popup-said')).toHaveText('an agent deletes only its own annotations');
+		// loom's own message is for the command line; the popup says the viewer's sentence
+		await expect(p.getByTestId('popup-said')).toHaveText('Loom could not do that.');
 		await expect(page.getByTestId('deleted')).toHaveCount(0);
 	});
 });
@@ -1275,7 +1276,7 @@ test.describe('Settings › Annotations', () => {
 	test('without a publisher that saves types it is shown as published', async ({ page }) => {
 		await page.goto('/master/drafting/main');
 		await settings(page, 'annotations');
-		await expect(page.getByTestId('settings-read-only')).toContainText('.loom/records/annotation-types.toml');
+		await expect(page.getByTestId('settings-read-only')).toContainText('where loom serves this quilt');
 		await expect(page.getByTestId('type-name')).toBeDisabled();
 		await expect(page.getByTestId('types-add')).toHaveCount(0);
 	});

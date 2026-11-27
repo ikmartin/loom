@@ -120,6 +120,15 @@ export const frame = {
 		'no-reviewer': 'Loom does not know your name yet. Set it in Settings, under Profile, and try again.',
 		'no-source': 'Loom holds no TeX source of this work to read its results from.',
 		'no-space': 'There is not enough room on this computer for the file.',
+		'no-such-annotation': 'That annotation is no longer there.',
+		'no-such-change': 'That change no longer waits for you.',
+		'no-such-document': 'That document is no longer in the quilt.',
+		'no-such-edit': 'That edit no longer waits for you.',
+		'no-such-key': 'That result is no longer in your documents.',
+		'no-such-mode': 'This quilt has no mode of that name now.',
+		'no-such-quote': 'Loom could not find those words in the text, so nothing was written.',
+		'no-such-session': 'That session is no longer there.',
+		'no-such-version': 'That version is not kept.',
 		'no-such-citation': 'That citation is no longer there, or it names a result now.',
 		'no-such-incoming': 'That file is no longer waiting to be taken in. Drop it again.',
 		'no-such-intake': 'There is nothing of that drop left to undo.',
@@ -136,6 +145,16 @@ export const frame = {
 		'not-a-candidate': 'That is not one of the works it might be.',
 		'not-a-document': 'Loom takes PDFs, TeX sources and .bib files, and this is none of them.',
 		'not-found': 'Those words are not in the paper.',
+		'not-a-task': 'That is not a box loom can tick.',
+		'not-open': 'It was kept or discarded already.',
+		'not-openable': 'Loom never opens a file that may run code.',
+		'not-utf8': 'That file is not text loom can read, so it was left as it is.',
+		'not-writable': 'That file cannot be written.',
+		mirrored: 'Its document mirrors Overleaf: make the change there.',
+		'outside-quilt': 'That file is outside the quilt.',
+		'unknown-version': 'That version is not kept.',
+		'settings-refused': 'Nothing was saved: a setting was refused.',
+		stale: 'It changed since the page was drawn, so nothing was written. Look at it again.',
 		'not-last': 'Something done after it has to be undone first.',
 		'not-new': 'Results have been read from it since, so it stays. Delete the work instead.',
 		'not-readable': 'Loom holds no copy of this paper it can read on this computer.',
@@ -149,6 +168,15 @@ export const frame = {
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
 		unreachable: 'The service that looks papers up could not be reached. Try again later.'
 	} as Record<string, string>,
+	/** Settings › Profile: the name field and where the name now comes from. */
+	profile: {
+		field: 'Your name',
+		save: 'Save',
+		saving: 'Saving…',
+		unset: 'not set',
+		/** Under the field, where no name was saved and git's is used. */
+		fromGit: "From git's name for you, until you save one here."
+	},
 	/** The note above the document in the left pane, for what the quilt's first page has to say; elsewhere than a document, the same words float near the foot of the window. */
 	note: {
 		/** A quilt just made from a paper whose working copy does not typeset as the paper did (the home page opens it so). */
@@ -199,6 +227,6 @@ export const frame = {
 		/** The heading of the page shown when the manifest could not be read. */
 		problems: 'Problems',
 		/** The page shown while the manifest is loading. */
-		loading: 'Loading manifest…'
+		loading: 'Loading the quilt…'
 	}
 } as const;

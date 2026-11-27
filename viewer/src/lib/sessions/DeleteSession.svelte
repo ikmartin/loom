@@ -1,6 +1,9 @@
 <script lang="ts">
-	// The delete confirmation (plan 0.13.1, §18's mockup): what deleting a session does and does not touch, and the escape hatch, since purging is deliberately terminal-only and the sentence naming it is the only place a reader learns it exists.
+	// The delete confirmation (plan 0.13.1, §18's mockup): what deleting a session does and does not touch. Erasing its transcript for good is an agent's, and is not offered here.
 	import Popover from '$lib/components/Popover.svelte';
+	import { review } from '$lib/words/review';
+
+	const words = review.deleteSession;
 
 	let { title, onCancel, onDelete }: { title: string; onCancel: () => void; onDelete: () => void } = $props();
 
@@ -8,14 +11,14 @@
 	$effect(() => box?.querySelector<HTMLButtonElement>('[data-testid=delete-confirm]')?.focus());
 </script>
 
-<Popover modal open testid="delete-session" label="Delete “{title}”?" onclose={onCancel}>
+<Popover modal open testid="delete-session" label={words.title(title)} onclose={onCancel}>
 	<div class="modal" bind:this={box}>
-		<h3 id="delete-title">Delete “{title}”?</h3>
-		<p>Are you sure you want to delete this session?</p>
-		<p data-testid="delete-says">The session is removed from view. Annotations belong to no session, so none goes with it; <code>loom session delete --purge</code> erases its transcript for good.</p>
+		<h3 id="delete-title">{words.title(title)}</h3>
+		<p>{words.ask}</p>
+		<p data-testid="delete-says">{words.says}</p>
 		<div class="buttons">
-			<button type="button" data-testid="delete-cancel" onclick={onCancel}>Cancel</button>
-			<button type="button" class="destroy" data-testid="delete-confirm" onclick={onDelete}>Delete</button>
+			<button type="button" data-testid="delete-cancel" onclick={onCancel}>{words.cancel}</button>
+			<button type="button" class="destroy" data-testid="delete-confirm" onclick={onDelete}>{words.confirm}</button>
 		</div>
 	</div>
 </Popover>
@@ -38,12 +41,6 @@
 		font-size: 14px;
 		line-height: 1.5;
 		color: var(--ink-soft);
-	}
-	code {
-		font-size: 12.5px;
-		background: var(--leaf);
-		padding: 1px 4px;
-		border-radius: var(--rad-pill);
 	}
 	.buttons {
 		display: flex;

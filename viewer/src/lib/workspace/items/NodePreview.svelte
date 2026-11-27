@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A node, rendered small for a hover card (plan 0.13.3 H1–H3): its label, number, id and state, and its statement typeset — proofs hidden, the text clamped by a fade rather than cut. A section says how many entries it holds and no more: its fragment is the whole section, too much to fetch and typeset for a glance.
+	// A node, rendered small for a hover card (plan 0.13.3 H1–H3): its label, number and state, its id only where Settings › Show ids is on, and its statement typeset — proofs hidden, the text clamped by a fade rather than cut. A section says how many entries it holds and no more: its fragment is the whole section, too much to fetch and typeset for a glance.
 	// A node item at one of its regions (`regionAt`), a labelled equation, is drawn as that display alone: its number and what it stands in, then the display cut from the node's fragment, a section's too, and typeset as the page sets it. Where the fragment holds no such display, the node's own card stands.
 	import { tick } from 'svelte';
 	import { displayNode } from '$lib/nodes/display';
@@ -11,6 +11,8 @@
 	import Badge from '$lib/components/Badge.svelte';
 	import { regionAt, type Item } from '../item';
 	import { regionName } from '../names';
+	import { prefs } from '$lib/prefs.svelte';
+	import { docs } from '$lib/words/docs';
 
 	let { item, onresize = () => {}, master = '', persistent = false }: { item: Item; onresize?: () => void; master?: string; persistent?: boolean } = $props();
 
@@ -73,19 +75,19 @@
 {#if node && region && named && drawsDisplay}
 	<p class="head">
 		<span class="label">{named.number}</span>
-		<span class="title">in {named.within}</span>
-		<span class="id">{region}</span>
+		<span class="title">{docs.preview.within(named.within)}</span>
+		{#if prefs.ids}<span class="id">{region}</span>{/if}
 	</p>
 	<div class="body fragment display" bind:this={body} data-testid="preview-display">{@html html}</div>
 {:else if node}
 	<p class="head">
 		<span class="label">{identity.name}</span>
 		{#if identity.context}<span class="title">{identity.context}</span>{/if}
-		<span class="id">{node.id}</span>
+		{#if prefs.ids}<span class="id">{node.id}</span>{/if}
 	</p>
 	<p class="state"><Badge parts={nodeBadge(m, node)} /></p>
 	{#if node.kind === 'section'}
-		{#if node.children.length}<p class="more">{node.children.length} {node.children.length === 1 ? 'entry' : 'entries'} in this section</p>{/if}
+		{#if node.children.length}<p class="more">{docs.preview.entries(node.children.length)}</p>{/if}
 	{:else}
 		<div class="body fragment" class:persistent bind:this={body}>{@html html}</div>
 	{/if}

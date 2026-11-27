@@ -229,7 +229,7 @@
 			width="100%"
 			{height}
 			role="img"
-			aria-label="the neighbourhood of {centreId}: {nodes.length} nodes"
+			aria-label="the neighbourhood of {centreId}: {nodes.length} results"
 			onpointerdown={(e) => down(e)}
 			onpointermove={move}
 			onpointerup={up}

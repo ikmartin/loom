@@ -27,7 +27,7 @@
 	<span class="slot">{#if paper}<Mark kind={paper} />{/if}</span>
 	<span class="slot">{#if lean}<Mark kind={lean} />{/if}</span>
 	<span class="tx">{#if asked}<span class="who">{asked.by}</span>{asked.rest}{:else}{line(row, reviewNames)}{/if}</span>
-	{#if meta}<span class="meta" class:problem={row.kind === 'edits' && row.broke}>{meta}</span>{/if}
+	{#if meta}<span class="meta">{meta}</span>{/if}
 {/snippet}
 
 <div class="rr" class:open data-testid="review-row" data-kind={row.kind} data-ref={row.kind === 'fetch' ? row.ref : undefined}>

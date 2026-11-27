@@ -36,12 +36,12 @@ const ACCEPTED: [string, string, string, string][] = [
 	[BOUNDS, 'lem:thin', 'Lemma 2', p(`${ch('f', 'Let', 'Suppose')} ${m('W')} is thin.`)]
 ];
 
-const EDITS: { change: string; type: 'suggested' | 'edit'; doc: string; key: string; where: string; html: string; broke?: { line: number; error: string } }[] = [
+const EDITS: { change: string; type: 'suggested' | 'edit'; doc: string; key: string; where: string; html: string }[] = [
 	// keyed as the static suite's main.tex keys its proof, so see it lands on a block that is there
 	{ change: 'c-1a2b3c4d', type: 'suggested', doc: MAIN, key: 'sy-0002/proof', where: 'proof of Theorem 3.1', html: p(`Since ${m('\\mathcal{Z}(Q) = \\ker \\partial')}, ${ch('g', 'the rank of the kernel is the rank of the source less the rank of the image', `by rank–nullity, ${m('\\operatorname{rank} \\mathcal{Z}(Q) = |A(Q)| - \\operatorname{rank} \\partial')}`)}, and Proposition 2.1 gives ${m('\\operatorname{rank} \\partial')}.`) },
 	{ change: 'c-2b3c4d5e', type: 'suggested', doc: BOUNDS, key: 'thm:radius', where: 'Theorem 1', html: p(`The bound follows from ${ch('h', '[Smi24]', '[Smi24, Proposition 3.4]')}.`) },
 	{ change: 'c-3c4d5e6f', type: 'suggested', doc: MAIN, key: 'def:divergence', where: 'Definition 2.2', html: p(`the weight arriving at ${m('v')} less the weight ${ch('i', 'leaving at', 'leaving')} it.`) },
-	{ change: 'c-4d5e6f70', type: 'edit', doc: BOUNDS, key: 'lem:thin', where: 'Lemma 2', html: p(`${ch('j', 'Let', 'Suppose')} ${m('W')} is thin ${ch('k', '', 'and its boundary lies in \\Wid')}.`), broke: { line: 14, error: 'Undefined control sequence' } },
+	{ change: 'c-4d5e6f70', type: 'edit', doc: BOUNDS, key: 'lem:thin', where: 'Lemma 2', html: p(`${ch('j', 'Let', 'Suppose')} ${m('W')} is thin ${ch('k', '', 'and its boundary lies in \\Wid')}.`) },
 	{ change: 'c-5e6f7081', type: 'suggested', doc: MAIN, key: 'sec:open', where: 'Section 4, second paragraph', html: p(`…${ch('l', '', ' The case of infinite quivers is open; see the survey [4].')}`) }
 ];
 
@@ -176,7 +176,7 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 		const row = `edits:${e.change}`;
 		fragments[`fixture/edits/${e.change}.html`] = e.html;
 		bodies[row] = { statement: { fragment: `fixture/edits/${e.change}.html` } };
-		return { row, kind: 'edits', docs: [e.doc], change: e.change, type: e.type, doc: e.doc, key: e.key, where: e.where, by: e.type === 'suggested' ? 'Claude Code' : null, state: 'ready', broke: e.broke ?? null };
+		return { row, kind: 'edits', docs: [e.doc], change: e.change, type: e.type, doc: e.doc, key: e.key, where: e.where, by: e.type === 'suggested' ? 'Claude Code' : null, state: 'ready' };
 	});
 	rows.push(...questions, ...fetch, ...cited, ...checks, ...attest, ...accepted, ...attested, ...edits);
 

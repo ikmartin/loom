@@ -1,5 +1,6 @@
 <script lang="ts">
 	// On a version's toolbar: ‹ older and newer › through its document's versions in this tab's place, `live text`, `compare with now`, and `restore…`, one line that never wraps. While the two panes are compared it holds older and newer alone, the counter and stop standing beside it. Restore asks in the line under the toolbar, then puts the document back as this version, its text now kept as a version, and turns to the live text, the answer staying in that line. A version that cannot be put back says why on the button.
+	import { refusalOf } from '$lib/library/said';
 	import { onDestroy } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { landed } from '$lib/manifest/updating.svelte';
@@ -47,7 +48,7 @@
 		const done = await write('history-restore', { document: draft, version: item.id });
 		asking = undefined;
 		if (!done.ok) {
-			setStrip(index, { text: done.error?.message ?? 'The publisher refused it.', testid: 'version-said', refused: true });
+			setStrip(index, { text: refusalOf(done.error), testid: 'version-said', refused: true });
 			return;
 		}
 		await landed();

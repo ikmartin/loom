@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Beside a document opened from Your Changes (`?review=KEY`), inside the document's side panel: the block, why it waits, the change when it changed since it was accepted (`SinceAccepted`), and Accept, its answer said here. A block loom cannot accept says why instead. It stands in Docs, so it links nowhere outside Docs: its `close` puts the panel away in place.
+	import { refusalOf } from '$lib/library/said';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
@@ -52,7 +53,7 @@
 		busy = true;
 		said = null;
 		const done = (await write('review-accept', { keys: [reviewKey] })) as Awaited<ReturnType<typeof write>> & { accepted?: string[]; refused?: { why: string }[] };
-		if (!done.ok) said = { text: done.error?.message ?? 'The publisher refused it.', refused: true };
+		if (!done.ok) said = { text: refusalOf(done.error), refused: true };
 		else {
 			await landed();
 			said = done.accepted?.length ? { text: `Accepted ${name}.`, refused: false } : { text: done.refused?.[0]?.why ?? 'Not accepted.', refused: true };

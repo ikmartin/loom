@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Settings › Modes: the quilt's modes in the order its agents are shown them, from the manifest's `agents.modes`, the list at the left and the chosen one at the right: its "When it fits" line, whether its text is loom's or edited here, whether a newer version from loom waits beside it, and the text as its file holds it. Where loom can save one (`agents-mode-save`) and the quilt has an agent layer, Edit opens the text, kept for each mode until Save or Cancel, and Put back loom's, asked first, replaces an edit with loom's text. Each is the author's act; loom refuses an agent.
+	import { refusalOf } from '$lib/library/said';
 	import { store } from '$lib/manifest/client.svelte';
 	import { write } from '$lib/write';
 	import { modes as words } from '$lib/words/modes';
@@ -49,7 +50,7 @@
 		const res = await write('agents-mode-save', { name, ...body });
 		busy = false;
 		if (!res.ok) {
-			said = res.error?.message ?? words.refused;
+			said = refusalOf(res.error, words.refused);
 			return;
 		}
 		delete drafts[name];
@@ -97,7 +98,7 @@
 						</div>
 					{/if}
 					{#if said}<p class="said" role="alert" data-testid="mode-said">{said}</p>{/if}
-					{#if current.newer}<p class="note info" data-testid="mode-newer">{words.newerWhat(current.path)}</p>{/if}
+					{#if current.newer}<p class="note info" data-testid="mode-newer">{words.newerWhat}</p>{/if}
 					<section>
 						<h5>{words.fits}</h5>
 						<p class="fits" data-testid="mode-fits">{current.fits || words.noFits}</p>

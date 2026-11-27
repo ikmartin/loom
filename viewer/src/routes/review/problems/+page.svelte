@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › Problems: the problems in a document's LaTeX, one that did not compile among them, filtered by class from the manifest, which keeps loom's model and its own difficulties for agents. The person's files first, open and counted; an agent's copy's and every remark below, each folded and said to be whose it is. Each problem is titled by what is wrong, opens at its place, and offers a fix only where the viewer can do it as a button: never a command. The filters stand in the page; the severity and a code live in the URL, so a link can open it showing one of them.
+	import { refusalOf } from '$lib/library/said';
 	import { barShown } from '$lib/shell/scrollbars';
 	import { page } from '$app/state';
 	import HelpDot from '$lib/components/HelpDot.svelte';
@@ -59,7 +60,7 @@
 		if (done.ok) {
 			text = typeof done.result === 'string' ? `Done: ${done.result}.` : 'Done.';
 			await landed();
-		} else [text, refused] = [done.error?.message ?? 'That was not done.', true];
+		} else [text, refused] = [refusalOf(done.error, 'That was not done.'), true];
 		answers = { ...answers, [id]: { text, refused } };
 		busy = '';
 	}
@@ -130,7 +131,7 @@
 	{#if parts.copy.length}
 		<details class="part" open={isOpen('copy', false)} ontoggle={toggled('copy')} data-testid="problems-copy">
 			<summary><h2>In an agent's copy <span class="n">{parts.copy.length}</span></h2></summary>
-			<p class="whose">The agent's to put right, or to leave out when you take the copy back in {#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="problems-copy-link">{reviewWords.kinds.edits.name}</a>{:else}<a href={route('/review/proposed')} data-testid="problems-copy-link">Proposed Changes</a>{/if}.</p>
+			<p class="whose">The agent's to put right, or to leave out when you take the copy back in {#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="problems-copy-link">{reviewWords.kinds.edits.name}</a>{:else}<a href={route('/review/proposed')} data-testid="problems-copy-link">Proposed edits</a>{/if}.</p>
 			{@render groups(parts.copy, 'copy')}
 		</details>
 	{/if}

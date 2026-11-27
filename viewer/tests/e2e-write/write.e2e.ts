@@ -63,7 +63,7 @@ test("the publisher's refusal is shown rather than swallowed, and nothing is fil
 	await select(statement);
 	await page.getByTestId('popup-comment-field').fill('This should be refused.');
 	await page.getByTestId('popup-save').click();
-	await expect(page.getByTestId('popup-said')).toContainText('quote');
+	await expect(page.getByTestId('popup-said')).toContainText('could not find those words');
 	expect(served.log().filter((e) => e.body === 'This should be refused.')).toHaveLength(0);
 });
 
@@ -385,6 +385,7 @@ test('Review\'s Sessions closes, reopens and deletes a session, a tombstone that
 	await page.getByTestId(`sessions-delete-${id}`).click();
 	const modal = page.getByTestId('delete-session');
 	await expect(modal.getByTestId('delete-says')).toContainText('Annotations belong to no session, so none goes with it');
+	await expect(modal.getByTestId('delete-says')).not.toContainText('loom ');
 	await modal.getByTestId('delete-confirm').click();
 	await expect.poll(() => sessionIndex(served).filter((e) => e.event === 'deleted' && e.id === id).length).toBe(1);
 	await expect(row).toHaveCount(0);

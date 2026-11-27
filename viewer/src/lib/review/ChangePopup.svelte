@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A pending change's popup, opened at its words, or at the element it is marked on where it is not merged into the text (`apart`): what it is (an edit in the file, or a suggestion, with who wrote it and when), its words out and in and its patch where the text does not show them, the annotations on its words, each of which opens its own popup, what a suggestion's writer says of it, a box that writes an annotation on its words, and Keep and Discard, with Copy new text and Done in Overleaf in place of Keep on a document that mirrors Overleaf (`MirroredActs`). Both take effect on screen once loom has recorded them (`history.svelte.ts`); a change that is not ready says why and offers neither.
+	import { refusalOf } from '$lib/library/said';
 	import { onMount } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
@@ -12,7 +13,7 @@
 	import { can } from '$lib/write';
 	import { typeOf } from './annotationTypes';
 	import { actSays, changeById, kindName, ready, refusal, whoMade } from './changes';
-	import { annotate, discardChanges, keepChanges } from './history.svelte';
+	import { annotate, changeWhy, discardChanges, keepChanges } from './history.svelte';
 	import { say } from './toasts.svelte';
 	import MirroredActs from '$lib/overleaf/MirroredActs.svelte';
 	import { mirrors } from '$lib/overleaf/said';
@@ -64,8 +65,9 @@
 	async function act(how: 'keep' | 'discard'): Promise<void> {
 		onclose();
 		const res = how === 'keep' ? await keepChanges({ changes: [id] }) : await discardChanges({ changes: [id] });
-		const refused = res.refused?.find((r) => r.id === id)?.why;
-		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? res.error?.message ?? 'the publisher refused it'] });
+		const no = res.refused?.find((r) => r.id === id);
+		const refused = no ? changeWhy({ code: no.code ?? 'refused' }) : undefined;
+		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? refusalOf(res.error)] });
 	}
 
 	/** Write an annotation on its words, as they stand in what the person has kept: the words it takes out, or its block where it only adds. */
@@ -76,7 +78,7 @@
 		const target = c.key ?? c.documents[0] ?? c.path;
 		const res = await annotate({ target, ...(c.old.trim() ? { quote: c.old } : {}), message: text.trim() });
 		busy = false;
-		if (!res.ok) said = res.error?.message ?? 'The publisher refused it.';
+		if (!res.ok) said = refusalOf(res.error);
 		else {
 			text = '';
 			said = c.old.trim() ? 'Written as an annotation on these words.' : 'Written as an annotation on its block.';

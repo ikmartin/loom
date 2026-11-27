@@ -1,4 +1,5 @@
 // The one draft of the quilt's settings, kept while the window is closed so a change is not lost by closing it. Save posts every change at once; a refusal names each setting it refused, shown beside that setting.
+import { refusalOf } from '$lib/library/said';
 
 import { store } from '$lib/manifest/client.svelte';
 import { landed } from '$lib/manifest/updating.svelte';
@@ -44,7 +45,7 @@ class Draft {
 			this.revert();
 		} else {
 			this.refused = answer.error?.fields ?? {};
-			this.message = answer.error?.fields ? 'Nothing was saved: fix the settings marked below.' : (answer.error?.message ?? 'Could not save config.toml');
+			this.message = answer.error?.fields ? 'Nothing was saved: fix the settings marked below.' : refusalOf(answer.error, 'Could not save config.toml');
 		}
 		this.busy = false;
 		return answer.ok;

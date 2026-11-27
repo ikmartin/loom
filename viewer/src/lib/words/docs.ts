@@ -240,6 +240,18 @@ export const docs = {
 		waits: (name: string) => `${name}: Lean accepted, not attested. It waits for you in Review.`
 	},
 	node: {
+		/** A result's page for a part of a result, a proof with no label: what it is part of, linked after. */
+		partOf: 'This has no page of its own. It is part of',
+		/** A result's page for a result of an agent's document that was closed. */
+		closed: 'This result belongs to a closed agent document.',
+		/** The link after it. */
+		closedRead: 'Read its saved text and annotations',
+		/** A result's page, and its context beside it, for a result the quilt no longer holds. */
+		gone: 'This result is not in the quilt now.',
+		/** A result's page for a label defined twice: where, and what then. */
+		twice: (files: string[]) => `Defined twice, ${files.length > 1 ? `in ${files.join(' and ')}` : `both times in ${files[0]}`}. It has no text until one definition remains.`,
+		/** The result's LaTeX, shown in its page in place of its typesetting: its accessible name. */
+		verbatim: 'the LaTeX behind this block',
 		/** Under a result whose proof is missing, where the proof would be. */
 		noProof: 'No proof is attached.',
 		/** After it, where the block waits to be accepted: what waits, and where, in words; nothing there leaves Docs. */
@@ -274,10 +286,45 @@ export const docs = {
 		fewer: (n: number) => `only the newest ${n}`,
 		olderName: (of: string) => `the older versions of ${of}`
 	},
+	/** A result's context, opened beside it: its lists' names and what they say. */
+	context: {
+		accepted: 'Accepted by',
+		current: 'Current',
+		stale: 'Stale',
+		/** What part of the result an acceptance or a version is of. */
+		statement: 'Statement',
+		proof: (n: number, of: number) => (of > 1 ? `Proof ${n}` : 'Proof'),
+		in: 'in',
+		from: 'from',
+		dependsOn: 'depends on',
+		readFirst: (n: number) => `read first: ${n} more`,
+		restsOn: 'what this rests on',
+		usedBy: 'used by',
+		/** A relation's list, by its kind; a kind with no name here is shown as its quilt names it. */
+		relation: (kind: string) => (kind === 'see' ? 'see also' : kind),
+		/** Beside a related result that no document reaches. */
+		noDocument: 'no document',
+		discussions: 'discussions',
+		detached: 'detached annotations',
+		problems: 'problems',
+		/** A detached annotation's row, where it says nothing and quotes nothing. */
+		untitled: 'an annotation',
+		/** A part of a result in a list, named for the result it belongs to. */
+		proofOf: (name: string) => `proof of ${name}`,
+		/** A key in a list that is no result's. */
+		untitledResult: 'a result'
+	},
+	/** The research state's page, where the quilt has none yet. */
+	noState: 'This quilt has no research state yet. Ask your agent to write one: where the work stands, kept up to date as it goes.',
 	/** A block drawn from the person's saved source while TeX typesets it (a demonstration): the note beside it, and that note's hover text. */
 	draft: {
 		text: 'typesetting…',
 		title: 'Drawn from your saved source by the viewer. TeX’s typesetting replaces it when it is ready.'
+	},
+	/** A result's hover card: where a numbered display stands, and how much a section holds. */
+	preview: {
+		within: (where: string) => `in ${where}`,
+		entries: (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'} in this section`
 	},
 	column: {
 		/** The label over the focused document's sections, low in Docs' column. */

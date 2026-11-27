@@ -47,7 +47,7 @@ describe("round six's rows", () => {
 		expect(quiet(byRow('attested-changed:cor'))).toBe('its statement changed since you attested it, 20 Nov');
 		expect(line(byRow('fetch:t-2026-11-21-pq0d4n'), n)).toBe('Jones 2019 · Covering estimates');
 		expect(line(byRow('fetch:t-2026-11-21-pq0d4n'), none)).toBe('a paper');
-		expect(quiet(byRow('edits:c-4d'))).toBe('bounds.tex has not compiled since this edit (line 14)');
+		expect(quiet(byRow('edits:c-4d'))).toBe('');
 		expect(marks(byRow('attest:tq'))).toEqual(['checked', 'attest']);
 	});
 

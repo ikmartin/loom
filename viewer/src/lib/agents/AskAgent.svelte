@@ -1,5 +1,6 @@
 <script lang="ts">
 	// The box Ask your agent opens: what the request is about where there is a choice, the mode from the quilt's own, the person's words, and the request as it will be pasted; Copy, and Copy and open Claude where the quilt is set up for Claude Code and loom can open an app. It writes nothing and starts no agent.
+	import { refusalOf } from '$lib/library/said';
 	import Popover from '$lib/components/Popover.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { copyText } from '$lib/clipboard';
@@ -33,7 +34,7 @@
 		let refused = '';
 		if (ok && andOpen) {
 			const done = await write('open', { app: 'Claude' });
-			if (!done.ok) refused = done.error?.message ?? words.ask.openFailed;
+			if (!done.ok) refused = refusalOf(done.error, words.ask.openFailed);
 		}
 		open = false;
 		said = '';

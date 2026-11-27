@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › History › Versions, under a document's versions: each version of a file no document's version holds, newest first, each opened, compared with the file now, or put back after asking. A text opens as its text and compares as a line diff; an image as itself and beside the file now; anything else by its bytes, to download.
+	import { refusalOf } from '$lib/library/said';
 	import type { HistoryFile } from '$lib/manifest/types';
 	import { landed } from '$lib/manifest/updating.svelte';
 	import { dataUrl, filesUrl } from '$lib/paths';
@@ -42,7 +43,7 @@
 		said = null;
 		const done = await write('history-restore', { file: f.path, version: f.version });
 		if (done.ok) await landed();
-		said = { at, text: done.ok ? capital(done.result ?? '') : (done.error?.message ?? ''), refused: !done.ok };
+		said = { at, text: done.ok ? capital(done.result ?? '') : refusalOf(done.error), refused: !done.ok };
 		busy = '';
 		asking = '';
 	}

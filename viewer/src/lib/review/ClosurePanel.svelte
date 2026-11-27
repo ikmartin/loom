@@ -24,7 +24,7 @@
 		</span>
 	</header>
 	{#if keys.length <= 1}
-		<p class="faint">This result rests on nothing else in the corpus.</p>
+		<p class="faint">This result rests on nothing else in the quilt.</p>
 	{:else}
 		<ol class="stack">
 			{#each keys as k (k)}

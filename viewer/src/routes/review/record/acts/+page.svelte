@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › History › Everything recorded: every act the history holds, in words, newest first, for one document or for all; an undo's set-aside text is put back from its row, after asking. An act's answer stays with it when a newer act arrives above it.
+	import { refusalOf } from '$lib/library/said';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -36,7 +37,7 @@
 		said = null;
 		const done = await write('history-restore', { path: a.path, text: a.from });
 		if (done.ok) await landed();
-		said = { at, text: done.ok ? capital(done.result ?? 'done') : (done.error?.message ?? 'The publisher refused it.'), refused: !done.ok };
+		said = { at, text: done.ok ? capital(done.result ?? 'done') : refusalOf(done.error), refused: !done.ok };
 		busy = '';
 		asking = '';
 	}

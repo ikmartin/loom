@@ -4,6 +4,7 @@
 	// **Annotate** on, selected words, widened to whole words where a drag stops partway through one, are marked at once in the look in hand, and Add comment stands at their end until the next selection: typing there starts the comment, so a letter meant for it never reaches a shortcut. A type that stays open until resolved asks something, so its words open the popup to say it first, since loom takes such an annotation only with words; that draft is not saved until its button is pressed, and leaving it with words in it asks first. **Comment** on, a click leaves a comment at the place clicked, on the result it is in, and turns the tool off. With neither on, a selection offers its actions (`SelectionMenu`): **Quote**, which copies the words and where they came from and writes nothing, **Annotate**, which marks them as the tool would, and **New note**; after Annotate, the tool's or the menu's, Add comment stands at the words with the actions beside it, Annotate left out. Alt-drag draws a box round what a selection cannot hold: a labelled equation is noted as itself, anything else as the words of the block under the box.
 	//
 	// A quote is what was selected with each formula it touches given as its TeX, the form loom finds in the source, so a selection across `$c$` anchors where the words on screen alone would not.
+	import { refusalOf } from '$lib/library/said';
 	import { untrack, type Snippet } from 'svelte';
 	import { onDestroy } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
@@ -232,7 +233,7 @@
 			if (awaiting === early) awaiting = null;
 		}
 		if (!res.ok) {
-			say({ title: 'Not annotated', lines: [res.error?.message ?? 'the publisher refused it'] });
+			say({ title: 'Not annotated', lines: [refusalOf(res.error)] });
 			return;
 		}
 		const id = (res.result ?? '').split(/\s+/)[0] ?? '';

@@ -1,12 +1,13 @@
 <script lang="ts">
 	// **Changes** on a document's toolbar, with how many changes wait in its text, and its menu: how the text shows them (Markup, every change in place, removed words struck and new words underlined; Final, the text with every change made), and Keep all and Discard all, each saying what it would do. With annotations alone listed the text is as kept, so the views wait. Keep all and Discard all act on the document's changes that are ready, through the same writes as a change's own Keep and Discard (`history.svelte.ts`).
+	import { refusalOf } from '$lib/library/said';
 	import Icon from '$lib/components/Icon.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { can } from '$lib/write';
 	import { acted } from './acted.svelte';
 	import type { Annotating, ChangesView } from './annotating.svelte';
 	import { allSays, changesIn, ready } from './changes';
-	import { discardChanges, keepChanges } from './history.svelte';
+	import { changeWhy, discardChanges, keepChanges } from './history.svelte';
 	import { say } from './toasts.svelte';
 
 	let {
@@ -89,14 +90,14 @@
 		notes.close();
 		const res = how === 'keep' ? await keepChanges({ all: true, document }) : await discardChanges({ all: true, document });
 		const refused = res.refused ?? [];
-		if (!res.ok) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [res.error?.message ?? 'the publisher refused it'] });
-		else if (refused.length) say({ title: `${refused.length} ${refused.length === 1 ? 'change was' : 'changes were'} not ${how === 'keep' ? 'kept' : 'discarded'}`, lines: refused.slice(0, 3).map((r) => r.why) });
+		if (!res.ok) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refusalOf(res.error)] });
+		else if (refused.length) say({ title: `${refused.length} ${refused.length === 1 ? 'change was' : 'changes were'} not ${how === 'keep' ? 'kept' : 'discarded'}`, lines: refused.slice(0, 3).map((r) => changeWhy({ code: r.code ?? 'refused' })) });
 	}
 </script>
 
 {#if list.length}
 	<span class="sep" aria-hidden="true"></span>
-	<button type="button" class="tool words" class:on={open} bind:this={button} aria-expanded={open} aria-haspopup="menu" title="Pending changes: how the text shows them, and keeping or discarding them all" aria-label="Changes in {of}, {list.length}" data-testid="changes-toggle" onclick={toggle}><Icon name="pen" size={14} />Changes<span class="badge" data-testid="changes-count">{list.length}</span><Icon name="caret" size={12} /></button>
+	<button type="button" class="tool words" class:on={open} bind:this={button} aria-expanded={open} aria-haspopup="menu" title="Proposed edits: how the text shows them, and keeping or discarding them all" aria-label="Changes in {of}, {list.length}" data-testid="changes-toggle" onclick={toggle}><Icon name="pen" size={14} />Changes<span class="badge" data-testid="changes-count">{list.length}</span><Icon name="caret" size={12} /></button>
 {/if}
 
 {#if open}

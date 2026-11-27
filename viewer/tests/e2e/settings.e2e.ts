@@ -47,7 +47,7 @@ test('each section opens its own page, saying where it is saved, and the window 
 		['appearance', 'Appearance', 'this browser'],
 		['profile', 'Profile', 'for every quilt'],
 		['agents', 'Agents', "this quilt's config.toml"],
-		['overleaf', 'Overleaf', '.loom/records/source-sync.json and travels with the quilt']
+		['overleaf', 'Overleaf', 'recorded in the quilt and travels with it']
 	]) {
 		await settings(page, section);
 		await expect(page.getByTestId('settings-title')).toHaveText(title);
@@ -62,7 +62,8 @@ test("Settings › Modes lists the quilt's modes in the order its agents are sho
 	await page.goto('/');
 	await settings(page, 'modes');
 	await expect(page.getByTestId('settings-title')).toHaveText('Modes');
-	await expect(page.getByTestId('settings-window').locator('.where')).toContainText('.loom/agents/instructions/modes/');
+	await expect(page.getByTestId('settings-window').locator('.where')).toContainText('Kept in this quilt, a file for each mode');
+	await expect(page.getByTestId('settings-window').locator('.where')).not.toContainText('.loom');
 	const tabs = page.getByTestId('mode-tab');
 	await expect(tabs.locator('.name')).toHaveText(['quick', 'question', 'audit', 'referee', 'review', 'simplify', 'flow', 'draft', 'formalize']);
 	await expect(tabs.locator('.state')).toHaveText(Array(9).fill("loom's"));
@@ -101,7 +102,8 @@ test("without a publisher, the quilt's settings are shown as published and chang
 	await expect(page.getByTestId('settings-read-only')).toContainText('config.toml');
 	await expect(page.getByTestId('config-quilt.name')).toHaveValue('The synthetic quilt');
 	await expect(page.getByTestId('config-quilt.name')).toBeDisabled();
-	await expect(page.getByTestId('setting-quilt.name')).toContainText('[quilt] name');
+	// a setting says what it does, never the key it is written under
+	await expect(page.getByTestId('setting-quilt.name')).not.toContainText('[quilt]');
 	await settings(page, 'documents');
 	await expect(page.getByTestId('config-quilt.main')).toHaveValue('drafting/main.tex');
 	await expect(page.getByTestId('config-quilt.main')).toBeDisabled();
@@ -120,6 +122,9 @@ test("without a publisher, the quilt's settings are shown as published and chang
 	// a name is saved only through a publisher
 	await settings(page, 'profile');
 	await expect(page.locator('#reviewer-name')).toHaveCount(0);
+	// where the name is kept is said by the section, never as a path
+	await expect(page.getByTestId('settings-page')).not.toContainText('config');
+	await expect(page.getByTestId('profile-from')).toHaveCount(0);
 });
 
 test('on a phone the sections are a row above the page, and nothing runs off the screen', async ({ page }) => {
