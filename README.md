@@ -1,76 +1,32 @@
 # loom
 
-One repository holding loom, its viewer, and the documents that govern them. `loom` turns a LaTeX paper into a *quilt*, where every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref` and `\uses` an author already writes, acceptances are recorded with content hashes, and review comments are anchored to quoted text. The viewer, in `viewer/`, is what it publishes to. The paper still compiles with plain `pdflatex`, from the same files, on Overleaf.
+Loom is a place to do mathematics with an AI agent beside you: to read papers, learn a subject, write and proofread your own. Your files stay as they are, a LaTeX paper, Markdown notes, the PDFs you read. Loom shows them typeset, lets you and your agent comment on exact words, and holds every edit the agent proposes until you keep or discard it.
 
-| directory | what it is | language |
-|---|---|---|
-| `loom/` | the CLI: scanner, reshaping commands, history, library, build | Python |
-| `viewer/` | the static viewer for a published quilt | Svelte |
+## Install
 
-loom and its viewer are separate codebases, each with its own build, tests and dependencies, and the viewer ships inside loom. `loom` never needs the viewer: a quilt edited in a plain text editor loses nothing.
-
-## The documents
-
-They are the reason this repository exists, and they govern loom rather than describing it after the fact.
-
-- `docs/design/` — the design: what loom is for, the three people every decision is tested against, the principles, the model, how agents take part, and the invariants that must not be lost. It records current thinking and changes as the design is discovered; what is decided but not built is marked as such.
-- `docs/specs/` — the formats: the viewer interface (manifest, HTML dialect, conformance fixture), the source contract, the library's nodes and diagnostics. They win over the design wherever shapes are concerned.
-- `docs/contributing.md` — how to build, test, verify and release.
-- `docs/work-queue/` — deferred work, each item with an observable trigger saying when it becomes worth doing.
-- `docs/plans/` — the plan for work in progress. Earlier plans are history: what was intended at the time.
-- `docs/design/decision-records-frozen.md` — the decision records of the original design book, frozen as history on 2026-10-26 so that the `DR-NNN` ids cited in code still resolve. The book itself and its deviations log are deleted; git history keeps them.
-- `AGENTS.md` — the rules that hold for everyone working here, human or agent. Read it first.
-
-`demos/` holds example quilts: `demo/` is what `loom init --demo` writes, `synthetic/` exercises every construct of the source contract and generates the conformance fixture, and `showcase/` is the one to open when you want to see what loom does. Quilts built from real papers are gitignored, because they contain the paper sources.
-
-## Installing
-
-On a Mac, with no password and nothing else installed first:
+On a Mac, paste this line into Terminal:
 
 ```sh
 curl -LsSf https://github.com/ikmartin/loom/releases/latest/download/install.sh | sh
 ```
 
-It installs loom with a Python of its own, and loom's own TeX (TeX Live 2026, about 400 MB on disk) with Ghostscript and poppler beside it, all under `~/Library/Application Support/loom` and `~/.local`; it edits no shell file. It writes Loom in `~/Applications` (Loom Quilts where another app is called Loom), which opens loom's home page, and opens it. The same line updates loom, and a quilt open at the time restarts with the new loom by itself. Loom uses its own TeX even where another is installed; `use = "mine"` under `[tex]` in `~/.config/loom/config.toml` keeps yours, and `home_tree = true` there lets loom's TeX read your `~/Library/texmf`. A package a paper needs is fetched the first time it is typeset. `loom doctor` names the TeX in use, and `loom doctor --repair` mends loom's own.
+It needs no password and nothing installed first. It installs loom with its own TeX (about 400 MB), puts Loom in your Applications folder, and opens it. That is the only thing you type: from then on everything happens in Loom's window. To update, paste the same line again.
 
-## Getting started from a clone
+## Quilts
 
-```sh
-git clone https://github.com/ikmartin/loom
-cd loom
-uv tool install -e ./loom        # puts `loom` on your PATH, running this checkout
-loom --version
-```
+A quilt is a folder for one piece of research: the papers you write or read, and your notes on them. Loom opens on Your quilts, where New quilt makes one; open it and drop your paper's folder or a PDF on it. A quilt has four views:
 
-`uv sync` inside `loom/` builds a virtual environment but does **not** put `loom` on your PATH; that is what `uv tool install -e` is for, and `-e` means a `git pull` takes effect without reinstalling. If the command is still not found afterwards, run `uv tool update-shell` and open a new terminal.
+- **Docs**: your documents, typeset, with comments on their words.
+- **Library**: the papers you rely on, to read, annotate and cite.
+- **Web**: every result and what it rests on.
+- **Review**: what waits for your decision, such as edits proposed to your text.
 
-To see a quilt in the viewer:
+## Your agent
 
-```sh
-cd demos/showcase && loom serve
-```
+Connect Claude, or another agent, from the chip at the foot of a quilt's column. Its edits to your documents wait in Review, and a kept edit can be undone. An agent you connect works with your permissions on your Mac, so connect only one you trust.
 
-For the viewer's own development, `cd viewer && npm ci && npm run dev`.
+## Alpha
 
-## Tests
+Loom is alpha: a quilt may break between versions, so keep your work backed up. To report a problem, open an issue on this repository.
 
-| suite | command |
-|---|---|
-| loom, unit tier | `cd loom && uv run pytest -m "not tex and not paper and not network and not client"` |
-| loom, everything | `cd loom && uv run pytest` (needs a TeX distribution and poppler) |
-| viewer | `cd viewer && npm run test:unit` and `npm run test:e2e` |
-| the documents | `python docs/work-queue/check.py` |
-
-The LaTeX compiles in loom's tests run with an empty `HOME` and empty TeX trees, so a test can only read what it created.
-
-## Working here
-
-A change that crosses loom and its viewer — a manifest field and the viewer code that reads it, say — is one branch and one pull request. That is why they are one repository (DR-196).
-
-CI runs `scripts/verify`, one workflow per lane: `loom`, `viewer` and `docs`, each triggered only by the paths its lane reads (`docs/contributing.md`).
-
-A release is a GitHub release holding the wheel, with the viewer built and vendored into it, and the install line (`.github/workflows/release.yml`); the workflow makes a draft, and publishing it is done by hand. Nothing is published to a package index.
-
-## License
-
-GPL-3.0-or-later; see `LICENSE`. Files under `loom/src/loom/assets/` (`loom.sty`, the demo quilt, the AI-layer templates) are MIT, so they can travel with your paper: see `loom/NOTICE`.
+Working on loom itself: read `AGENTS.md`, then `docs/contributing.md`. Licences: `LICENSE` and `loom/NOTICE`.

@@ -1,7 +1,10 @@
-The showcase quilt: an invented paper about balanced flows on finite quivers, together with every record loom writes. Where the synthetic quilt exercises the *source contract* — one construct of every kind, one diagnostic of every code — this one exercises the *records*: the reference layer, annotations of every kind, severity and state, an agent run and a discarded one, a landmark history with a stamp, a fork and a revert, and the three faults a quilt can be left in. It is the quilt to open when you want to see what loom does.
+# The loom showcase
 
-Nothing here is real. The paper, the two cited works, their authors, their journals and their identifiers are invented, and the mathematics is plausible rather than important; the point is the machinery around it. The cited works' PDFs are compiled from `../showcase-works/*.tex` by `../showcase-works/build.sh` and committed, which is why a fresh clone can open every `cited:` locator and see the page it names.
+A quilt to look around in. The paper, *Balanced flows on finite quivers*, and the two works it cites are invented; what loom keeps around them is real. An author and an agent acting as referee have worked here for a while, so every screen has something on it.
 
-`scripts/gen_quilts.py showcase` writes the quilt by running loom's own commands on these sources under a fixed clock, so no record in it was typed, and `--check` proves the checked-in copy is what the generator writes. Regenerate it after a feature lands: that is what keeps the showcase a picture of loom today rather than of loom last spring.
+- **Read [the paper](quilt:drafting/main-atomic.tex)** in Docs. The coloured marks are the referee's annotations: click one to read it and its replies. Words drawn in teal are edits proposed to the text.
+- **Click a citation** in the introduction: the cited page opens beside the paper. The Library holds both works.
+- **Follow [the rank theorem](quilt:sh-0009)** in the Web, to see what it rests on and what rests on it.
+- **Open Review** for what waits for you: proposed edits to keep or discard, and problems, a few of them left here on purpose. Its History lists every version and session.
 
-EXPECTED-LINT.txt lists the diagnostics `loom lint` must report, one `severity code` per line, sorted. The showcase carries them on purpose: one `duplicate-id` (a sketch made live again over the node file its own atomize wrote), one `loom:missing-proof` and one `unreachable` (a lemma begun with `loom new` and not yet placed), and one `loom:detached-annotation`.
+How loom works, at the foot of the column, says what each mark means.

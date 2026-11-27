@@ -1,4 +1,4 @@
-// The frame's words: the column's head and foot, the four views' names and their hover cards, the marks' legend, and the column's message. Every sentence the viewer says is written in this folder, a file for each view and this one for the frame; a component holds none (`scripts/checks/words.py`). An entry is named for the place it shows, with a comment saying where, on one line, so that words seen on screen are found by searching for them.
+// The frame's words: the column's head and foot, the four views' names and their hover cards, the panel How loom works, and the column's message. Every sentence the viewer says is written in this folder, a file for each view and this one for the frame; a component holds none (`scripts/checks/words.py`). An entry is named for the place it shows, with a comment saying where, on one line, so that words seen on screen are found by searching for them.
 
 export const frame = {
 	views: {
@@ -62,14 +62,29 @@ export const frame = {
 		dismiss: 'Dismiss'
 	},
 	legend: {
-		/** The quiet link in the column's foot that opens the legend of the marks. */
-		open: 'what the marks mean',
-		/** The legend's first line, over the marks of a result's reading of its paper. */
-		head: 'The marks, on every screen',
-		/** The legend's line over the marks of Lean. */
+		/** The quiet link in the column's foot that opens the panel How loom works, and the panel's heading. */
+		open: 'How loom works',
+		/** The panel's line over the icons in the margin beside a text. */
+		margin: 'Beside your text',
+		/** Under Beside your text, one for each icon of the margin, drawn beside it. */
+		icons: {
+			annotation: 'an annotation; click to open it',
+			comment: 'an annotation with a comment',
+			edit: 'a proposed edit, to keep or discard',
+			count: 'several on one line'
+		},
+		/** The panel's line over the marks of a result's reading of its paper. */
+		head: 'How a result stands, on every screen',
+		/** The panel's line over the marks of Lean. */
 		lean: 'Lean',
-		/** The legend's line over the mark a person puts on a page. */
-		page: 'On a page'
+		/** The panel's line over the mark a person puts on a page. */
+		page: 'On a page',
+		/** The panel's line over when a version is kept and how to compare. */
+		versions: 'Versions',
+		/** Under Versions: when loom keeps one. */
+		made: "Loom keeps a version of a document when it comes in; when you keep or undo a proposed edit, take in an agent's copy or restore a version; and when you record one. Saving a file makes none.",
+		/** Under Versions: how to compare two. */
+		compare: "To compare, open history on the document's toolbar and choose compare beside a version: it opens beside the text with what differs marked. Review › History lists every version."
 	},
 	marks: {
 		/** A result's paper mark, filled green: the person found loom's copy matches its paper. Also the mark's accessible name. */
