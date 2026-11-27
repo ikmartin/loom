@@ -1,5 +1,5 @@
 <script lang="ts">
-	// What an agent is and did, and what it is told, sees and may change: opened from the chip, its parts also standing in Settings › Agents (`parts`). Connected lists each conversation the stream says is connected, with its report in Review › History; with none, the setup card. Told is the line loom puts in the app's root file, verbatim. Sees, may change and never are said from the quilt's own settings, with loom's sentence on how far the apps set up here hold an agent to them.
+	// What an agent is and did, and what it is told, sees and may change: opened from the chip, its parts also standing in Settings › Agents (`parts`). Connected lists each conversation the stream says is connected, with its report in Review › History; with none, the setup card. Told says in words what the line loom puts in the app's root file asks, never the line itself, which names commands a person does not type. Sees, may change and never are said from the quilt's own settings, with loom's sentence on how far the apps set up here hold an agent to them.
 	import { store } from '$lib/manifest/client.svelte';
 	import { threadUrl } from '$lib/nav';
 	import { agents as words } from '$lib/words/agents';
@@ -23,7 +23,7 @@
 <div class="panel" data-testid="agent-panel">
 	{#if has('connected')}
 		<section>
-			<h4>{words.panel.connected}</h4>
+			<h4>{records === null ? words.panel.connectedUnknown : records.length ? words.panel.connected : words.panel.connectedNone}</h4>
 			{#if records === null}
 				<p class="aside" data-testid="agents-unknown">{words.panel.unknown}</p>
 			{:else if !records.length}
@@ -58,8 +58,7 @@
 		<section>
 			<h4>{words.panel.told}</h4>
 			{#if agents?.line}
-				<p>{words.panel.toldFirst}</p>
-				<blockquote class="verbatim" data-testid="agents-line">{agents.line}</blockquote>
+				<p data-testid="agents-line">{words.panel.toldFirst}</p>
 				<p>{words.panel.toldThen(agents.modes.length)}</p>
 			{:else if noLayer}
 				<p class="aside">{words.panel.toldNothing}</p>
@@ -174,17 +173,6 @@
 		color: var(--ink-soft);
 		font-size: 12.5px;
 		padding-left: 14px;
-	}
-	.verbatim {
-		margin: 0;
-		padding: 6px 10px;
-		border-left: 2px solid var(--rule);
-		background: var(--leaf);
-		font-family: var(--mono);
-		font-size: 11.5px;
-		line-height: 1.5;
-		overflow-wrap: anywhere;
-		white-space: pre-wrap;
 	}
 	.said {
 		margin: 0;

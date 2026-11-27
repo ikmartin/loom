@@ -12,6 +12,8 @@
 	import SideHost from '$lib/review/SideHost.svelte';
 	import LeanMarks from '$lib/views/docs/LeanMarks.svelte';
 	import NotCompiled from '$lib/views/docs/NotCompiled.svelte';
+	import Typesetting from '$lib/views/docs/Typesetting.svelte';
+	import { compiles, typesettingFirst } from '$lib/manifest/compiles.svelte';
 	import { anchorId, keyUrl } from '$lib/nav';
 	import { followNodes, followReading, reading, sectionIds } from '$lib/reading.svelte';
 	import { contentsOf } from '$lib/contents';
@@ -91,9 +93,15 @@
 	let columnBox = $state<HTMLElement | null>(null);
 	let drawnSeq = $state(0);
 
+	/** Whether the text drawn is TeX's page (`data-from="tex"` on the document's head), rather than its source while no page has come. */
+	let fromTex = $state(true);
+	/** The text is hidden behind a line saying so while TeX sets the document for the first time. */
+	const typesetting = $derived(master ? typesettingFirst(compiles.all[master.path], m.generated, fromTex) : false);
+
 	function fill(root: HTMLElement) {
 		drawnSeq++;
 		docRoot = root;
+		fromTex = root.querySelector('[data-fragment="master"]')?.getAttribute('data-from') === 'tex';
 	}
 
 	/** Put a floating panel against the pane rather than inside what scrolls, so it stays put while the document moves under it. */
@@ -131,9 +139,10 @@
 			<div class="gutters-host" use:guttersHost>
 				<div class="gutters" class:beside={!!notes.side}>
 					<div class="column" bind:this={columnBox}>
+						{#if typesetting}<Typesetting path={master.path} />{/if}
 						<NotCompiled path={master.path} />
 						<LeanMarks doc={master.path} host={columnBox} drawn={drawnSeq} />
-						<FragmentNotes {notes} fallback={master.path} in={master.path}>
+						<div class="drawn" class:waiting={typesetting}><FragmentNotes {notes} fallback={master.path} in={master.path}>
 							{#key hasComparison}<Fragment
 									path={master.fragment}
 									master={master.path}
@@ -150,7 +159,7 @@
 									arrival={documentState(item).arrival}
 									onmounted={fill}
 								/>{/key}
-						</FragmentNotes>
+						</FragmentNotes></div>
 					</div>
 				</div>
 			</div>
@@ -179,6 +188,16 @@
 		padding-top: 0;
 		padding-left: 0;
 		padding-right: 0;
+	}
+	.drawn {
+		display: contents;
+	}
+	/* laid out still, so a page typeset meanwhile measures as it will be read, but neither seen nor taking room */
+	.drawn.waiting {
+		display: block;
+		height: 0;
+		overflow: hidden;
+		visibility: hidden;
 	}
 	.review-comparison {
 		position: sticky;

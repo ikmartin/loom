@@ -163,8 +163,10 @@ export const library = {
 		question: (name: string) => `${name} waits for your answer`,
 		/** The intake's question, asked in the column: the file, the identifier it states, and the works in the library that state it too. */
 		asks: (name: string, stated: string, works: string[]) => (works.length === 1 ? `${name} states ${stated}, as ${works[0]} in your library does. Is it that work?` : `${name} states ${stated}, as ${works.length} works in your library do. Is it one of them?`),
-		/** The question where the file states nothing a work states: it was dropped on that work's row. */
+		/** The question of a file dropped on a work's row in the Library, asked before it is taken in, and of one the intake asks about that states nothing a work states. */
 		asksOn: (name: string, short: string) => `Is ${name} ${short}, the work you dropped it on?`,
+		/** The same, of several files dropped on one row together. */
+		asksOnMany: (names: string[], short: string) => `Are ${list(names)} ${short}, the work you dropped them on?`,
 		/** The question where every work it named has since been deleted: only whether the file is a work of its own. */
 		asksGone: (name: string, stated: string) => (stated ? `${name} states ${stated}, as a work since deleted from your library did. Add it as a work of its own?` : `The work ${name} was dropped on has since been deleted from your library. Add it as a work of its own?`),
 		/** The question where every work the file's identifiers name holds a document of its kind already: the copy asked about as what it is, kept as a work of its own or let go. */
@@ -180,6 +182,7 @@ export const library = {
 		/** The answers: that it is the one work asked about, that it is a work of its own beside one or several. */
 		isIt: 'yes',
 		notIt: 'no, a work of its own',
+		notThem: 'no, works of their own',
 		noneOfThem: 'none of them: a work of its own',
 		/** A work the question names whose short name another work asked about shares, told apart by its title. */
 		candidate: (short: string, title: string) => `${short} · ${title}`

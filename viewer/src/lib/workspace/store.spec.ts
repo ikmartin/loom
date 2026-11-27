@@ -92,16 +92,27 @@ describe('the workspace', () => {
 		expect(w.current!.seq).toBeGreaterThan(first!);
 	});
 
-	it('moves a tab to the other pane and focus follows; a pane left empty closes (W6)', () => {
+	it('splits a tab off into a second pane and focus follows; with two, swaps it with the other pane\'s front tab, never emptying a pane (W6)', () => {
 		w.here(doc('drafting/main.tex'));
 		w.here(doc('drafting/talk.tex'));
 		w.move(0, itemKey(doc('drafting/talk.tex')));
 		expect(w.panes).toHaveLength(2);
 		expect(w.focus).toBe(1);
 		w.move(1, itemKey(doc('drafting/talk.tex')));
-		expect(w.panes).toHaveLength(1);
-		expect(w.panes[0].items.map((i) => i.id)).toEqual(['drafting/main.tex', 'drafting/talk.tex']);
+		expect(w.panes).toHaveLength(2);
+		expect(w.panes.map((p) => p.items.map((i) => i.id))).toEqual([['drafting/talk.tex'], ['drafting/main.tex']]);
 		expect(w.focus).toBe(0);
+	});
+
+	it('swaps a tab of a pane of several with the front tab of the other, each the front of its new pane (W6)', () => {
+		w.here(doc('drafting/main.tex'));
+		w.here(doc('drafting/talk.tex'));
+		w.beside(work('Kre99'), 0);
+		w.move(0, itemKey(doc('drafting/main.tex')));
+		expect(w.panes.map((p) => p.items.map((i) => i.id))).toEqual([['Kre99', 'drafting/talk.tex'], ['drafting/main.tex']]);
+		expect(w.active(0)?.id).toBe('Kre99');
+		expect(w.active(1)?.id).toBe('drafting/main.tex');
+		expect(w.focus).toBe(1);
 	});
 
 	it('will not move the lone tab of a lone pane (W5)', () => {

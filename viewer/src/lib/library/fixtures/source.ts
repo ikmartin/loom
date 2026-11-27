@@ -313,12 +313,19 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 					const asWork = (w: (typeof same)[number]) => ({ ref: w.ref, short: w.short, title: w.title, authors: w.authors, year: w.year, how });
 					return { id, item, name, state: 'question', question, document: { name, kind: 'pdf', identifiers: [`arxiv:${stated[1]}${stated[2] ?? ''}`] }, candidates: candidates.map(asWork), ...(held.length ? { held: held.map(asWork) } : {}) };
 				}
+				const onto = it.incoming && it.for ? f.works.find((w) => w.ref === it.for) : undefined;
+				if (onto) {
+					// filed under the work it was dropped on, on the person's word, as the intake files it: no work is added
+					onto.holds.pdf ??= `filed-${f.gen}-${item}`;
+					const id = `d-${f.gen}-${item}`;
+					return { id, item, name, state: 'added', act: `x-${f.gen}-${item}`, ref: onto.ref, short: onto.short, title: onto.title, authors: onto.authors, year: onto.year, found_by: 'row', tex: false, unconfirmed: false, identifier: null, under: true };
+				}
 				const arxiv = /^\d{4}\.\d{4,5}/.test(name);
 				const added = addWork(f, name, offline);
 				const id = `d-${f.gen}-${item}`;
 				f.taken[id] = added.ref;
 				// an added row as the intake sends it (`write-api.md` §6): a file is found by the identifier it states, else by its name
-				return { id, item, name, state: 'added', act: `x-${f.gen}-${item}`, ref: added.ref, short: added.short, title: added.title, authors: added.authors, year: added.year, found_by: arxiv ? 'arxiv' : it.text ? 'none' : 'title', tex: arxiv && !offline, unconfirmed: offline && arxiv, identifier: arxiv ? `arxiv:${name}` : null, under: !!it.for };
+				return { id, item, name, state: 'added', act: `x-${f.gen}-${item}`, ref: added.ref, short: added.short, title: added.title, authors: added.authors, year: added.year, found_by: arxiv ? 'arxiv' : it.text ? 'none' : 'title', tex: arxiv && !offline, unconfirmed: offline && arxiv, identifier: arxiv ? `arxiv:${name}` : null, under: false };
 			});
 			changed();
 			return ok({ rows });

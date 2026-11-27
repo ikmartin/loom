@@ -14,6 +14,8 @@ const TEX: [RegExp, string][] = [
 export const docs = {
 	/** Over a draft whose last compile, after a change, made no PDF: its file, why (`texError`), and the line TeX stopped at, '' where unknown. */
 	notCompiled: (file: string, why: string, line: string) => `${file} has not compiled since it last changed${why ? `: ${why}` : ''}${line ? ` (line ${line})` : ''}. The PDF is the one from before.`,
+	/** In place of a document's text while TeX sets it for the first time, its source not shown meanwhile: the line, with its file, and the line under it. */
+	typesetting: { text: (file: string) => `Typesetting ${file}…`, sub: 'Its text shows here once TeX has set it.' },
 	/** Over a draft whose last compile finished with errors but made a PDF: its file, TeX's first error (`texError`), and the line it was at, '' where unknown. */
 	compiledWithErrors: (file: string, why: string, line: string) => `${file} compiled with errors${why ? `: ${why}` : ''}${line ? ` (line ${line})` : ''}. The PDF was made anyway and may be wrong there.`,
 	/** A compile's error and its line, as a title or a line under the paper says them. */

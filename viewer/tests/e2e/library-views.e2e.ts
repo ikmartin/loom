@@ -318,6 +318,35 @@ test("a file stating an arXiv number a work states is asked about in the column,
 	await expect(page.getByTestId('work-row')).toHaveCount(302);
 });
 
+test("a file dropped on a work's row is asked about before anything is taken in: yes files it under that work, no makes a work of its own", async ({ page }) => {
+	await open(page);
+	const msg = page.getByTestId('column-message');
+	const answers = msg.getByTestId('column-message-choice');
+	const rows = page.getByTestId('work-row');
+	const drop = (title: string, name: string) =>
+		row(page, title).evaluate((el, name) => {
+			const data = new DataTransfer();
+			data.items.add(new File(['%PDF-1.4'], name, { type: 'application/pdf' }));
+			el.dispatchEvent(new DragEvent('dragover', { dataTransfer: data, bubbles: true, cancelable: true }));
+			el.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }));
+		}, name);
+	// the row under the pointer is no sign of what the person meant: nothing is filed until they say
+	await drop('Widgets and their bounds', 'zakharov-kuznetsov.pdf');
+	await expect(msg).toContainText(/^Is zakharov-kuznetsov\.pdf .+, the work you dropped it on\?/);
+	await expect(answers).toHaveText(['yes', 'no, a work of its own']);
+	await expect(rows).toHaveCount(300);
+	await answers.filter({ hasText: 'no, a work of its own' }).click();
+	await expect(msg).toContainText('Added zakharov-kuznetsov.pdf');
+	await expect(rows).toHaveCount(301);
+	await expect(row(page, 'zakharov-kuznetsov.pdf')).toBeVisible();
+	// yes: filed under the work, and no row is added
+	await page.getByTestId('column-message-dismiss').click();
+	await drop('Widgets and their bounds', 'widgets.pdf');
+	await answers.filter({ hasText: 'yes' }).click();
+	await expect(msg).toContainText(/^Filed widgets\.pdf under /);
+	await expect(rows).toHaveCount(301);
+});
+
 test('a copy of a PDF every work stating its number holds already is asked about as a copy, naming each work so its row can be told apart, kept as a work of its own or let go', async ({ page }) => {
 	await open(page);
 	const msg = page.getByTestId('column-message');

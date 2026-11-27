@@ -1,4 +1,4 @@
-// What a dropped file, a chosen one or a pasted identifier goes through (`docs/specs/library-views.md` §3.5): each file is received, then all are taken in together, a file dropped on a work's row named for that work. The column's message says what happened to the whole drop: one work by its name, several by their count with each that was not added named, and `undo` taking back every work the drop added. On a quilt that has not said whether loom may use the network, the take is made without it, and each work it added by an identifier loom found asks in its row whether to look it up this once. A file loom has a question about ("is this one of these works?", Open 19) is asked in the column, with each work it may be and a work of its own as answers, which `library-answer` settles, and the works stating its identifier that hold a document of its kind already (`held`) named beside them; one whose every work holds one is asked about as a copy, kept as a work of its own or let go by `library-undo`; one still waiting after a reload is asked again from the manifest's `arriving`, and one closed unanswered is not asked again on this page. Nothing here changes view: a view that lists works lights the row just added.
+// What a dropped file, a chosen one or a pasted identifier goes through (`docs/specs/library-views.md` §3.5): each file is received, then all are taken in together, a file dropped on a row of Review's papers to fetch named for that work, and files dropped on a work's row in the Library taken in only once the person says whether they are that work's. The column's message says what happened to the whole drop: one work by its name, several by their count with each that was not added named, and `undo` taking back every work the drop added. On a quilt that has not said whether loom may use the network, the take is made without it, and each work it added by an identifier loom found asks in its row whether to look it up this once. A file loom has a question about ("is this one of these works?", Open 19) is asked in the column, with each work it may be and a work of its own as answers, which `library-answer` settles, and the works stating its identifier that hold a document of its kind already (`held`) named beside them; one whose every work holds one is asked about as a copy, kept as a work of its own or let go by `library-undo`; one still waiting after a reload is asked again from the manifest's `arriving`, and one closed unanswered is not asked again on this page. Nothing here changes view: a view that lists works lights the row just added.
 
 import { message } from '$lib/shell/message.svelte';
 import { library as words } from '$lib/words/library';
@@ -145,6 +145,22 @@ export async function addFiles(files: File[], onto?: string): Promise<void> {
 	const done = await take(items);
 	if (!done.ok) return message.post(sentence(done.error));
 	tell(done.value.rows, refused);
+}
+
+/** Asks in the column whether files dropped on a work's row in the Library are that work's before taking anything in, since the row under the pointer is no sign of what the person meant: `yes` files them under it, `no` takes them in as a drop anywhere. A work gone from the library meanwhile takes them as a drop anywhere; a question closed unanswered takes nothing. */
+export async function askOnRow(files: File[], onto: string): Promise<void> {
+	if (!files.length) return;
+	const library = await api.works();
+	const work = library.ok ? library.value.works.find((w) => w.ref === onto) : undefined;
+	if (!work) return addFiles(files);
+	const names = files.map((f) => f.name);
+	const one = names.length === 1;
+	message.post(one ? words.add.asksOn(names[0], work.short) : words.add.asksOnMany(names, work.short), undefined, {
+		choices: [
+			{ label: words.add.isIt, act: () => addFiles(files, onto) },
+			{ label: one ? words.add.notIt : words.add.notThem, act: () => addFiles(files) }
+		]
+	});
 }
 
 /** Takes in a pasted arXiv number, DOI or BibTeX. */

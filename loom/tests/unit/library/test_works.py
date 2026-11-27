@@ -116,3 +116,21 @@ def test_the_generation_stands_until_anything_a_row_reads_changes(tmp_path: Path
     rescanned = scan(load_quilt(root))
     assert generation(rescanned) > after_log
     assert {r["short"]: r["used_in"] for r in works(rescanned)}["Jones 2019"] == ["main.tex"]
+
+
+def test_a_work_from_a_bibitem_is_shown_by_what_its_entry_says(tmp_path: Path) -> None:
+    """A `\\bibitem` makes a work naming nothing but its `note`, as every work of an imported paper's `.bbl` is; its row reads the note as its title, so the row says something and a search finds it."""
+    root = quilt(tmp_path)
+    (root / "main.tex").write_text(
+        "\\documentclass{article}\n\\begin{document}\nBy \\cite{Fre82} and \\cite{Smi24}.\n\\bibliography{refs}\n"
+        "\\begin{thebibliography}{9}\n\\bibitem{Fre82} M.~Freedman, \\newblock {\\em The topology of four-dimensional manifolds}, \\newblock J. Differential Geom. 17 (1982).\n\\end{thebibliography}\n\\end{document}\n"
+    )
+    gather(scan(load_quilt(root)))
+    rows = {r["short"]: r for r in works(scan(load_quilt(root)))}
+    assert (
+        rows["Fre82"]["title"]
+        == "M. Freedman, The topology of four-dimensional manifolds, J. Differential Geom. 17 (1982)."
+    )
+    assert (rows["Fre82"]["authors"], rows["Fre82"]["year"]) == ([], "")
+    # an entry with fields of its own keeps them: a note is never read over a title
+    assert rows["Smith 2024"]["title"] == "Widgets"

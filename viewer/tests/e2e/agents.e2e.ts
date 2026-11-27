@@ -55,6 +55,36 @@ test('the chip stands at the foot of the open column, under the legend, and open
 	await expect(page.locator('body')).not.toContainText(/session chosen|writing in/i);
 });
 
+test("What it is told says in words what the line in the app's file asks, and shows no command", async ({ page }) => {
+	await serve(page, (m) => {
+		m.config.agents.layer = true;
+		m.agents.line = "This directory is a quilt managed by loom. Before doing anything, call `loom_ai_orient`, the tool of the loom MCP server, and follow it; if you have no loom tools, run `loom ai orient` in a shell instead, and `loom doctor` to tell the author why. Write anywhere but the paths the orientation names as protected.";
+	});
+	await publisher(page, []);
+	await page.goto('/master/drafting/main');
+	await page.getByTestId('agent-chip').click();
+	const panel = page.getByTestId('agent-panel');
+	await expect(panel.getByTestId('agents-line')).toContainText('ask loom how to work here');
+	await expect(panel).not.toContainText(/loom_|loom ai|loom doctor/);
+});
+
+test("the panel's first heading follows who is connected: never Connected over no agent", async ({ page }) => {
+	await publisher(page, []);
+	await page.goto('/master/drafting/main');
+	await page.getByTestId('agent-chip').click();
+	const panel = page.getByTestId('agent-panel');
+	await expect(panel.getByTestId('agents-none')).toBeVisible();
+	await expect(panel.locator('h4').first()).toHaveText('Not connected');
+});
+
+test('at 760 the panel opened from the folded dot keeps Use with Claude and Use with Codex in the window', async ({ page }) => {
+	await page.setViewportSize({ width: 760, height: 900 });
+	await publisher(page, [], ['agents-setup']);
+	await page.goto('/master/drafting/main');
+	await page.getByTestId('agent-chip').click();
+	for (const id of ['use-claude-code', 'use-codex']) await expect(page.getByTestId(id)).toBeInViewport({ ratio: 1 });
+});
+
 test('folded, the chip is its dot inside the strip, its words its hover text', async ({ page }) => {
 	await page.setViewportSize({ width: 1100, height: 900 });
 	await publisher(page, [RECORD]);

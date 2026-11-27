@@ -134,6 +134,29 @@ test('view PDF says in words when nothing is compiled yet, while it compiles and
 	await expect(pane(page, 1).getByTestId('pdf-compile')).toContainText('LaTeX reported errors');
 });
 
+test('while TeX sets a document for the first time, its source is not shown and the page says it is typesetting', async ({ page }) => {
+	const run = (ended: string) => ({ result: 'ok', ended, error: null, at: null });
+	let said: Record<string, unknown> = { [talk.path]: { state: 'compiling', again: false, last: null } };
+	await compiling(page, () => said);
+	await page.goto(route(talk));
+	const doc = pane(page, 0);
+	await expect(doc.getByTestId('doc-typesetting')).toHaveText(`Typesetting ${file(talk)}…Its text shows here once TeX has set it.`);
+	await expect(doc.locator('pre.source').first()).toBeHidden();
+	// the run ended after the manifest was made: the manifest carrying its page is still to come
+	said = { [talk.path]: { state: 'idle', again: false, last: run('2026-09-16T00:00:05Z') } };
+	await page.waitForTimeout(400);
+	await expect(doc.getByTestId('doc-typesetting')).toBeVisible();
+	// the manifest is past the run, and TeX gave this talk no page: its source is its text
+	said = { [talk.path]: { state: 'idle', again: false, last: run('2026-09-15T23:00:00Z') } };
+	await expect(doc.getByTestId('doc-typesetting')).toHaveCount(0);
+	await expect(doc.locator('pre.source').first()).toBeVisible();
+	// a document whose page is TeX's is read while it compiles again
+	said = { [main.path]: { state: 'compiling', again: false, last: null } };
+	await page.goto(route(main));
+	await expect(pane(page, 0).locator('[data-fragment="master"]')).toBeVisible();
+	await expect(pane(page, 0).getByTestId('doc-typesetting')).toHaveCount(0);
+});
+
 test("a project's own PDF opens in the browser from its view menu too, as the file it is", async ({ page }) => {
 	const fig = (manifest.files as { path: string; kind: string }[]).find((f) => f.kind === 'pdf')!;
 	await page.route(`**/_files/${fig.path}`, (r) => r.fulfill({ body: PDF, contentType: 'application/pdf' }));

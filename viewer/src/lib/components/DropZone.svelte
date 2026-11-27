@@ -1,8 +1,8 @@
 <script lang="ts">
-	// The window's drop target (1b, 4d): files dragged over any view cover it with one sheet saying they go to the library, and, only while papers wait for their file, that one of them is attached to its paper. A drop anywhere hands the files to the library's intake (`$lib/library/intake`); a drop on a work's row, in the Library's list or among Review's papers to fetch, names that work. The view never changes. The sheet lets the pointer through, so a part of the page that takes a drop for itself (it calls preventDefault), as an empty quilt's drop area does (`PaperDrop.svelte`), still gets it. Nothing is drawn where the publisher takes no files. Being the intake's on every view, it also asks in the column each question the intake waits on (`askWaiting`).
+	// The window's drop target (1b, 4d): files dragged over any view cover it with one sheet saying they go to the library, and, only while papers wait for their file, that one of them is attached to its paper. A drop anywhere hands the files to the library's intake (`$lib/library/intake`); a drop on a row among Review's papers to fetch, which waits for its file, names that work, and one on a work's row in the Library asks first whether the files are that work's (`askOnRow`), since a row under the pointer says nothing of what the person meant. The view never changes. The sheet lets the pointer through, so a part of the page that takes a drop for itself (it calls preventDefault), as an empty quilt's drop area does (`PaperDrop.svelte`), still gets it. Nothing is drawn where the publisher takes no files. Being the intake's on every view, it also asks in the column each question the intake waits on (`askWaiting`).
 	import { onMount, untrack } from 'svelte';
 	import { call } from '$lib/library/api';
-	import { addFiles, askWaiting } from '$lib/library/intake';
+	import { addFiles, askOnRow, askWaiting } from '$lib/library/intake';
 	import { store } from '$lib/manifest/client.svelte';
 	import { message } from '$lib/shell/message.svelte';
 	import { onFixture } from '$lib/library/source';
@@ -44,8 +44,10 @@
 			over = false;
 			if (!(served || onFixture()) || !carriesFiles(e) || e.defaultPrevented) return;
 			e.preventDefault();
-			const onto = (e.target as Element | null)?.closest?.('[data-ref]')?.getAttribute('data-ref') ?? undefined;
-			void addFiles(Array.from(e.dataTransfer!.files), onto);
+			const row = (e.target as Element | null)?.closest?.('[data-ref]');
+			const onto = row?.getAttribute('data-ref') ?? undefined;
+			const files = Array.from(e.dataTransfer!.files);
+			void (onto && row?.getAttribute('data-kind') !== 'fetch' ? askOnRow(files, onto) : addFiles(files, onto));
 		};
 		window.addEventListener('dragover', move);
 		window.addEventListener('drop', drop);
