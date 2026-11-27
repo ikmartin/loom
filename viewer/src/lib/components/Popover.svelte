@@ -53,7 +53,10 @@
 		const vh = window.innerHeight;
 		const s: string[] = [];
 		if (placement === 'right') {
-			s.push(`left: ${at.right + gap}px`, `top: ${Math.max(gap, at.top)}px`, `max-height: ${vh - Math.max(gap, at.top) - gap}px`);
+			s.push(`left: ${at.right + gap}px`);
+			// a control in the window's lower half (the folded column's foot) hangs the box upward from its bottom edge, else the box has only the room below it
+			if (at.top > vh / 2) s.push(`bottom: ${Math.max(gap, vh - at.bottom)}px`, `max-height: ${Math.min(at.bottom, vh) - 2 * gap}px`);
+			else s.push(`top: ${Math.max(gap, at.top)}px`, `max-height: ${vh - Math.max(gap, at.top) - gap}px`);
 		} else {
 			if (placement === 'above') s.push(`bottom: ${vh - at.top + gap}px`, `max-height: ${at.top - 2 * gap}px`);
 			else s.push(`top: ${at.bottom + gap}px`, `max-height: ${vh - at.bottom - 2 * gap}px`);

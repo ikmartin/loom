@@ -77,6 +77,14 @@ test("the panel's first heading follows who is connected: never Connected over n
 	await expect(panel.locator('h4').first()).toHaveText('Not connected');
 });
 
+test('at 760 the panel opened from the folded dot keeps Use with Claude and Use with Codex in the window', async ({ page }) => {
+	await page.setViewportSize({ width: 760, height: 900 });
+	await publisher(page, [], ['agents-setup']);
+	await page.goto('/master/drafting/main');
+	await page.getByTestId('agent-chip').click();
+	for (const id of ['use-claude-code', 'use-codex']) await expect(page.getByTestId(id)).toBeInViewport({ ratio: 1 });
+});
+
 test('folded, the chip is its dot inside the strip, its words its hover text', async ({ page }) => {
 	await page.setViewportSize({ width: 1100, height: 900 });
 	await publisher(page, [RECORD]);
