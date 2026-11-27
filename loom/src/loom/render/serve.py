@@ -124,6 +124,9 @@ class Publications:
         self.connected_state = b"[]"
         self.library = 0
         self.library_state = b""
+        #: The blocks the last save changed, as source, and the build that will publish them (`render.quick`), a demonstration.
+        self.drafts = 0
+        self.drafts_state = b""
         self._closed = False
 
     def published(self, n: int = 0) -> None:
@@ -174,17 +177,26 @@ class Publications:
                 self.library_state = state
                 self._cond.notify_all()
 
+    def drafted(self, state: bytes) -> None:
+        """A save's changed blocks, as one line of JSON, said before the build that publishes them runs TeX (a demonstration)."""
+        with self._cond:
+            self.drafts += 1
+            self.drafts_state = state
+            self._cond.notify_all()
+
     def close(self) -> None:
         """End every stream: the server is stopping."""
         with self._cond:
             self._closed = True
             self._cond.notify_all()
 
-    def counts(self) -> tuple[int, int, int, int, int]:
-        return (self.count, self.compiles, self.connected, self.library, self.ends)
+    def counts(self) -> tuple[int, int, int, int, int, int]:
+        return (self.count, self.compiles, self.connected, self.library, self.ends, self.drafts)
 
-    def wait(self, seen: tuple[int, int, int, int, int], timeout: float) -> tuple[int, int, int, int, int] | None:
-        """The publication, compile, connection, library and build-end counts once any is past `seen`, or as they stand after `timeout`; None once closed."""
+    def wait(
+        self, seen: tuple[int, int, int, int, int, int], timeout: float
+    ) -> tuple[int, int, int, int, int, int] | None:
+        """The publication, compile, connection, library, build-end and draft counts once any is past `seen`, or as they stand after `timeout`; None once closed."""
         with self._cond:
             self._cond.wait_for(lambda: self._closed or self.counts() != seen, timeout)
             return None if self._closed else self.counts()
@@ -1054,7 +1066,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
         self._json(HTTPStatus.OK, reading_place(self.quilt_root))
 
     def _stream(self) -> None:
-        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, `connected`, carrying the agent servers alive, and `built`, carrying how the builds ended (`Publications.built_state`), each on opening and each time it changes; and `library`, carrying `{"gen": N}`, each time the library's generation moves (`library-views.md` §2, "Freshness").
+        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, `connected`, carrying the agent servers alive, and `built`, carrying how the builds ended (`Publications.built_state`), each on opening and each time it changes; `library`, carrying `{"gen": N}`, each time the library's generation moves (`library-views.md` §2, "Freshness"); and `drafted`, carrying a save's changed blocks as source before its build runs TeX (`render.quick`, a demonstration), said before a `built` that comes with it.
 
         The viewer fetches the manifest as it would on a poll and learns nothing of what changed. Held open on its own thread; a comment every `HEARTBEAT` seconds keeps an idle one alive, and the server's stop ends it.
         """
@@ -1086,6 +1098,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     self.wfile.write(b"event: connected\ndata: " + pubs.connected_state + b"\n\n")
                 if now[3] != seen[3]:
                     self.wfile.write(b"event: library\ndata: " + pubs.library_state + b"\n\n")
+                if now[5] != seen[5]:
+                    self.wfile.write(b"event: drafted\ndata: " + pubs.drafts_state + b"\n\n")
                 if now[4] != seen[4]:
                     self.wfile.write(b"event: built\ndata: " + pubs.built_state + b"\n\n")
                 seen = now
@@ -1323,6 +1337,8 @@ class ServeSession:
             self._sweep_due = False
             self._begun += 1
             n = self._begun
+            if changed is not None and not records:
+                self._draft(changed, n)
             try:
                 if progress is None and changed is not None:
                     from loom.cli.report import Progress
@@ -1368,6 +1384,21 @@ class ServeSession:
             if due:
                 self.compiles.want(due)
         self._settle()
+
+    def _draft(self, changed: list[Path], n: int) -> None:
+        """Say the blocks a save changed, as source, before build `n` publishes them (`render.quick`, a demonstration); a failure here says so and builds all the same."""
+        last = self.last_report
+        if last is None:
+            return
+        from loom.render.quick import drafted
+
+        try:
+            blocks = drafted(last.result, self.quilt.root, changed)
+        except Exception as exc:  # noqa: BLE001
+            print(f"loom serve: no draft of the save: {failure(exc)}", file=sys.stderr)
+            return
+        if blocks:
+            self.publications.drafted(json.dumps({"server": os.getpid(), "build": n, "blocks": blocks}).encode())
 
     def upcoming(self) -> int:
         """The number the next build will have, which a write answered under the publication's hold says it waits on: every build counts once it begins, published or failed."""
