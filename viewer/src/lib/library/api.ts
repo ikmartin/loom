@@ -2,6 +2,7 @@
 
 import { can, capabilities, forgetCapabilities, type Capabilities } from '$lib/write';
 import { updating } from '$lib/manifest/updating.svelte';
+import { askName } from '$lib/shell/name.svelte';
 import { base } from '$app/paths';
 import { libraryPdfUrl } from '$lib/paths';
 import { store } from '$lib/manifest/client.svelte';
@@ -40,35 +41,42 @@ export interface Source {
 
 const hex = (hash: string) => hash.replace(/^sha256:/, '');
 
-/** The publisher: `POST /_api/<name>` with the token, a refused token probed again once, as `write()` does, and a write's answer naming the build that publishes it marking the page updating, as `write()` does; bytes at their content addresses. */
+/** One call to the publisher, a refused token probed again once. */
+async function callOnce<T extends Gen>(name: string, body: Record<string, unknown>): Promise<Answer<T>> {
+	try {
+		let caps: Capabilities | null = null;
+		const send = async () => {
+			caps = await capabilities();
+			return fetch(`${base}/_api/${name}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', ...(caps?.token ? { 'X-Loom-Token': caps.token } : {}) },
+				body: JSON.stringify(body)
+			});
+		};
+		let res = await send();
+		if (res.status === 403) {
+			forgetCapabilities();
+			res = await send();
+		}
+		// an answer that is not loom's JSON is a host that serves no write API: the read is not served here
+		const payload = (await res.json().catch(() => null)) as (T & { error?: ApiError }) | null;
+		if (!payload || payload.error?.code === 'unknown-endpoint') return { ok: false, error: { code: 'not-served', message: '' } };
+		if (res.ok && !payload.error) {
+			updating.expect((caps as Capabilities | null)?.pid, (payload as { publication?: unknown }).publication);
+			return { ok: true, value: payload };
+		}
+		return { ok: false, error: { ...(payload.error ?? { code: 'failed', message: '' }), status: res.status } };
+	} catch (err) {
+		return { ok: false, error: { code: 'unreachable', message: (err as Error).message } };
+	}
+}
+
+/** The publisher: `POST /_api/<name>` with the token, a refused token probed again once, as `write()` does, a write's answer naming the build that publishes it marking the page updating, and a write refused for want of the person's name asking for it and sent again once it is saved, as `write()` does; bytes at their content addresses. */
 export const server: Source = {
 	async call<T extends Gen>(name: string, body: Record<string, unknown>): Promise<Answer<T>> {
-		try {
-			let caps: Capabilities | null = null;
-			const send = async () => {
-				caps = await capabilities();
-				return fetch(`${base}/_api/${name}`, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json', ...(caps?.token ? { 'X-Loom-Token': caps.token } : {}) },
-					body: JSON.stringify(body)
-				});
-			};
-			let res = await send();
-			if (res.status === 403) {
-				forgetCapabilities();
-				res = await send();
-			}
-			// an answer that is not loom's JSON is a host that serves no write API: the read is not served here
-			const payload = (await res.json().catch(() => null)) as (T & { error?: ApiError }) | null;
-			if (!payload || payload.error?.code === 'unknown-endpoint') return { ok: false, error: { code: 'not-served', message: '' } };
-			if (res.ok && !payload.error) {
-				updating.expect((caps as Capabilities | null)?.pid, (payload as { publication?: unknown }).publication);
-				return { ok: true, value: payload };
-			}
-			return { ok: false, error: { ...(payload.error ?? { code: 'failed', message: '' }), status: res.status } };
-		} catch (err) {
-			return { ok: false, error: { code: 'unreachable', message: (err as Error).message } };
-		}
+		const said = await callOnce<T>(name, body);
+		if (said.ok || said.error.code !== 'no-reviewer') return said;
+		return (await askName()) ? callOnce<T>(name, body) : said;
 	},
 	async receive(file: File) {
 		try {

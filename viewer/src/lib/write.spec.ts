@@ -107,6 +107,20 @@ describe('a write refused for want of the person’s name', () => {
 		unmount();
 	});
 
+	it('asks the same way for a write of the library’s and Review’s client', async () => {
+		const { server } = await import('$lib/library/api');
+		const { answer, mountAsk, naming } = await import('$lib/shell/name.svelte');
+		const unmount = mountAsk();
+		const p = nameless();
+		const done = server.call('annotate', { target: 'k' });
+		await vi.waitFor(() => expect(naming.open).toBe(true));
+		p.named = true;
+		answer(true);
+		expect((await done).ok).toBe(true);
+		expect(p.posts).toBe(2);
+		unmount();
+	});
+
 	it('answers with the refusal when the name is left unsaved, or nothing on the page can ask', async () => {
 		const { answer, mountAsk, naming } = await import('$lib/shell/name.svelte');
 		const unmount = mountAsk();
