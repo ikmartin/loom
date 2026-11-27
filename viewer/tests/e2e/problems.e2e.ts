@@ -58,7 +58,7 @@ test("a person is shown the problems in their own LaTeX alone, and the manifest 
 	await expect(page.getByTestId('problems-remarks')).toHaveCount(0);
 	// an agent's copy's LaTeX is the agent's: folded beneath, said whose it is
 	await expect(page.getByTestId('problems-copy')).not.toHaveAttribute('open');
-	await expect(page.getByTestId('problems-copy')).toContainText('Proposed Changes');
+	await expect(page.getByTestId('problems-copy')).toContainText('Proposed edits');
 	await expect(page.getByTestId('problems-copy').locator('a[href="/review/proposed"]')).toHaveCount(1);
 	// a fix is a command an agent runs, never offered to the person
 	await expect(page.getByTestId('fix')).toHaveCount(0);
@@ -87,7 +87,6 @@ test("where Review's reads are served, an agent's copy's problems point to Propo
 	await page.goto('/review/problems?fixture=round6');
 	const copy = page.getByTestId('problems-copy');
 	await expect(copy).toContainText('take the copy back in Proposed edits.');
-	await expect(copy).not.toContainText('Proposed Changes');
 	await copy.locator('summary').first().click();
 	await copy.getByTestId('problems-copy-link').click();
 	await expect(page).toHaveURL(/\/review(\?|$)/);

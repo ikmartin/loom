@@ -168,6 +168,15 @@ export const frame = {
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
 		unreachable: 'The service that looks papers up could not be reached. Try again later.'
 	} as Record<string, string>,
+	/** Settings › Profile: the name field and where the name now comes from. */
+	profile: {
+		field: 'Your name',
+		save: 'Save',
+		saving: 'Saving…',
+		unset: 'not set',
+		/** Under the field, where no name was saved and git's is used. */
+		fromGit: "From git's name for you, until you save one here."
+	},
 	/** The note above the document in the left pane, for what the quilt's first page has to say; elsewhere than a document, the same words float near the foot of the window. */
 	note: {
 		/** A quilt just made from a paper whose working copy does not typeset as the paper did (the home page opens it so). */
@@ -218,6 +227,6 @@ export const frame = {
 		/** The heading of the page shown when the manifest could not be read. */
 		problems: 'Problems',
 		/** The page shown while the manifest is loading. */
-		loading: 'Loading manifest…'
+		loading: 'Loading the quilt…'
 	}
 } as const;

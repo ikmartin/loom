@@ -124,7 +124,7 @@
 		<NoDrafts what="documents to read" />
 	{:else if !master}
 		<h1>Unknown document</h1>
-		<p class="muted">No document in this corpus is <code>{item.id}</code>.</p>
+		<p class="muted">No document in this quilt is <code>{item.id}</code>.</p>
 	{:else}
 		{#if master.copy_of}<DraftActions {master}/>{/if}
 		<div class:with-comparison={hasComparison} class="review-layout">

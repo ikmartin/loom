@@ -122,6 +122,9 @@ test("without a publisher, the quilt's settings are shown as published and chang
 	// a name is saved only through a publisher
 	await settings(page, 'profile');
 	await expect(page.locator('#reviewer-name')).toHaveCount(0);
+	// where the name is kept is said by the section, never as a path
+	await expect(page.getByTestId('settings-page')).not.toContainText('config');
+	await expect(page.getByTestId('profile-from')).toHaveCount(0);
 });
 
 test('on a phone the sections are a row above the page, and nothing runs off the screen', async ({ page }) => {

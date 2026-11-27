@@ -131,7 +131,7 @@
 	{#if parts.copy.length}
 		<details class="part" open={isOpen('copy', false)} ontoggle={toggled('copy')} data-testid="problems-copy">
 			<summary><h2>In an agent's copy <span class="n">{parts.copy.length}</span></h2></summary>
-			<p class="whose">The agent's to put right, or to leave out when you take the copy back in {#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="problems-copy-link">{reviewWords.kinds.edits.name}</a>{:else}<a href={route('/review/proposed')} data-testid="problems-copy-link">Proposed Changes</a>{/if}.</p>
+			<p class="whose">The agent's to put right, or to leave out when you take the copy back in {#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="problems-copy-link">{reviewWords.kinds.edits.name}</a>{:else}<a href={route('/review/proposed')} data-testid="problems-copy-link">Proposed edits</a>{/if}.</p>
 			{@render groups(parts.copy, 'copy')}
 		</details>
 	{/if}

@@ -5,6 +5,9 @@
 	import { landed } from '$lib/manifest/updating.svelte';
 	import { write } from '$lib/write';
 	import Row from './Row.svelte';
+	import { frame } from '$lib/words/frame';
+
+	const words = frame.profile;
 
 	let { editable }: { editable: boolean } = $props();
 
@@ -34,15 +37,15 @@
 					void save();
 				}}
 			>
-				<input id="reviewer-name" class="text" bind:value={name} autocomplete="name" required aria-label="Your name" />
-				<button class="btn" disabled={busy || !name.trim() || name.trim() === effective} type="submit">{busy ? 'Saving…' : 'Save'}</button>
+				<input id="reviewer-name" class="text" bind:value={name} autocomplete="name" required aria-label={words.field} />
+				<button class="btn" disabled={busy || !name.trim() || name.trim() === effective} type="submit">{busy ? words.saving : words.save}</button>
 			</form>
 		{:else}
-			<span class="value">{effective || 'not set'}</span>
+			<span class="value">{effective || words.unset}</span>
 		{/if}
 	</Row>
 </div>
-{#if store.manifest?.reviewer?.source}<p class="from">From {store.manifest.reviewer.source}.</p>{/if}
+{#if store.manifest?.reviewer?.source === 'git config user.name'}<p class="from" data-testid="profile-from">{words.fromGit}</p>{/if}
 
 <style>
 	form {

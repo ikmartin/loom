@@ -5,7 +5,7 @@ import { manifest, REFEREE, serve } from '../manifest';
 test('Review\'s column lists its sections, each counting what waits there, the current one marked', async ({ page }) => {
 	await page.goto('/review');
 	const list = page.getByTestId('review-sections');
-	await expect(list.getByRole('link')).toHaveText([/^Your Changes/, /^Proposed Changes/, /^Problems/, /^History/]);
+	await expect(list.getByRole('link')).toHaveText([/^Your Changes/, /^Proposed edits/, /^Problems/, /^History/]);
 	await expect(page.getByTestId('section-changes')).toHaveAttribute('aria-current', 'page');
 	// what changed since it was accepted, or was taken in, and every pending change; a block never accepted is listed there, not counted
 	const unresolved = (manifest.unresolved ?? []).filter((r: { cause: string }) => r.cause !== 'never-accepted').length;
