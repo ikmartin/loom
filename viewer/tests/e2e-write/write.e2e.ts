@@ -385,6 +385,7 @@ test('Review\'s Sessions closes, reopens and deletes a session, a tombstone that
 	await page.getByTestId(`sessions-delete-${id}`).click();
 	const modal = page.getByTestId('delete-session');
 	await expect(modal.getByTestId('delete-says')).toContainText('Annotations belong to no session, so none goes with it');
+	await expect(modal.getByTestId('delete-says')).not.toContainText('loom ');
 	await modal.getByTestId('delete-confirm').click();
 	await expect.poll(() => sessionIndex(served).filter((e) => e.event === 'deleted' && e.id === id).length).toBe(1);
 	await expect(row).toHaveCount(0);

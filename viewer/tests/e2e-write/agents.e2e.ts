@@ -73,7 +73,7 @@ test('the chip says an agent is connected only while its server lives, whether i
 		await expect(record).toContainText('Claude Code');
 		await expect(record).toContainText('in the Claude app');
 		await expect(record).toContainText('Writes as Claude Code Agent');
-		await expect(page.getByTestId('agent-last')).toContainText('Last call just now: loom since.');
+		await expect(page.getByTestId('agent-last')).toContainText('Last call just now: the since tool.');
 		// its session is its report, a link to its transcript, and nothing says whether a session is chosen
 		await expect(page.getByTestId('agent-session')).toHaveAttribute('href', /\/session\/s-/);
 		await expect(page.locator('body')).not.toContainText(/session chosen|writing in/i);

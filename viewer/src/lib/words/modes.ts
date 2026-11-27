@@ -5,7 +5,7 @@ export const modes = {
 		/** The section's name in the Settings panel. */
 		section: 'Modes',
 		/** Under the section's title: where the modes are kept. */
-		where: "Kept in this quilt's .loom/agents/instructions/modes/, a file for each mode, shared with everyone who has the quilt. Only you change them here; an agent cannot.",
+		where: "Kept in this quilt, a file for each mode, shared with everyone who has the quilt. Only you change them here; an agent cannot.",
 		/** The one row's name. */
 		name: 'Modes',
 		/** What the row is. */
@@ -20,8 +20,8 @@ export const modes = {
 	},
 	/** Beside a mode's name, where `loom upgrade` left loom's newer version beside the quilt's edited copy. */
 	newer: 'newer from loom',
-	/** The same, said in full in the mode's detail, with the file it is in. */
-	newerWhat: (path: string) => `Loom has a newer version of this mode than the one this quilt's edit started from. It is in ${path}.new, beside the edit, to compare and merge by hand.`,
+	/** The same, said in full in the mode's detail. */
+	newerWhat: "Loom has a newer version of this mode than the one this quilt's edit started from. Put back loom's to take it in place of the edit, or keep the edit.",
 	/** The detail's heading over the "When it fits" line. */
 	fits: 'When it fits',
 	/** In its place, for a mode whose text has dropped the line. */

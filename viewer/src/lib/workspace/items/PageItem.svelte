@@ -4,6 +4,7 @@
 	import Prose from '$lib/math/Prose.svelte';
 	import type { Item } from '../item';
 	import PageMeta from './PageMeta.svelte';
+	import { docs as words } from '$lib/words/docs';
 
 	let { item }: { item: Item } = $props();
 
@@ -17,7 +18,7 @@
 			<PageMeta {page} />
 			<Prose html={page.body_html} />
 		{:else}
-			<p class="muted">This quilt has no research state yet; an agent writes one with <code>loom write state</code>.</p>
+			<p class="muted">{words.noState}</p>
 		{/if}
 	</div>
 </div>

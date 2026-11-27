@@ -608,6 +608,41 @@ export const review = {
 		/** Everything recorded's words for a file's version put back. */
 		restored: (name: string) => `Put ${name} back as a version`
 	},
+	/** Review › History › Sessions: the question before a session is deleted. */
+	deleteSession: {
+		/** Its heading and accessible name. */
+		title: (name: string) => `Delete “${name}”?`,
+		/** Its question. */
+		ask: 'Are you sure you want to delete this session?',
+		/** What deleting does and does not touch. */
+		says: 'The session is removed from view. Annotations belong to no session, so none goes with it.',
+		cancel: 'Cancel',
+		confirm: 'Delete'
+	},
+	/** The question-mark circle beside a page's title (Review's page where loom serves no lists, and Problems): what the page shows and what each state means. */
+	help: {
+		review: {
+			title: 'What the Your Changes page shows',
+			body: "The mathematics first: every statement and proof you have not accepted as it stands, one document at a time, each listed once with every reason it waits. Accepting records your reading of the text against what it rests on; it goes stale when either changes. Blocks taken in from an agent's copy or a pull are grouped by where they came from; what loom cannot accept says why in its row. Then the changes waiting to be kept, by document: suggestions not yet kept or discarded and edits made since your look in the places agents may edit, each a few words out and a few words in. Your own places, the config and each place agents are denied (Settings › Agents), are not watched, so an edit there is never listed. Keep writes a suggestion into its file, or takes an edit into your look; Discard drops a suggestion, or writes your words back over an edit, its text kept as a version first. Neither says whether the mathematics is right, and each acts as it does in the document. To do adds the open annotations from others.",
+			states: [
+				['changed since you accepted', 'the text, or something it rests on, changed after you accepted it'],
+				['taken in', "it came in from an agent's copy or a pull, and you have not accepted it since"],
+				['never accepted', 'nothing has been recorded about this text; these are listed and not counted'],
+				["can't be accepted yet", 'it is marked incomplete, it is a conjecture or question, its basis is not said, or something it rests on cannot be identified; the row says which'],
+				['suggestion', 'words someone proposes in place of yours, not yet in the file'],
+				['edit in the file', 'words that differ from what you last saw, whoever changed them, where the quilt reviews edits made in place']
+			]
+		},
+		problems: {
+			title: 'What the problems page shows',
+			body: "What is wrong in your own LaTeX, a document that did not compile among it, by whose it is to put right. Your files come first, and are what Review counts; an agent's copy is the agent's, or yours to leave out when you take it back. What loom notices about its own picture of the quilt is your agent's to keep, and is not shown here.",
+			states: [
+				['error', 'a reader would notice it: a document that did not compile, a reference to nothing'],
+				['warning', 'probably a mistake, though the document still reads'],
+				['remark', 'worth knowing, and not wrong']
+			]
+		}
+	} as Record<string, { title: string; body: string; states: [string, string][] }>,
 	/** Names joined as a sentence lists them. */
 	listed
 } as const;

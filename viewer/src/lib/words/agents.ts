@@ -35,9 +35,10 @@ export const agents = {
 		desktop: 'in the Claude app',
 		terminal: 'in a terminal'
 	},
-	/** What a call was, in the panel: a mode started, or a resource read; a tool is shown as its command. */
+	/** What a call was, in the panel: a mode started, a resource read, or a tool by its name. */
 	call: {
 		prompt: (mode: string) => `the ${mode} mode, started`,
+		tool: (name: string) => `the ${name} tool`,
 		resource: 'a resource read'
 	},
 	/** The panel the chip opens. */

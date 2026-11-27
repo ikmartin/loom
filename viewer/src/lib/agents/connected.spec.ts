@@ -65,7 +65,7 @@ describe('the chip', () => {
 
 describe('the words of a record', () => {
 	it('reads a call as its command, a prompt as its mode', () => {
-		expect(callOf({ kind: 'tool', name: 'loom_ai_orient', when: '' })).toBe('loom ai orient');
+		expect(callOf({ kind: 'tool', name: 'loom_ai_orient', when: '' })).toBe('the ai orient tool');
 		expect(callOf({ kind: 'prompt', name: 'referee', when: '' })).toBe('the referee mode, started');
 	});
 

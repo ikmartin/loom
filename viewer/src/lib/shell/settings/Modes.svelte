@@ -97,7 +97,7 @@
 						</div>
 					{/if}
 					{#if said}<p class="said" role="alert" data-testid="mode-said">{said}</p>{/if}
-					{#if current.newer}<p class="note info" data-testid="mode-newer">{words.newerWhat(current.path)}</p>{/if}
+					{#if current.newer}<p class="note info" data-testid="mode-newer">{words.newerWhat}</p>{/if}
 					<section>
 						<h5>{words.fits}</h5>
 						<p class="fits" data-testid="mode-fits">{current.fits || words.noFits}</p>

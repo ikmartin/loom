@@ -1,5 +1,5 @@
 <script lang="ts">
-	// One setting: its name, what it does and where it is written on the left, its control on the right, or beneath with `stack` for a list. The words are the catalog's.
+	// One setting: its name and what it does on the left, its control on the right, or beneath with `stack` for a list. The words are the catalog's.
 	import type { Snippet } from 'svelte';
 	import { SETTING } from './catalog';
 	import Words from './Words.svelte';
@@ -12,7 +12,6 @@
 	<div class="about">
 		<div class="name">{s.name}</div>
 		<div class="what"><Words text={s.what} /></div>
-		{#if s.key}<div class="key">{s.key}</div>{/if}
 		{#if refused}<p class="refused" role="alert" data-testid="setting-refused">{refused}</p>{/if}
 		{#if stack}{@render children?.()}{/if}
 	</div>
@@ -44,12 +43,6 @@
 		color: var(--ink-soft);
 		margin-top: 3px;
 		line-height: 1.45;
-	}
-	.key {
-		font-family: var(--mono);
-		font-size: 11px;
-		color: var(--ink-faint);
-		margin-top: 4px;
 	}
 	.refused {
 		margin: 6px 0 0;

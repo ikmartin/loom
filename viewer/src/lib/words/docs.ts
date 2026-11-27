@@ -228,6 +228,8 @@ export const docs = {
 		fewer: (n: number) => `only the newest ${n}`,
 		olderName: (of: string) => `the older versions of ${of}`
 	},
+	/** The research state's page, where the quilt has none yet. */
+	noState: 'This quilt has no research state yet. Ask your agent to write one: where the work stands, kept up to date as it goes.',
 	/** A block drawn from the person's saved source while TeX typesets it (a demonstration): the note beside it, and that note's hover text. */
 	draft: {
 		text: 'typesetting…',
