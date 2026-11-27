@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toHtml, type Point } from './latexlite';
+import { LITE_CSS, toHtml, type Point } from './latexlite';
 import { parseMacros } from './macros';
 import { library as words } from '$lib/words/library';
 
@@ -293,5 +293,14 @@ describe('an anchor whose number waits for the person\'s compile', () => {
 		const r = toHtml('By \\eqref{tq-0002-eq00} and \\ref{tq-0002-eq00}.', points);
 		expect(r.html).not.toContain('null');
 		expect(r.unresolved).toEqual(['tq-0002-eq00']);
+	});
+});
+
+describe('its rules', () => {
+	it('select only within a drawing, which is wholly paragraphs, so the page around it is not restyled while it is on screen', () => {
+		const selectors = [...LITE_CSS.matchAll(/([^{}]+)\{[^}]*\}/g)].flatMap((m) => m[1].split(',').map((s) => s.trim()));
+		expect(selectors.length).toBeGreaterThan(0);
+		expect(selectors.filter((s) => !s.includes('.tx-'))).toEqual([]);
+		expect(toHtml('\\[x\\]', {}).html).toBe(par('<div class="math display">\\[x\\]</div>'));
 	});
 });

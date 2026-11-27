@@ -32,7 +32,7 @@ export interface Drawn {
 	unresolved: string[];
 }
 
-/** Rules the drawing needs: paragraphs, hanging list labels, displays. Scoped to the `tx-` classes and `.math.display`. */
+/** Rules the drawing needs: paragraphs, hanging list labels, displays. Put in the page's head while a drawing is on screen, so every rule selects within a `tx-` class: one that did not would restyle the draft beside the drawing, and move its text while a citation's card is open. */
 export const LITE_CSS = `
 .tx-par + .tx-par { margin-top: 0.6em; }
 .tx-list { margin: 0.35em 0; padding-left: 2.4em; list-style: none; }
@@ -46,7 +46,7 @@ export const LITE_CSS = `
 .tx-right { text-align: right; }
 .tx-quote { margin: 0.4em 2em; }
 .tx-unknown { color: #b42318; font-family: ui-monospace, monospace; font-style: normal; }
-.math.display { display: block; margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
+.tx-par .math.display { display: block; margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
 `;
 
 const BREAK = '\u0000';
