@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom import own
 from loom.ai.clients import PROJECT_FILES
 from loom.paths import CACHE, LOCAL, LOOM, LOOM_GITIGNORE, SCRATCH
 
@@ -54,8 +55,8 @@ def write_loom_ignore(root: Path, *, write: bool = True) -> bool:
         return False
     if write:
         p = root / LOOM_GITIGNORE
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(want, encoding="utf-8")
+        own.mkdir(p.parent, root=root)
+        own.write_text(p, want, encoding="utf-8", root=root)
     return True
 
 

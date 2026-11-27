@@ -13,6 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.history.ledger import History, append_entry, load_history
 from loom.history.steps import free_name, plan_freeze, slug, stamp_document, text_hash, write_step
 from loom.paths import ADOPTION_DECISIONS, ADOPTION_PREVIEWS, documents_named, under
@@ -675,8 +676,10 @@ def prepare(
     prepared["decision"] = decisions(result, copy, who, data=data)
     prepared["token"] = _digest(prepared)
     home = root / ADOPTION_PREVIEWS
-    home.mkdir(parents=True, exist_ok=True)
-    (home / (prepared["token"] + ".json")).write_text(json.dumps(prepared, indent=2) + "\n")
+    own.mkdir(home, root=root)
+    own.write_text(
+        home / (prepared["token"] + ".json"), json.dumps(prepared, indent=2) + "\n", encoding=None, root=root
+    )
     return prepared
 
 
@@ -1037,8 +1040,8 @@ def refresh(result: ScanResult, copy: str, *, write: bool = True) -> dict[str, A
         return answer
     try:
         temporary = path.with_suffix(".refresh.tmp")
-        temporary.write_text(text)
-        temporary.replace(path)
+        own.write_text(temporary, text, encoding=None)
+        own.replace(temporary, path)
         append_entry(
             history.dir,
             "refresh",
@@ -1046,8 +1049,8 @@ def refresh(result: ScanResult, copy: str, *, write: bool = True) -> dict[str, A
             None,
         )
     except Exception:
-        path.write_text(original)
-        ledger.write_bytes(ledger_before)
+        own.write_text(path, original, encoding=None)
+        own.write_bytes(ledger, ledger_before)
         raise
     return answer
 
@@ -1177,8 +1180,8 @@ def decide(
     path = result.quilt.root / ADOPTION_DECISIONS
     stored = json.loads(path.read_text()) if path.is_file() else {}
     stored.setdefault(reviewer, {})[data["copy"]] = row
-    path.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(path.parent, root=result.quilt.root)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(stored, indent=2) + "\n")
-    temporary.replace(path)
+    own.write_text(temporary, json.dumps(stored, indent=2) + "\n", encoding=None, root=result.quilt.root)
+    own.replace(temporary, path, root=result.quilt.root)
     return row

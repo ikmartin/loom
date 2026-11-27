@@ -8,12 +8,12 @@ from __future__ import annotations
 import dataclasses
 import difflib
 import json
-import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from loom import own
 from loom.clock import stamp
 from loom.paths import LOOKED
 
@@ -181,10 +181,10 @@ def _align(root: Path, look: Look) -> Look:
 
 def _write(root: Path, look: Look) -> None:
     p = look_path(root, look.who)
-    p.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(p.parent, root=root)
     tmp = p.with_name(p.name + ".loom-tmp")
-    tmp.write_text(json.dumps(look.to_json(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, p)
+    own.write_text(tmp, json.dumps(look.to_json(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8", root=root)
+    own.replace(tmp, p, root=root)
 
 
 def open_texts(quilt: Quilt) -> dict[str, str]:

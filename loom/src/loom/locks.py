@@ -16,6 +16,8 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 
+from loom import own
+
 #: How long a writer waits, in seconds, before refusing. A hold is a read and a write, or a scan and a write, and N writers queue, so this is far longer than any one of them.
 WAIT = 120.0
 #: Where the Windows lock sits, past the end of any log.
@@ -159,7 +161,11 @@ def _take(fd: int, path: Path, wait: float, patience: Callable[[], AbstractConte
 
 @contextmanager
 def locked(
-    path: Path, *, wait: float | None = None, patience: Callable[[], AbstractContextManager[object]] | None = None
+    path: Path,
+    *,
+    wait: float | None = None,
+    patience: Callable[[], AbstractContextManager[object]] | None = None,
+    root: Path | None = None,
 ) -> Iterator[None]:
     """Hold the exclusive lock on `path`, across processes and threads, for the length of the block.
 
@@ -171,6 +177,8 @@ def locked(
         Seconds to wait before refusing; default `WAIT`.
     patience : callable, optional
         Makes a context manager entered only while actually waiting, for a command that shows it is alive.
+    root : Path, optional
+        The place the lock file is made in without following a link (`loom.own`); default the quilt holding it.
 
     Yields
     ------
@@ -187,9 +195,8 @@ def locked(
     if key in held:
         yield
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # read-only is enough to lock, and never changes the file
-    fd = os.open(path, os.O_RDONLY | os.O_CREAT, 0o666)
+    # read-only is enough to lock, and never changes the file; made, with its folder, through no link (`loom.own`)
+    fd = own.os_open(path, os.O_RDONLY | os.O_CREAT, 0o666, root=root, make=True)
     try:
         took = _take(fd, path, WAIT if wait is None else wait, patience)
         held.add(key)

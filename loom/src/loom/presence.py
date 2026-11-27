@@ -16,6 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.paths import LIVE
 
 #: The record's format number, which a reader checks before it lists one.
@@ -38,12 +39,13 @@ def record_path(root: Path, pid: int) -> Path:
 
 
 def _place(root: Path, *, make: bool = False) -> Path | None:
-    """`.loom/local/live/` when it is a directory and not a link, made with `make` where there is none; None otherwise, so nothing is read or written through a link a copied quilt carries."""
+    """`.loom/local/live/` when it and every folder on its way is a directory and not a link, made with `make` where there is none; None otherwise, so nothing is read or written through a link a copied quilt carries."""
     where = root / LIVE
     try:
         if make and not os.path.lexists(where):
-            where.mkdir(parents=True, exist_ok=True)
-        return where if stat.S_ISDIR(os.lstat(where).st_mode) else None
+            own.mkdir(where, root=root)
+        with own.parent(where / "x", root=root):
+            return where
     except OSError:
         return None
 

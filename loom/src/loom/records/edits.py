@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.locks import locked
 from loom.paths import EDIT_LOG
 from loom.records.ids import EDIT, draw
@@ -79,7 +80,7 @@ def append(root: Path, event: dict[str, Any]) -> None:
     """Append one event under the log's lock."""
     p = log_path(root)
     with locked(p):
-        with p.open("a", encoding="utf-8") as fh:
+        with own.open(p, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
 
 
@@ -89,7 +90,7 @@ def append_new(root: Path, event: dict[str, Any], date: str) -> str:
     with locked(p):
         ids = {e.id for e in replay(root)[0]}
         edit_id = draw(f"e-{date}-", ids)
-        with p.open("a", encoding="utf-8") as fh:
+        with own.open(p, "a", encoding="utf-8") as fh:
             fh.write(json.dumps({**event, "id": edit_id}, ensure_ascii=False, sort_keys=True) + "\n")
     return edit_id
 

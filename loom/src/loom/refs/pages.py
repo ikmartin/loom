@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from loom import own
 from loom.paths import LIBRARY_PAGES
 
 # A numbered heading: "3", "3.1", "A.2". A bare single capital is deliberately NOT a number -- "C (F ) = Spec Sym(F )"
@@ -242,8 +243,8 @@ def token_boxes(pdf: Path, page: int, home: Path | None = None) -> str:
     if cache.is_file():
         return cache.read_text(encoding="utf-8")
     xml = _pdftotext(["-q", "-bbox-layout", "-f", str(page), "-l", str(page), str(pdf), "-"])
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(xml, encoding="utf-8")
+    own.mkdir(cache.parent)
+    own.write_text(cache, xml, encoding="utf-8")
     return xml
 
 
@@ -283,10 +284,10 @@ def document_boxes(pdf: Path, cache: Path | None = None) -> list[str]:
     if cache is not None:
         said = cache / "document.json"
         try:
-            cache.mkdir(parents=True, exist_ok=True)
+            own.mkdir(cache)
             for n, xml in enumerate(pages, 1):
-                (cache / f"{n:04d}.xml").write_text(xml, encoding="utf-8")
-            said.write_text(json.dumps({"sha256": sha, "pages": len(pages)}) + "\n", encoding="utf-8")
+                own.write_text(cache / f"{n:04d}.xml", xml, encoding="utf-8")
+            own.write_text(said, json.dumps({"sha256": sha, "pages": len(pages)}) + "\n", encoding="utf-8")
         except OSError:
             pass
     return pages
@@ -420,16 +421,17 @@ def write_map(home: Path, pdf: Path, progress: Callable[[int, int], None] | None
     """
     pages = page_texts(pdf, progress)
     out = home / "pages"
-    out.mkdir(parents=True, exist_ok=True)
+    own.mkdir(out)
     for old in out.glob("*.txt"):
-        old.unlink()
+        own.unlink(old)
     chars = 0
     for i, text in enumerate(pages, start=1):
         body = text.strip("\n")
-        (out / f"{i:04d}.txt").write_text(body + "\n", encoding="utf-8")
+        own.write_text(out / f"{i:04d}.txt", body + "\n", encoding="utf-8")
         chars += len(body)
     m = PageMap(sha256=sha256_of(pdf), pages=len(pages), sections=find_sections(pages), chars=chars)
-    (home / "sections.json").write_text(
+    own.write_text(
+        home / "sections.json",
         json.dumps(
             {"sha256": m.sha256, "pages": m.pages, "chars": m.chars, "sections": [asdict(s) for s in m.sections]},
             indent=2,

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.clock import today
 from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, ASK_LOG, EDIT_LOG, EVIDENCE_LOG, REVIEW_OBSERVATIONS
 from loom.records.annotations import Annotation, Record, load_records
@@ -491,12 +492,15 @@ class Records:
                 cause.when = active[identity]
         if active != old_partition:
             partitions[self.reviewer] = active
-            path.parent.mkdir(parents=True, exist_ok=True)
+            own.mkdir(path.parent, root=self.root)
             temporary = path.with_suffix(".json.tmp")
-            temporary.write_text(
-                json.dumps({"reviewers": partitions}, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            own.write_text(
+                temporary,
+                json.dumps({"reviewers": partitions}, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+                root=self.root,
             )
-            os.replace(temporary, path)
+            own.replace(temporary, path, root=self.root)
 
     def _review_facts(self, result: ScanResult, states: dict[str, KeyState], current: dict[str, str]) -> None:
         for res in self.resolved(result):
@@ -1074,8 +1078,8 @@ class Records:
                         text = self.diff_for(result, c, key)
                         if text and diffs_dir is not None:
                             name = f"{_slug(key)}-{c.kind}{'-' + _slug(c.id) if c.id else ''}.diff"
-                            diffs_dir.mkdir(parents=True, exist_ok=True)
-                            (diffs_dir / name).write_text(text, encoding="utf-8")
+                            own.mkdir(diffs_dir, root=result.quilt.root)
+                            own.write_text(diffs_dir / name, text, encoding="utf-8", root=result.quilt.root)
                             # written beside the publish, so named to the build's index here (`lifetimes.built`)
                             used(diffs_dir / name)
                             d["diff"] = f"diffs/{name}"
@@ -1177,7 +1181,6 @@ def _when(result: ScanResult, n: NodeRec) -> str | None:
 
     Under LOOM_FIXED_TIME it is the fixed date instead: a modification time depends on when and how a quilt was copied, so a fixture built from it would differ by the day it was regenerated.
     """
-    import os
 
     if os.environ.get("LOOM_FIXED_TIME"):
         from loom.clock import today

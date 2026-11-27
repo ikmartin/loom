@@ -8,6 +8,7 @@ import subprocess
 import threading
 from pathlib import Path
 
+from loom import own
 from loom.library import documents
 from loom.paths import LIBRARY_THUMBS
 
@@ -37,7 +38,7 @@ def thumb(root: Path, digest: str) -> Path | None:
     tool = shutil.which("pdftoppm")
     if not pdf.is_file() or tool is None:
         return None
-    out.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(out.parent)
     stem = out.with_name(f".{out.stem}.{os.getpid()}.{threading.get_ident()}")
     drawn = stem.with_name(f"{stem.name}.png")  # -singlefile appends .png to the whole stem, dots and all
     try:
@@ -63,9 +64,9 @@ def thumb(root: Path, digest: str) -> Path | None:
         )
         if made.returncode != 0 or not drawn.is_file():
             return None
-        os.replace(drawn, out)
+        own.replace(drawn, out)
         return out
     except (OSError, subprocess.SubprocessError):
         return None
     finally:
-        drawn.unlink(missing_ok=True)
+        own.unlink(drawn, missing_ok=True)

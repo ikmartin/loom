@@ -17,7 +17,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from loom import fence
+from loom import fence, own
 from loom.clock import tex_date
 from loom.tex import missing, private
 
@@ -465,7 +465,8 @@ def _compile_once(
     """
     engine = normalise_engine(engine)
     exe = which_latexmk()
-    outdir.mkdir(parents=True, exist_ok=True)
+    # the compile folder is reached through no link (`loom.own`), so TeX, which writes by path, writes in it and nowhere a link leads
+    own.mkdir(outdir)
     if exe is None:
         return CompileResult(False, engine, outdir, 127, errors=["latexmk is not installed"])
     stem = Path(tex_rel).stem
@@ -524,10 +525,10 @@ def _compile_once(
         for f in sorted(run.rglob("*")) if made_one else [run / f"{stem}.log"]:
             if f.is_file() and f.relative_to(run).parts[0] != FENCED:
                 target = outdir / f.relative_to(run)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(f, target)
+                own.mkdir(target.parent)
+                own.replace(f, target)
     finally:
-        shutil.rmtree(run, ignore_errors=True)
+        own.rmtree(run, ignore_errors=True)
     log = outdir / f"{stem}.log"
     errors: list[str] = []
     warnings: list[str] = []

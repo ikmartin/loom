@@ -11,6 +11,8 @@ import os
 import sys
 from pathlib import Path
 
+from loom import own
+
 #: The folder of `data_dir` that holds each served quilt's write token.
 TOKENS = "tokens"
 #: The folder of `data_dir` a tool that unpacks itself on its first run unpacks into, once for the machine: TeX Live's `biber`, about 200 MB.
@@ -73,9 +75,10 @@ def write_token(root: Path, token: str) -> None:
     The folder is made closed to others, and a file an earlier server left is emptied and closed before the token goes in, since it keeps the mode it was made with.
     """
     p = token_file(root)
-    p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # made through no link before its mode is set by path (`loom.own`)
+    own.mkdir(p.parent, root=data_dir())
     os.chmod(p.parent, 0o700)
-    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = own.os_open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600, root=data_dir())
     os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(json.dumps({"root": str(Path(root).resolve()), "token": token}, indent=1) + "\n")
@@ -95,4 +98,4 @@ def read_token(root: Path) -> str:
 
 def forget_token(root: Path) -> None:
     """Remove the write token of the server on `root`: it has stopped."""
-    token_file(root).unlink(missing_ok=True)
+    own.unlink(token_file(root), root=data_dir(), missing_ok=True)

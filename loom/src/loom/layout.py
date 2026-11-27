@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
 import tempfile
 from pathlib import Path
 
+from loom import own
 from loom.paths import FORMAT, LOOM
 
 #: The layout this loom reads and writes.
@@ -67,10 +69,10 @@ def stamp(root: Path) -> None:
                 return  # another process's `.loom/` is in place, and the caller reads what it holds
         finally:
             shutil.rmtree(made, ignore_errors=True)
-    fd, tmp = tempfile.mkstemp(prefix=".format-", dir=folder)
+    tmp = folder / f".format-{secrets.token_hex(6)}"
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        with own.open(tmp, "x", encoding="utf-8", root=root, perm=0o600) as fh:
             fh.write(text)
-        os.replace(tmp, root / FORMAT)
+        own.replace(tmp, root / FORMAT, root=root)
     finally:
-        Path(tmp).unlink(missing_ok=True)
+        own.unlink(tmp, root=root, missing_ok=True)

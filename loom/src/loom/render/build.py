@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from loom import own
 from loom.history.ledger import load_history
 from loom.lifetimes import BuildIndex, in_cache, read_index, write_index
 from loom.paths import (
@@ -380,7 +381,7 @@ def _build(
     if force:
         # a text TeX refused may have been refused for the machine's sake, a package since installed; --force tries each once more, and nothing this process remembers stands in for it
         for failed in [*(root / SNIPPETS).glob("*.failed"), *(root / BLOCK_PREVIEWS).glob("*.html")]:
-            failed.unlink()
+            own.unlink(failed, root=root)
         forget()
     renderer = FragmentRenderer(plan)
     before = read_index(root)
@@ -555,7 +556,7 @@ def _build(
     told("publishing")
     keep = {rel for rel in fragments.values() if rel not in files} | transcripts
     publish(build_dir, files, manifest, prune, keep=keep)
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    own.mkdir(cache_dir, root=root)
     uses = {rel: uses.get(rel, []) for rel in index}
     read_beside = in_cache(root, beside)
     shared = {n[1:] for said in [*uses.values(), read_beside] for n in said if n.startswith("@")}

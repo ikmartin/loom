@@ -16,6 +16,7 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.paths import CROPS
 
 #: Points of the page kept round a mark on every side.
@@ -205,7 +206,7 @@ def _made(
     dpi = min(float(RESOLUTION), MAX_PIXELS * 72 / (x1 - x0))
     scale = dpi / 72
     px = [round(x0 * scale), round(y0 * scale), max(1, round((x1 - x0) * scale)), max(1, round((y1 - y0) * scale))]
-    out.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(out.parent, root=root)
     with tempfile.TemporaryDirectory(dir=out.parent) as tmp:
         base = Path(tmp) / "crop"
         argv = [tool, "-png", "-singlefile", "-r", f"{dpi:g}", "-f", str(page), "-l", str(page)]
@@ -219,8 +220,8 @@ def _made(
             return None
         plain = made.read_bytes()
         drawn = _drawn(plain, rects, strokes, look, mark, (x0, y0), scale)
-        made.write_bytes(drawn if drawn is not None else plain)
-        made.replace(out)
+        own.write_bytes(made, drawn if drawn is not None else plain, root=root)
+        own.replace(made, out, root=root)
     return out
 
 

@@ -20,11 +20,13 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.app import registry
 from loom.app.registry import HOME_PORT, Entry, address
 from loom.app.supervise import SETTLE, Supervisor, tail
 from loom.files import FILES_URL
 from loom.identity import at_the_viewer
+from loom.machine import data_dir
 from loom.render.endpoints.base import ApiError
 from loom.render.serve import BUILD_URL, LIBRARY_PDF_URL, LIBRARY_THUMB_URL, HeldBundle, LoomHandler, from_elsewhere
 from loom.version import code_stamp
@@ -381,7 +383,7 @@ class Home:
         """Keep the jobs that ended in `app/jobs.json` for the home that starts in this one's place after an update, which lists them as its own (`take_on`)."""
         ended = [job for job in self.jobs_listing() if job["state"] != "running"]
         try:
-            _carried().write_text(json.dumps(ended) + "\n", encoding="utf-8")
+            own.write_text(_carried(), json.dumps(ended) + "\n", encoding="utf-8", root=data_dir())
         except (OSError, TypeError, ValueError):
             traceback.print_exc()  # the restart goes on: the page loses the jobs' answers, never a quilt
 
@@ -391,7 +393,7 @@ class Home:
             said = json.loads(_carried().read_text(encoding="utf-8"))
         except (OSError, ValueError):
             said = []
-        _carried().unlink(missing_ok=True)
+        own.unlink(_carried(), root=data_dir(), missing_ok=True)
         for job in reversed(said if isinstance(said, list) else []):
             if isinstance(job, dict) and isinstance(job.get("job"), str) and job.get("state") in ("done", "failed"):
                 self.jobs[job["job"]] = job
@@ -430,7 +432,7 @@ class Home:
         from loom.locks import locked
 
         try:
-            self.claimed.enter_context(locked(registry.folder() / "home.lock", wait=0))
+            self.claimed.enter_context(locked(registry.folder() / "home.lock", wait=0, root=data_dir()))
         except EnvError as exc:
             raise HomeRunning from exc
         self.take_on()
@@ -453,8 +455,13 @@ class Home:
             self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.port = self.httpd.server_address[1]
         p = address()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"port": self.port, "pid": os.getpid(), "url": self.url}) + "\n", encoding="utf-8")
+        own.mkdir(p.parent, root=data_dir())
+        own.write_text(
+            p,
+            json.dumps({"port": self.port, "pid": os.getpid(), "url": self.url}) + "\n",
+            encoding="utf-8",
+            root=data_dir(),
+        )
         threading.Thread(target=self.httpd.serve_forever, name="loom-home", daemon=True).start()
 
     @property
@@ -488,7 +495,7 @@ class Home:
             self.httpd = None
         try:
             if json.loads(address().read_text(encoding="utf-8")).get("pid") == os.getpid():
-                address().unlink()
+                own.unlink(address(), root=data_dir())
         except (OSError, ValueError):
             pass
         if self.held is not None:

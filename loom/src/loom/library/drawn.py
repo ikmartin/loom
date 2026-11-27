@@ -9,11 +9,10 @@ import contextlib
 import json
 import os
 import re
-import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
-from loom import locks, machine
+from loom import locks, machine, own
 from loom.library import ids
 from loom.library.node import Node, node_bytes, node_hash
 from loom.paths import DRAWN_RUN, LIBRARY_DRAWN, SURVEY_LOCK
@@ -60,17 +59,17 @@ def give(root: Path, ref: str, tex: str) -> None:
         The hash of the source the word is given for; a source put in its place asks again.
     """
     p = machine.words_file(root)
+    home = machine.data_dir()
     p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with locks.locked(p.with_suffix(".lock")):
+    with locks.locked(p.with_suffix(".lock"), root=home):
         works = _words(root)
         if works.get(ref) == tex:
             return
         works[ref] = tex
         tmp = p.with_name(f".{p.name}.{os.getpid()}")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        with own.open(tmp, "w", encoding="utf-8", root=home, perm=0o600) as f:
             f.write(json.dumps({"root": str(Path(root).resolve()), "compile": works}, indent=1, sort_keys=True) + "\n")
-        os.replace(tmp, p)
+        own.replace(tmp, p, root=home)
 
 
 def _words(root: Path) -> dict[str, str]:
@@ -264,27 +263,27 @@ def _draw(root: Path, text: str, engine: str, out: Path) -> bool:
     with locks.locked(root / SURVEY_LOCK, wait=QUEUE), _scratch(root / DRAWN_RUN) as tmp:
         if out.is_file():
             return True
-        (tmp / "node.tex").write_text(text, encoding="utf-8")
+        own.write_text(tmp / "node.tex", text, encoding="utf-8", root=root)
         res = compile_tex(tmp, "node.tex", tmp / "out", engine, timeout=TIMEOUT, foreign=True, online=False)
         if res.ok and res.pdf is not None and res.pdf.is_file():
             made, _ = pdf_to_svg(res.pdf, tmp / "node.svg")
             if made:
-                out.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(tmp / "node.svg", out)
+                own.mkdir(out.parent, root=root)
+                own.replace(tmp / "node.svg", out, root=root)
                 return True
             return False
         if res.returncode not in (124, 127) and not res.stopped:
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.with_suffix(".failed").write_text(res.first_error[:500] + "\n", encoding="utf-8")
+            own.mkdir(out.parent, root=root)
+            own.write_text(out.with_suffix(".failed"), res.first_error[:500] + "\n", encoding="utf-8", root=root)
         return False
 
 
 @contextlib.contextmanager
 def _scratch(at: Path) -> Iterator[Path]:
-    """The folder one drawing compiles in: emptied first and removed after."""
-    shutil.rmtree(at, ignore_errors=True)
-    at.mkdir(parents=True)
+    """The folder one drawing compiles in: emptied first and removed after, never through a link (`loom.own`)."""
+    own.rmtree(at, ignore_errors=True)
+    own.mkdir(at, exist_ok=False)
     try:
         yield at
     finally:
-        shutil.rmtree(at, ignore_errors=True)
+        own.rmtree(at, ignore_errors=True)

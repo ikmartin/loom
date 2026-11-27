@@ -14,6 +14,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from loom import own
 from loom.history.ledger import History, load_history
 from loom.paths import BLOCKS, DRAFT_PREVIEWS, LOOM, SITE, SITE_SVG, document_dir, under
 from loom.scan.expand import Expansion, Segment
@@ -193,8 +194,8 @@ def capture_context(result: ScanResult, source: str, *, write: bool = True) -> d
     for name, content in files.items():
         dest = home / name
         if write and not dest.exists():
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(content)
+            own.mkdir(dest.parent, root=root)
+            own.write_bytes(dest, content, root=root)
     return {
         "path": str(home.relative_to(root)),
         "hashes": hashes,

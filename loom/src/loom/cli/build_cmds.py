@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from loom import own
 from loom.cli._common import find_session, note
 from loom.cli._quilt import open_scan, quilt_option, require_text, resolve_key
 from loom.cli.diagnostics import groups as diagnostic_groups
@@ -49,8 +50,8 @@ def log_run(session: str | None, command: str, root: Path | None = None) -> None
 
     found = find_session(root, session)  # an unmatched value is an error, never a directory quietly created
     p = files_dir(root, found)
-    p.mkdir(parents=True, exist_ok=True)
-    with (p / "run.log").open("a", encoding="utf-8") as fh:
+    own.mkdir(p, root=root)
+    with own.open(p / "run.log", "a", encoding="utf-8", root=root) as fh:
         fh.write(f"{stamp()}  {command}\n")
 
 
@@ -64,8 +65,8 @@ def write_bundle(result: ScanResult, b: Bundle) -> Path:
     """
     root = result.quilt.root
     out = root / CLOSURES / bundle_filename(b.key)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(b.text, encoding="utf-8")
+    own.mkdir(out.parent, root=root)
+    own.write_text(out, b.text, encoding="utf-8", root=root)
     return out
 
 
@@ -217,7 +218,7 @@ def html_report(result: ScanResult, master: str, engine: str) -> dict[str, Any]:
         return out
     displays = {str(i): r.tex for i, r in enumerate(res.repaired)}
     n = normalise(res.html.read_text(encoding="utf-8", errors="replace"), displays)
-    (page / "fragment.html").write_text(n.html, encoding="utf-8")
+    own.write_text(page / "fragment.html", n.html, encoding="utf-8")
     files = result.files
     from loom.tex.align import rendered_words
     from loom.tex.tex4ht import definitions

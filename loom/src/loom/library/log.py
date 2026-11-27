@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom import clock
+from loom import clock, own
 from loom.locks import locked
 from loom.paths import LIBRARY_LOG
 from loom.scan.model import Diagnostic, Location
@@ -177,9 +177,9 @@ def record(root: Path, event: str, ref: str, *, by: str, kind: str, **fields: An
     line = {"event": event, "ref": ref, "by": by, "kind": kind, "at": clock.stamp()}
     line.update({k: v for k, v in fields.items() if v is not None})
     path = root / LIBRARY_LOG
-    path.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(path.parent, root=root)
     with locked(path):
-        with path.open("a", encoding="utf-8") as fh:
+        with own.open(path, "a", encoding="utf-8", root=root) as fh:
             fh.write(json.dumps(line, ensure_ascii=False, sort_keys=True) + "\n")
     return line
 

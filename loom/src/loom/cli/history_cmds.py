@@ -13,6 +13,7 @@ from typing import Any
 
 import click
 
+from loom import own
 from loom.cli._common import destination
 from loom.cli._quilt import drawing_ids, draws_ids, open_quilt, open_scan, quilt_option, require_text, resolve_key
 from loom.cli.build_cmds import engine_for
@@ -188,8 +189,8 @@ def _draft_ai(
     # the copy is written before its step, so whether the step can still be recorded is settled first: a refusal leaves no copy
     with locked(history.ledger):
         refuse_stale(history)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(plan.text, encoding="utf-8")
+        own.mkdir(dest.parent, root=root)
+        own.write_text(dest, plan.text, encoding="utf-8", root=root)
         entry = write_step(
             history,
             "copy",

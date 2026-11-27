@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 
+from loom import own
 from loom.cli._common import note
 from loom.cli._quilt import open_scan, quilt_option
 from loom.errors import EnvError
@@ -73,8 +74,8 @@ def _start(root: Path) -> str:
     from loom.render.serve import open_url
 
     log = (root / SERVE_JSON).parent / "open-serve.log"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with open(log, "ab") as out:
+    own.mkdir(log.parent, root=root)
+    with own.open(log, "ab", root=root) as out:
         subprocess.Popen(
             [sys.executable, "-P", "-m", "loom", "serve", "--quilt", str(root)],
             cwd=root,

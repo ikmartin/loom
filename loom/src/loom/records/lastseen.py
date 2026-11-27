@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from loom import own
 from loom.paths import LAST_SEEN
 from loom.records.snapshots import write_snapshot
 from loom.scan.hashing import hash_text
@@ -46,10 +47,12 @@ def read_last_seen(root: Path, history_dir: Path) -> dict[str, str]:
 
 def write_last_seen(root: Path, texts: dict[str, str], history_dir: Path) -> None:
     p = cache_path(root, history_dir)
-    p.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(p.parent, root=root)
     tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text(json.dumps({"version": VERSION, "keys": texts}, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(p)
+    own.write_text(
+        tmp, json.dumps({"version": VERSION, "keys": texts}, ensure_ascii=False), encoding="utf-8", root=root
+    )
+    own.replace(tmp, p, root=root)
 
 
 def current_texts(result: ScanResult) -> dict[str, str]:

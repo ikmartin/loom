@@ -20,8 +20,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.app import registry
 from loom.app.registry import Entry, folder, free
+from loom.machine import data_dir
 
 #: Seconds before each start again of a server that died unasked; after the last, it is shown as could not start.
 RETRIES = (2.0, 10.0, 60.0)
@@ -166,10 +168,10 @@ class Supervisor:
 
     def _spawn(self, entry: Entry) -> subprocess.Popen[bytes]:
         log = log_path(entry)
-        log.parent.mkdir(parents=True, exist_ok=True)
+        own.mkdir(log.parent, root=data_dir())
         if log.exists() and log.stat().st_size > LOG_CAP:
-            log.unlink()
-        with open(log, "ab") as out:
+            own.unlink(log, root=data_dir())
+        with own.open(log, "ab", root=data_dir()) as out:
             # -P: the quilt is no place to import loom from; a `loom.py` an agent wrote there would run in its place
             return subprocess.Popen(
                 [

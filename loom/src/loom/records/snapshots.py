@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom import own
 from loom.scan.hashing import normalize, sha256
 
 
@@ -19,11 +20,11 @@ def write_snapshot(root: Path, text: str, history_dir: Path) -> tuple[str, bool]
     norm = normalize(text)
     digest = sha256(norm)
     d = snapshots_dir(root, history_dir)
-    d.mkdir(parents=True, exist_ok=True)
+    own.mkdir(d, root=root)
     p = d / f"{digest.split(':', 1)[1]}.tex"
     if p.exists():
         return digest, False
-    p.write_text(norm, encoding="utf-8")
+    own.write_text(p, norm, encoding="utf-8", root=root)
     return digest, True
 
 
@@ -36,7 +37,7 @@ def write_raw(root: Path, text: str, history_dir: Path) -> str:
     """Store `text` exactly, as `<hex>.md`, and return its hash: a page's Markdown, which `normalize` would change (it drops `%` lines and the trailing spaces of a hard break), and a file's text as loom found it, its own line endings kept (`writes.store`)."""
     from loom.writes import store
 
-    return store(history_dir, text.encode("utf-8"))
+    return store(history_dir, text.encode("utf-8"), root=root)
 
 
 def read_raw(root: Path, digest: str, history_dir: Path) -> str | None:

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.clock import stamp
 from loom.paths import document_dir
 from loom.scan.labels import derived_of, is_id_shaped
@@ -453,8 +454,8 @@ def append_entry(hist_dir: Path, action: str, data: dict[str, Any], actor: str |
     if stage_line(ledger, json.dumps(line, ensure_ascii=False)):
         _CACHE.pop(str(ledger), None)
         return Entry(n, action, when, actor, dict(data))
-    hist_dir.mkdir(parents=True, exist_ok=True)
-    with ledger.open("a", encoding="utf-8") as fh:
+    own.mkdir(hist_dir)
+    with own.open(ledger, "a", encoding="utf-8") as fh:
         if existing and not existing.endswith("\n"):
             fh.write("\n")
         fh.write(json.dumps(line, ensure_ascii=False) + "\n")

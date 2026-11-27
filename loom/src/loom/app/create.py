@@ -21,8 +21,10 @@ from collections.abc import Callable, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
+from loom import own
 from loom.app import registry
 from loom.app.registry import Entry, folder
+from loom.machine import data_dir
 from loom.render.endpoints.base import ApiError
 
 #: The most one drop may hold, received or unpacked.
@@ -126,19 +128,19 @@ def receive(drop: str | None, rel: str, stream: _Reads, length: int) -> dict[str
     path = _safe(rel)
     if drop is None:
         drop = secrets.token_hex(8)
-        (incoming() / drop / "files").mkdir(parents=True)
+        own.mkdir(incoming() / drop / "files", root=data_dir(), exist_ok=False)
     files = _drop_dir(drop) / "files"
     size, count = _held(files)
     if size + length > MAX_DROP or count >= MAX_FILES:
         raise ApiError("too-large", "a drop holds at most 1 GB in 10,000 files", status=413)
     target = files / path
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
+        own.mkdir(target.parent, root=data_dir())
     except (FileExistsError, NotADirectoryError) as exc:
         raise ApiError("bad-path", "a dropped file's folder is a file already") from exc
     tmp = files / f".{secrets.token_hex(4)}.part"
     left = length
-    with open(tmp, "wb") as out:
+    with own.open(tmp, "wb", root=data_dir()) as out:
         while left > 0:
             chunk = stream.read(min(left, 1 << 20))
             if not chunk:
@@ -146,12 +148,12 @@ def receive(drop: str | None, rel: str, stream: _Reads, length: int) -> dict[str
             out.write(chunk)
             left -= len(chunk)
     if left:
-        tmp.unlink()
+        own.unlink(tmp, root=data_dir())
         raise ApiError("cut-short", "the file ended before its length")
     try:
-        tmp.replace(target)
+        own.replace(tmp, target, root=data_dir())
     except OSError as exc:
-        tmp.unlink()
+        own.unlink(tmp, root=data_dir())
         raise ApiError("bad-path", "a dropped file's path is a folder already") from exc
     return {"drop": drop, "path": path.as_posix(), "size": length}
 
@@ -169,7 +171,7 @@ def _archive(p: Path) -> str | None:
 def _copy(data: _Reads, to: Path) -> None:
     """Copy `data` to the file `to`, refusing past `MAX_DROP`, which a small archive can unpack to."""
     total = 0
-    with open(to, "wb") as copy:
+    with own.open(to, "wb", root=data_dir()) as copy:
         while chunk := data.read(1 << 20):
             total += len(chunk)
             if total > MAX_DROP:
@@ -179,7 +181,7 @@ def _copy(data: _Reads, to: Path) -> None:
 
 def _unpack(src: Path, kind: str, out: Path) -> None:
     """Open the archive `src` into `out`: never outside it, never through a link, and within `MAX_DROP` and `MAX_FILES`; nothing is left of a refused one."""
-    out.mkdir(parents=True)
+    own.mkdir(out, root=data_dir(), exist_ok=False)
     try:
         if kind == "zip":
             with zipfile.ZipFile(src) as z:
@@ -190,7 +192,7 @@ def _unpack(src: Path, kind: str, out: Path) -> None:
                     if (info.external_attr >> 16) & 0o170000 == 0o120000:
                         raise ValueError("a link")
                     to = out / _safe(info.filename)
-                    to.parent.mkdir(parents=True, exist_ok=True)
+                    own.mkdir(to.parent, root=data_dir())
                     with z.open(info) as data:
                         _copy(data, to)
         elif kind == "tar":
@@ -205,7 +207,7 @@ def _unpack(src: Path, kind: str, out: Path) -> None:
             with gzip.open(src) as data:
                 _copy(data, out / (name if name.endswith(".tex") else f"{name}.tex"))
     except (OSError, EOFError, tarfile.TarError, zipfile.BadZipFile, ValueError, ApiError) as exc:
-        shutil.rmtree(out, ignore_errors=True)
+        own.rmtree(out, root=data_dir(), ignore_errors=True)
         raise ApiError("bad-archive", "loom cannot open that archive safely") from exc
 
 
@@ -333,8 +335,10 @@ def make(
     nest = where.parent / f".loom-making-{key}"
     staged = nest / where.name
     record = making() / f"{key}.json"
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(json.dumps({"nest": str(nest), "where": str(where)}) + "\n", encoding="utf-8")
+    own.mkdir(record.parent, root=data_dir())
+    own.write_text(
+        record, json.dumps({"nest": str(nest), "where": str(where)}) + "\n", encoding="utf-8", root=data_dir()
+    )
     done: dict[str, Any] = {"folder": str(where)}
     try:
         with makings.lock:
@@ -379,14 +383,14 @@ def make(
     except BaseException:
         shutil.rmtree(nest, ignore_errors=True)
         if not nest.exists():
-            record.unlink(missing_ok=True)
+            own.unlink(record, root=data_dir(), missing_ok=True)
         raise
     # the quilt is in its place: were the home stopped now, its next start would put it on the list (`recover`)
     entry = registry.remember(where)
     registry.set_open(entry.id, True)
     entry.open = True
     nest.rmdir()
-    record.unlink()
+    own.unlink(record, root=data_dir())
     step("starting")
     return {**done, "quilt": entry.id, "tex": private.active(year=False).kind, **start(entry)}
 
@@ -404,10 +408,10 @@ def recover() -> None:
             said = json.loads(record.read_text(encoding="utf-8"))
             nest, where = Path(said["nest"]), Path(said["where"])
         except (OSError, ValueError, KeyError, TypeError):
-            record.unlink(missing_ok=True)
+            own.unlink(record, root=data_dir(), missing_ok=True)
             continue
         if not _NEST.fullmatch(nest.name):
-            record.unlink(missing_ok=True)  # a record names nothing but a create's own folder
+            own.unlink(record, root=data_dir(), missing_ok=True)  # a record names nothing but a create's own folder
             continue
         try:
             if not (nest / where.name).exists() and is_quilt_root(where):
@@ -416,7 +420,7 @@ def recover() -> None:
             continue  # kept for a start that can read the list
         shutil.rmtree(nest, ignore_errors=True)
         if not nest.exists():
-            record.unlink(missing_ok=True)
+            own.unlink(record, root=data_dir(), missing_ok=True)
 
 
 def sweep() -> None:
@@ -432,9 +436,9 @@ def sweep() -> None:
         except OSError:
             newest = 0.0
         if newest < cutoff:
-            shutil.rmtree(d, ignore_errors=True)
+            own.rmtree(d, root=data_dir(), ignore_errors=True)
 
 
 def let_go(drop: str) -> None:
     """Remove a drop whose quilt is made."""
-    shutil.rmtree(_drop_dir(drop), ignore_errors=True)
+    own.rmtree(_drop_dir(drop), root=data_dir(), ignore_errors=True)

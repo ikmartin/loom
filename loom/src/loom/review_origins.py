@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.paths import REVIEW_ORIGINS
 
 
@@ -46,7 +47,7 @@ def write(root: Path, origins: dict[str, dict[str, Any]]) -> None:
     path = root / REVIEW_ORIGINS
     if stage(path, (json.dumps(origins, indent=2, sort_keys=True) + "\n").encode("utf-8")):
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(path.parent, root=root)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(origins, indent=2, sort_keys=True) + "\n")
-    temporary.replace(path)
+    own.write_text(temporary, json.dumps(origins, indent=2, sort_keys=True) + "\n", encoding=None, root=root)
+    own.replace(temporary, path, root=root)

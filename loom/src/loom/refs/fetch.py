@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from loom import own
 from loom.version import __version__
 
 USER_AGENT = f"loom/{__version__} (+https://github.com/ikmartin/loom)"
@@ -114,7 +115,7 @@ def arxiv_pdf(ident: str, dest: Path, *, attempts: int = 3) -> Path:
 
 def _written(dest: Path, ident: str, suffix: str, data: bytes) -> Path:
     """`data` written into `dest` as `<ident><suffix>`, a `/` in the number made `_`."""
-    dest.mkdir(parents=True, exist_ok=True)
+    own.mkdir(dest)
     path = dest / f"{ident.replace('/', '_')}{suffix}"
-    path.write_bytes(data)
+    own.write_bytes(path, data)
     return path

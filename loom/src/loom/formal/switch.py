@@ -9,13 +9,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from loom import own
+from loom.machine import data_dir
+
 #: The folder of `machine.data_dir` that holds one file for each quilt formalization is on for.
 FOLDER = "formal"
 
 
 def switch_file(root: Path) -> Path:
     """Where the switch of the quilt at `root` is kept: `formal/<key>.json` in loom's data folder, keyed by the quilt's resolved path."""
-    from loom.machine import data_dir
 
     key = hashlib.sha256(str(Path(root).resolve()).encode("utf-8")).hexdigest()[:24]
     return data_dir() / FOLDER / f"{key}.json"
@@ -49,8 +51,7 @@ def turn_on(root: Path) -> None:
     p = switch_file(root)
     p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
+    with own.open(p, "w", encoding="utf-8", root=data_dir(), perm=0o600) as f:
         f.write(
             json.dumps({"root": str(Path(root).resolve()), "folder": _folder(root), "on": True, "at": at}, indent=1)
             + "\n"
@@ -59,8 +60,8 @@ def turn_on(root: Path) -> None:
 
 def turn_off(root: Path) -> None:
     """Turn formalization off for the quilt at `root` on this machine; what it installed stays."""
-    switch_file(root).unlink(missing_ok=True)
-    checked_file(root).unlink(missing_ok=True)
+    own.unlink(switch_file(root), root=data_dir(), missing_ok=True)
+    own.unlink(checked_file(root), root=data_dir(), missing_ok=True)
 
 
 def checked_file(root: Path) -> Path:
@@ -80,8 +81,7 @@ def remember_checked(root: Path, state: str) -> None:
     """Keep `state` as the one `again` last checked on its own for the quilt at `root`, so a server started again over the same Lean runs nothing."""
     p = checked_file(root)
     p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
+    with own.open(p, "w", encoding="utf-8", root=data_dir(), perm=0o600) as f:
         f.write(state + "\n")
 
 
@@ -104,6 +104,5 @@ def remember_check(root: Path, came: dict[str, Any]) -> None:
     p = last_file(root)
     p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
+    with own.open(p, "w", encoding="utf-8", root=data_dir(), perm=0o600) as f:
         f.write(json.dumps({"at": at, **came}, indent=1) + "\n")

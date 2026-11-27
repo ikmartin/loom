@@ -23,9 +23,10 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from loom import own
 from loom.errors import ContentError
 from loom.locks import flush, locked
-from loom.paths import JOURNAL, JOURNAL_INDEX, LOCAL, WRITES_LOCK
+from loom.paths import JOURNAL, JOURNAL_INDEX, LOCAL, LOOM, WRITES_LOCK
 
 #: The suffix of the temporary file an act writes beside the file it replaces.
 TEMP = ".loom-tmp"
@@ -58,10 +59,10 @@ def _flush(fh: Any, full: bool = False) -> None:
     flush(fh.fileno(), full)
 
 
-def store(history: Path, data: bytes) -> str:
+def store(history: Path, data: bytes, *, root: Path | None = None) -> str:
     """Keep `data` exactly in the history's `texts/`, as `<hex>.md` when it is UTF-8 and `<hex>.bin` otherwise; returns its digest.
 
-    The names `records.snapshots.write_raw` gives, so versions, looks and the journal share one store. Written whole and flushed, or not at all: a stored text is named by its hash, and a half-written one would be trusted forever.
+    The names `records.snapshots.write_raw` gives, so versions, looks and the journal share one store. Written whole and flushed, or not at all: a stored text is named by its hash, and a half-written one would be trusted forever. Never through a link (`loom.own`), anchored at `root` where given, else at the quilt holding the history.
     """
     d = digest(data)
     assert d is not None
@@ -72,15 +73,15 @@ def store(history: Path, data: bytes) -> str:
         suffix = ".bin"
     p = history / "texts" / f"{d.split(':', 1)[1]}{suffix}"
     if not p.is_file():
-        p.parent.mkdir(parents=True, exist_ok=True)
+        own.mkdir(p.parent, root=root)
         tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}{TEMP}")
         try:
-            with tmp.open("wb") as fh:
+            with own.open(tmp, "wb", root=root) as fh:
                 fh.write(data)
                 _flush(fh)
-            os.replace(tmp, p)
+            own.replace(tmp, p, root=root)
         finally:
-            tmp.unlink(missing_ok=True)
+            own.unlink(tmp, root=root, missing_ok=True)
     return d
 
 
@@ -572,27 +573,51 @@ def _flush_dir(d: Path) -> None:
         os.close(fd)
 
 
-def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None, mode: int | None = None) -> None:
+def _install(
+    root: Path,
+    rel: str,
+    data: bytes | None,
+    expect: bytes | None,
+    mode: int | None = None,
+    *,
+    own_place: bool | None = None,
+) -> None:
     """Make `rel` hold `data` (None removes it), whole or not at all, refusing (`changed`) when it no longer holds `expect`.
 
-    The file's folder is opened once, its real path a part at a time without following a link (`_folder_at`), and made only for a new file: the folder of a file this replaces is never made again, and a folder swapped or remade after it was opened is never written through, since the temp exists only in the folder opened. The temp is written and flushed there, the target read once more, the mode kept (`mode` for a file this makes, else the umask's), then the rename: the window in which a save can be lost is the instant between the read and the rename. A temp is removed when this fails and left by a crash, for recovery.
+    The file's folder is opened once, its real path a part at a time without following a link (`_folder_at`), and made only for a new file: the folder of a file this replaces is never made again, and a folder swapped or remade after it was opened is never written through, since the temp exists only in the folder opened. The temp is written and flushed there, the target read once more, the mode kept (`mode` for a file this makes, else the umask's), then the rename: the window in which a save can be lost is the instant between the read and the rename. A temp is removed when this fails and left by a crash, for recovery. A file in loom's own place (`own_place`, by default one under `.loom/`), a record an act stages, is reached by its own path and never its real one: a link on the way or at the file refuses the write (`changed`), and a removal takes a link at the file itself, never its target.
     """
+    if own_place is None:
+        own_place = PurePosixPath(rel).parts[:1] == (LOOM,)
     if data is None:
         if _read(root, rel) != expect:
             raise WriteRefused("changed", f"{rel} changed while loom was writing it; nothing was written")
-        (root / rel).unlink(missing_ok=True)
+        if own_place:
+            try:
+                own.unlink(root / rel, root=root, missing_ok=True)
+            except OSError as exc:
+                raise WriteRefused("changed", f"{rel} is not where loom left it; nothing was removed") from exc
+        else:
+            (root / rel).unlink(missing_ok=True)
         _flush_dir((root / rel).parent)
         return
-    target = _target(root, rel)
-    folder = _real(target.parent)
+    top = Path(os.path.realpath(root))
+    if own_place:
+        target = top / rel
+        folder: Path | None = target.parent
+    else:
+        target = _target(root, rel)
+        folder = _real(target.parent)
     if folder is None:
         raise WriteRefused("changed", f"the folder holding {rel} moved while loom was writing it; nothing was written")
-    top = Path(os.path.realpath(root))
     anchor = top if folder.is_relative_to(top) else Path(folder.anchor)
     name = f".{target.name}.{secrets.token_hex(6)}{TEMP}"
     tmp = target.with_name(name)
     try:
         with _folder_at(anchor, folder.relative_to(anchor).parts, make=expect is None, judged=False) as at:
+            if own_place and _link_at(at, target.name):
+                raise WriteRefused(
+                    "changed", f"{rel} is a link, and loom writes nothing of its own through one; nothing was written"
+                )
             if expect is not None and not os.access(target.name, os.W_OK, dir_fd=at):
                 raise WriteRefused(
                     "not-writable", f"{rel} is read-only, so loom writes nothing into it; nothing was written"
@@ -661,10 +686,20 @@ def _remove_made(root: Path, rel: str, made: str) -> bool:
     return True
 
 
-def _put_back(root: Path, rel: str, before: bytes | None, after: bytes | None) -> bool:
-    """Make `rel` hold `before` again while it holds `after`, what loom wrote, checked at the last instant as every write is (`_install`); False, with nothing written, once someone has changed it since or it cannot be written. Recovery's and a failed commit's way of undoing a file."""
+def _link_at(at: int, name: str) -> bool:
+    """Whether `name` in the open folder `at` is a link."""
     try:
-        _install(root, rel, before, after)
+        return stat.S_ISLNK(os.stat(name, dir_fd=at, follow_symlinks=False).st_mode)
+    except OSError:
+        return False
+
+
+def _put_back(
+    root: Path, rel: str, before: bytes | None, after: bytes | None, *, own_place: bool | None = None
+) -> bool:
+    """Make `rel` hold `before` again while it holds `after`, what loom wrote, checked at the last instant as every write is (`_install`, with `own_place`); False, with nothing written, once someone has changed it since or it cannot be written. Recovery's and a failed commit's way of undoing a file."""
+    try:
+        _install(root, rel, before, after, own_place=own_place)
     except (WriteRefused, OSError):
         return False
     return True
@@ -783,9 +818,9 @@ class Journal:
 
 
 def _append_line(path: Path, text: str, full: bool = False) -> tuple[int, int]:
-    """Append one line to `path`, on a line of its own even after a crash cut the last one short, and flush it; returns where it starts and ends."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("ab") as fh:
+    """Append one line to `path`, on a line of its own even after a crash cut the last one short, and flush it; returns where it starts and ends. Never through a link (`loom.own`)."""
+    own.mkdir(path.parent)
+    with own.open(path, "ab") as fh:
         start = fh.seek(0, os.SEEK_END)
         if start:
             with path.open("rb") as rd:
@@ -862,7 +897,8 @@ def _save_index(root: Path, j: Journal) -> None:
     p = root / JOURNAL_INDEX
     tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}{TEMP}")
     try:
-        tmp.write_text(
+        own.write_text(
+            tmp,
             json.dumps(
                 {
                     "offset": j.offset,
@@ -874,11 +910,12 @@ def _save_index(root: Path, j: Journal) -> None:
             ),
             encoding="utf-8",
         )
-        os.replace(tmp, p)
+        own.replace(tmp, p)
     except OSError:
         pass
     finally:
-        tmp.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            own.unlink(tmp, missing_ok=True)
 
 
 def _holds(root: Path, rel: str, want: str | None) -> bool:
@@ -2047,6 +2084,13 @@ class Act:
         self.after[rel] = None
         self.own.add(rel)
 
+    def _own_place(self, rel: str) -> bool:
+        """Whether `rel` is in loom's own place, under `.loom/` or the history, by its path as the act names it: a record staged into the act, written never through a link (`_install`)."""
+        if PurePosixPath(rel).parts[:1] == (LOOM,):
+            return True
+        hist = Path(os.path.abspath(self.history))
+        return Path(os.path.abspath(self.root / rel)).is_relative_to(hist)
+
     def wrote(self, gen: str) -> None:
         """Name a suggested edit's `<edit>:<generation>` as one this act writes."""
         self.edits.append(gen)
@@ -2104,8 +2148,12 @@ class Act:
             keep = self.root / LOCAL if this_machine(rel) else self.history
             b = self.before.get(rel)
             files[rel] = [
-                store(keep, b) if b is not None else None,
-                None if data is None else digest(data) if b is None and _unkept(data) else store(keep, data),
+                store(keep, b, root=self.root) if b is not None else None,
+                None
+                if data is None
+                else digest(data)
+                if b is None and _unkept(data)
+                else store(keep, data, root=self.root),
             ]
         for rel, data in self.confirmed.items():
             # read again at the last moment before the journal says so: a file saved since the confirm is no longer what the act would write
@@ -2149,13 +2197,19 @@ class Act:
                 if rel in self.own:
                     _remove_own(self.root, rel, self.before.get(rel))
                 else:
-                    _install(self.root, rel, data, self.before.get(rel), self.modes.get(rel))
+                    _install(
+                        self.root, rel, data, self.before.get(rel), self.modes.get(rel), own_place=self._own_place(rel)
+                    )
                 done.append(rel)
             # a guarded line refused (another writer moved its log on) puts the whole act back, files with it
             _append_guarded(self.root, guarded)
         except Exception as exc:
             # each file already written goes back while it holds what loom wrote; one changed since is the person's
-            kept = [rel for rel in reversed(done) if not _put_back(self.root, rel, self.before.get(rel), changed[rel])]
+            kept = [
+                rel
+                for rel in reversed(done)
+                if not _put_back(self.root, rel, self.before.get(rel), changed[rel], own_place=self._own_place(rel))
+            ]
             # a temporary that cannot be removed just now leaves the act begun, so recovery clears it (`_clear_temps_at`); the act's own failure is what is raised
             littered = False
             for rel in changed:

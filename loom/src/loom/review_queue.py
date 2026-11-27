@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.paths import REVIEW_DECISIONS
 from loom.records.store import Records
 from loom.scan.hashing import mathematical_hash
@@ -41,10 +42,10 @@ def _write(root: Path, rows: dict[str, dict[str, str]], reviewer: str | None = N
     data = _data(root)
     data["reviewers"][_name(root, reviewer)] = rows
     path = _path(root)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(path.parent, root=root)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    own.write_text(temporary, json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8", root=root)
+    own.replace(temporary, path, root=root)
 
 
 def fingerprint(result: ScanResult, key: str) -> str:

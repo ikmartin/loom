@@ -13,6 +13,7 @@ from contextlib import AbstractContextManager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from loom import own
 from loom.errors import EnvError
 from loom.machine import data_dir, quilt_id
 
@@ -93,21 +94,21 @@ def _read() -> tuple[dict[str, Entry], set[int]]:
 def _write(entries: dict[str, Entry], given: set[int]) -> None:
     """Write the list whole, through a temporary file flushed to the disk and renamed into place."""
     p = _path()
-    p.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(p.parent, root=data_dir())
     tmp = p.with_name(f".{p.name}.{os.getpid()}")
-    with open(tmp, "w", encoding="utf-8") as out:
+    with own.open(tmp, "w", encoding="utf-8", root=data_dir()) as out:
         out.write(
             json.dumps({"quilts": [asdict(e) for e in entries.values()], "given": sorted(given)}, indent=1) + "\n"
         )
         out.flush()
         os.fsync(out.fileno())
-    tmp.replace(p)
+    own.replace(tmp, p, root=data_dir())
 
 
 def _locked() -> AbstractContextManager[None]:
     from loom.locks import locked
 
-    return locked(folder() / ".lock")
+    return locked(folder() / ".lock", root=data_dir())
 
 
 def free(port: int) -> bool:

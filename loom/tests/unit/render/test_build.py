@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -268,17 +269,17 @@ def test_the_manifest_is_renamed_into_place_after_every_file_it_publishes(
     b = d / ".loom/cache/site"
     renames: list[tuple[Path, Path]] = []
     handed: list[str] = []
-    real_replace, real_publish = os.replace, build_mod.publish
+    real_replace, real_publish = publish_mod.own.replace, build_mod.publish
 
-    def replace(src: str | os.PathLike[str], dst: str | os.PathLike[str], **fds: int | None) -> None:
+    def replace(src: Path, dst: Path, **kw: Any) -> None:
         renames.append((Path(src), Path(dst)))
-        real_replace(src, dst, **fds)
+        real_replace(src, dst, **kw)
 
     def publish(build_dir: Path, files: dict[str, str | bytes], *args: object, **kwargs: object) -> None:
         handed.extend(files)
         real_publish(build_dir, files, *args, **kwargs)
 
-    monkeypatch.setattr(publish_mod.os, "replace", replace)
+    monkeypatch.setattr(publish_mod.own, "replace", replace)
     monkeypatch.setattr(build_mod, "publish", publish)
 
     def renamed() -> list[Path]:

@@ -8,11 +8,11 @@ The files the viewer shows have no record of their own, so a look keeps one for 
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from loom import own
 from loom.clock import stamp
 from loom.paths import DELETED, SHOWN_SEEN, SINCE
 from loom.scan.scan import ScanResult
@@ -141,8 +141,8 @@ def write_marker(root: Path, name: str, marker: Marker, session: str | None = No
         "state": marker.state,
     }
     for p in [marker_path(root, name), *([marker_path(root, name, session)] if session else [])]:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        own.mkdir(p.parent, root=root)
+        own.write_text(p, json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", root=root)
     # a deletion goes once every look of this name still to come starts after it: an open session that has looked within HOLD_DAYS has a window of its own
     looks = [marker, *_open_looks(root, name)]
 
@@ -152,7 +152,12 @@ def write_marker(root: Path, name: str, marker: Marker, session: str | None = No
     left = [e for e in deletions(root) if not (e.get("to") == name and told(e))]
     if left != deletions(root):
         dp = root / DELETED
-        dp.write_text("".join(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n" for e in left), encoding="utf-8")
+        own.write_text(
+            dp,
+            "".join(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n" for e in left),
+            encoding="utf-8",
+            root=root,
+        )
 
 
 def _open_looks(root: Path, name: str) -> list[Marker]:
@@ -213,8 +218,8 @@ def note_deletion(root: Path, removed: list[dict[str, Any]], by: str) -> None:
         )
     if lines:
         p = root / DELETED
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as fh:
+        own.mkdir(p.parent, root=root)
+        with own.open(p, "a", encoding="utf-8", root=root) as fh:
             for x in lines:
                 fh.write(json.dumps(x, ensure_ascii=False, sort_keys=True) + "\n")
 
@@ -568,12 +573,15 @@ def write_shown(root: Path, shown: tuple[dict[str, int], list[dict[str, Any]]] |
     looks = _all_looks(root)
     kept = [e for e in changes if any(m.new(str(e.get("when", "")), _file_mark(e)) for m in looks)]
     p = root / SHOWN_SEEN
-    p.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(p.parent, root=root)
     tmp = p.with_name(p.name + ".loom-tmp")
-    tmp.write_text(
-        json.dumps({"files": dict(sorted(files.items())), "changes": kept}, ensure_ascii=False) + "\n", encoding="utf-8"
+    own.write_text(
+        tmp,
+        json.dumps({"files": dict(sorted(files.items())), "changes": kept}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+        root=root,
     )
-    os.replace(tmp, p)
+    own.replace(tmp, p, root=root)
 
 
 def _all_looks(root: Path) -> list[Marker]:

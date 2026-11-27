@@ -16,6 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.anchors import Anchor, is_page_anchor
 from loom.locks import locked
 from loom.paths import ANNOTATION_LOG, BEFORE_DELETE
@@ -35,7 +36,7 @@ def append(root: Path, event: dict[str, Any]) -> None:
     """Append one event, under the log's lock, so it never lands while a deletion rewrites the log."""
     p = log_path(root)
     with locked(p):
-        with p.open("a", encoding="utf-8") as fh:
+        with own.open(p, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
 
 
@@ -94,8 +95,8 @@ def delete(
             keep({"lines": taken, "count": len(kept), "sha": _sha(kept)})
         if removed:
             backup = root / BEFORE_DELETE
-            backup.parent.mkdir(parents=True, exist_ok=True)
-            backup.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            own.mkdir(backup.parent, root=root)
+            own.write_text(backup, "\n".join(lines) + "\n", encoding="utf-8", root=root)
             _rewrite(p, kept)
     return removed
 
@@ -115,8 +116,8 @@ def take_out(root: Path, lines: list[str]) -> int:
         if len(kept) == len(held):
             return 0
         backup = root / BEFORE_DELETE
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        backup.write_text("\n".join(held) + "\n", encoding="utf-8")
+        own.mkdir(backup.parent, root=root)
+        own.write_text(backup, "\n".join(held) + "\n", encoding="utf-8", root=root)
         _rewrite(p, kept)
     return len(held) - len(kept)
 
@@ -165,7 +166,7 @@ def _sha(lines: list[str]) -> str:
 
 def _rewrite(p: Path, lines: list[str]) -> None:
     """Write the log as `lines`, in place, so the lock held on it keeps holding, and flushed to the disk."""
-    with p.open("r+" if p.is_file() else "w", encoding="utf-8") as fh:
+    with own.open(p, "r+" if p.is_file() else "w", encoding="utf-8") as fh:
         fh.seek(0)
         fh.write("".join(f"{line}\n" for line in lines))
         fh.truncate()
@@ -181,7 +182,7 @@ def restore(root: Path, events: list[dict[str, Any]]) -> list[str]:
         present = {a.id for r in replay(root)[0] for a in r.annotations}
         if any(i in present for i in made):
             raise ValueError("those annotations are in the log already")
-        with p.open("a", encoding="utf-8") as fh:
+        with own.open(p, "a", encoding="utf-8") as fh:
             for e in events:
                 fh.write(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n")
     return made

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from loom import own
 from loom.paths import under
 from loom.render.uses import passing
 from loom.tex import private
@@ -35,12 +36,12 @@ def publish_graphic(root: Path, name: str, svg_dir: Path, base: str = "") -> tup
     src = resolve_graphic(root, name, base)
     if src is None:
         return None, f"graphic {name} not found"
-    svg_dir.mkdir(parents=True, exist_ok=True)
+    own.mkdir(svg_dir)
     stamp = _digest(src)
     if src.suffix.lower() in (".png", ".jpg", ".jpeg", ".svg"):
         out = svg_dir / f"{stamp}{src.suffix.lower()}"
         if not out.exists():
-            shutil.copy(src, out)
+            own.copyfile(src, out, mode=True)
         else:
             _named_again(out)
         return f"svg/{out.name}", None
@@ -110,10 +111,10 @@ def _reads_pdf(said: str) -> bool:
 
 def publish_picture(picture: Path, svg_dir: Path) -> str:
     """A picture TeX drew, copied under `.loom/cache/site/svg/` by its content: the path a fragment names it by."""
-    svg_dir.mkdir(parents=True, exist_ok=True)
+    own.mkdir(svg_dir)
     out = svg_dir / f"{_digest(picture)}{picture.suffix.lower()}"
     if not out.exists():
-        shutil.copy(picture, out)
+        own.copyfile(picture, out, mode=True)
     else:
         _named_again(out)
     return f"svg/{out.name}"

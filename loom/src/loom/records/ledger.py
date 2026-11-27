@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.paths import LEDGER
 
 HEADER = "# .loom/records/state.toml -- written by `loom accept`. Do not edit.\nschema = 1\n"
@@ -104,9 +105,9 @@ def _context(raw: object) -> dict[str, Any]:
 
 def append_rows(root: Path, rows: list[AcceptRow]) -> None:
     p = ledger_path(root)
-    p.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(p.parent, root=root)
     existing = p.read_text(encoding="utf-8") if p.is_file() else ""
-    with p.open("a", encoding="utf-8") as fh:
+    with own.open(p, "a", encoding="utf-8", root=root) as fh:
         if not existing:
             fh.write(HEADER)
         for row in rows:
