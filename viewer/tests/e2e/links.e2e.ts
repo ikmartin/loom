@@ -236,6 +236,8 @@ test.describe('previews', () => {
 		const card = page.getByTestId('link-preview');
 		await expect(card).toBeVisible();
 		await expect(card.locator('.fragment mjx-container').first()).toBeVisible();
+		// the card names the result as a reader does, with no internal id while Show ids is off
+		await expect(card).not.toContainText('sy-000');
 		await page.keyboard.press('Escape');
 		await expect(card).toHaveCount(0);
 	});

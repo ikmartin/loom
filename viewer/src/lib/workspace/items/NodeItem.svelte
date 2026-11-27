@@ -8,6 +8,7 @@
 	import { slotsFor } from '$lib/fragments/slots';
 	import { keyUrl, nodeUrl, masterUrl, anchorId } from '$lib/nav';
 	import { docs } from '$lib/words/docs';
+	import { nodeName } from '../names';
 	import { fetchSource } from '$lib/source';
 	import type { Item } from '../item';
 	import { nodeState } from '../state.svelte';
@@ -35,18 +36,18 @@
 
 <div class="page item node">
 	{#if owner}
-		<p class="muted"><code>{key}</code> has no page of its own. It is part of <a href={keyUrl(m, key)}>{m.nodes[owner].title ?? owner}</a>.</p>
+		<p class="muted">{docs.node.partOf} <a href={keyUrl(m, key)}>{nodeName(m, owner)}</a>.</p>
 	{:else if !node && m.masters.some(d => d.closed_keys?.includes(key))}
 		{@const saved = m.masters.find(d => d.closed_keys?.includes(key))!}
-		<p>This result belongs to a closed agent document. <a href={masterUrl(saved.path) + '#' + anchorId(key)}>Read its saved text and annotations</a>.</p>
+		<p>{docs.node.closed} <a href={masterUrl(saved.path) + '#' + anchorId(key)}>{docs.node.closedRead}</a>.</p>
 	{:else if !node}
-		<p class="muted">The manifest has no node <code>{key}</code>.</p>
+		<p class="muted">{docs.node.gone}</p>
 	{:else if node.conflict?.length}
 		<p class="conflicted" data-testid="conflicted">
-			Defined twice{#if node.conflict.length > 1}, in {#each node.conflict as f, i (f)}{#if i}{' and '}{/if}<code>{f}</code>{/each}{:else}, both times in <code>{node.conflict[0]}</code>{/if}. It has no text until one definition remains.
+			{docs.node.twice(node.conflict)}
 		</p>
 	{:else if held.verbatim && held.source}
-		<pre class="verbatim" data-testid="verbatim" aria-label="the LaTeX behind this block">{held.source}</pre>
+		<pre class="verbatim" data-testid="verbatim" aria-label={docs.node.verbatim}>{held.source}</pre>
 	{:else}
 		<div class="gutters-host" use:guttersHost>
 			<div class="gutters" class:beside={!!held.notes.side}>
@@ -59,7 +60,7 @@
 					{#if node.children.length}
 						<ul class="plain children">
 							{#each node.children as ck (ck)}
-								<li><a href={nodeUrl(ck)}>{m.nodes[ck]?.taxon ?? ''} {m.nodes[ck]?.title ?? ck}</a></li>
+								<li><a href={nodeUrl(ck)}>{nodeName(m, ck)}</a></li>
 							{/each}
 						</ul>
 					{/if}

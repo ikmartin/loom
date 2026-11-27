@@ -141,7 +141,7 @@ test('no route reaches an unknown key from review or the problems page', async (
 			await page.goto(href.split('#')[0]);
 			const item = page.locator('[data-pane] .page.item').first();
 			await expect(item, `${start} links to ${href}`).toBeVisible();
-			await expect(item, `${start} links to ${href}`).not.toContainText('The manifest has no node');
+			await expect(item, `${start} links to ${href}`).not.toContainText('This result is not in the quilt now.');
 		}
 	}
 });

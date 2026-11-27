@@ -31,13 +31,15 @@ test('its lists come first, named as a reader names them, and its graph last', a
 	await expect(context).toContainText('Definition 1.1');
 	await expect(context).toContainText('proof of Lemma');
 	await expect(context).not.toContainText('/proof');
-	await expect(context.getByRole('link', { name: 'Definition 1.1' }).first()).toHaveAttribute('title', 'sy-0001');
+	// and no key in a link's hover text either
+	await expect(context.getByRole('link', { name: 'Definition 1.1' }).first()).not.toHaveAttribute('title');
+	await expect(context).not.toContainText('sy-000');
 });
 
 test('what the node is about stands in its context, with the landmark its text was recorded at', async ({ page }) => {
 	await page.goto('/node/sy-0002' + beside('/context/sy-0002'));
 	const context = pane(page, 1).getByTestId('context');
-	await expect(context.getByTestId('version').first()).toContainText('text of @1');
+	await expect(context.getByTestId('version').first()).toHaveText('Statement · text of @1');
 	await expect(context.getByTestId('closure-open')).toBeVisible();
 });
 
