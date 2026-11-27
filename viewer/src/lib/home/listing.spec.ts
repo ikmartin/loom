@@ -3,8 +3,8 @@ import { homePage, judgeHome, nameOf, repairOf, rowsOf, shortPath } from './list
 import { reportOf } from './report';
 import type { Job, Listing, QuiltRow } from './api';
 
-const row = (over: Partial<QuiltRow>): QuiltRow => ({ quilt: 'k', name: 'Q', folder: '/Users/m/Quilts/q', port: 8800, open: true, state: 'running', ...over });
-const listing = (quilts: QuiltRow[], jobs: Job[] = []): Listing => ({ quilts, jobs, name: { name: '', source: '' }, tex: 'mine', home_folder: '/Users/m' });
+const row = (over: Partial<QuiltRow>): QuiltRow => ({ quilt: 'k', name: 'Q', folder: '/Users/someone/Quilts/q', port: 8800, open: true, state: 'running', ...over });
+const listing = (quilts: QuiltRow[], jobs: Job[] = []): Listing => ({ quilts, jobs, name: { name: '', source: '' }, tex: 'mine', home_folder: '/Users/someone' });
 
 describe("loom's home page", () => {
 	it('is drawn when the probe says home, and never for a quilt whose server names the home', () => {
@@ -17,18 +17,18 @@ describe("loom's home page", () => {
 	});
 
 	it('lists a quilt being made by its name until the list holds it, and the quilts after', () => {
-		const making: Job = { job: 'j', kind: 'create', state: 'running', step: 'importing', name: 'Gadget', folder: '/Users/m/Quilts/Gadget' };
+		const making: Job = { job: 'j', kind: 'create', state: 'running', step: 'importing', name: 'Gadget', folder: '/Users/someone/Quilts/Gadget' };
 		expect(rowsOf(listing([row({})], [making])).map((r) => ('making' in r ? 'making' : 'quilt'))).toEqual(['making', 'quilt']);
 		// once on the list, the quilt's own row stands for it
-		expect(rowsOf(listing([row({ folder: '/Users/m/Quilts/Gadget' })], [making]))).toHaveLength(1);
+		expect(rowsOf(listing([row({ folder: '/Users/someone/Quilts/Gadget' })], [making]))).toHaveLength(1);
 		// a create that ended, or Repair TeX, is no row
 		expect(rowsOf(listing([], [{ ...making, state: 'failed' }, { job: 'r', kind: 'repair', state: 'running', step: '' }]))).toEqual([]);
 	});
 
 	it("writes a path under the person's home folder with ~", () => {
-		expect(shortPath('/Users/m/Quilts/q', '/Users/m')).toBe('~/Quilts/q');
-		expect(shortPath('/Users/m', '/Users/m/')).toBe('~');
-		expect(shortPath('/Users/mx/q', '/Users/m')).toBe('/Users/mx/q');
+		expect(shortPath('/Users/someone/Quilts/q', '/Users/someone')).toBe('~/Quilts/q');
+		expect(shortPath('/Users/someone', '/Users/someone/')).toBe('~');
+		expect(shortPath('/Volumes/backupx/q', '/Volumes/backup')).toBe('/Volumes/backupx/q');
 		expect(shortPath('/Volumes/x', undefined)).toBe('/Volumes/x');
 	});
 
@@ -52,7 +52,7 @@ describe("loom's home page", () => {
 		const as = (name: string, source: string) => nameOf({ ...listing([]), name: { name, source } });
 		expect(as('', '')).toEqual({ asked: true });
 		expect(as('Maren Holt', 'git config user.name')).toEqual({ asked: false, name: 'Maren Holt', fromGit: true });
-		expect(as('Maren Holt', '/Users/m/.config/loom/config.toml')).toEqual({ asked: false, name: 'Maren Holt', fromGit: false });
+		expect(as('Maren Holt', '/Users/someone/.config/loom/config.toml')).toEqual({ asked: false, name: 'Maren Holt', fromGit: false });
 		expect(nameOf(null)).toBeNull();
 	});
 });

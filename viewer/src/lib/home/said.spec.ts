@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { cannotStartOf, importSaidOf, refusalOf, untypesetOf } from './said';
 
-const HOME = '/Users/m';
-const QUILT = '/Users/m/Quilts/Thesis';
+const HOME = '/Users/someone';
+const QUILT = '/Users/someone/Quilts/Thesis';
 
 describe("the home's own words, worded by the page (I-13)", () => {
 	it("gives a refused quilt's refusal without loom serve's own lines, unwrapped, its paths written from the quilt", () => {
@@ -29,7 +29,7 @@ describe("the home's own words, worded by the page (I-13)", () => {
 	});
 
 	it("gives the system's reason a quilt could not start without its error number, under ~", () => {
-		expect(cannotStartOf("[Errno 1] Operation not permitted: '/Users/m/Dropbox/lattice-points/.loom'", HOME)).toBe("Operation not permitted: '~/Dropbox/lattice-points/.loom'");
+		expect(cannotStartOf("[Errno 1] Operation not permitted: '/Users/someone/Dropbox/lattice-points/.loom'", HOME)).toBe("Operation not permitted: '~/Dropbox/lattice-points/.loom'");
 	});
 
 	it("says where TeX stopped in TeX's words, that loom has no TeX for a missing tool, and never names the tool", () => {
@@ -40,7 +40,7 @@ describe("the home's own words, worded by the page (I-13)", () => {
 	});
 
 	it('writes the paths of what was dropped as the person dropped it', () => {
-		const said = '/Users/m/Library/Application Support/loom/app/incoming/0a1b2c3d4e5f6a7b/files/gadget-towers.tex: \\input{sections/intro} names a file that is not there';
+		const said = '/Users/someone/Library/Application Support/loom/app/incoming/0a1b2c3d4e5f6a7b/files/gadget-towers.tex: \\input{sections/intro} names a file that is not there';
 		expect(importSaidOf(said, HOME)).toBe('gadget-towers.tex: \\input{sections/intro} names a file that is not there');
 	});
 });
