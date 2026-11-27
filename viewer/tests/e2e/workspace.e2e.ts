@@ -252,6 +252,13 @@ test.describe('the arrangement', () => {
 		await expect(tabs(page, 0)).toHaveCount(2);
 	});
 
+	test('at 1440 with two panes, each pane keeps its margin marks inside it and inside the window', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/master/drafting/main' + beside('/master/drafting/talk'));
+		for (const i of [0, 1]) await expect(pane(page, i).locator('.fragment').first()).toBeVisible();
+		for (const i of [0, 1]) await expectInside(page, i);
+	});
+
 	test('a scrolled tab is where it was left', async ({ page }) => {
 		await page.goto('/master/drafting/main');
 		await expect(pane(page, 0).locator('.fragment').first()).toBeVisible();
@@ -558,6 +565,22 @@ test.describe('the divider', () => {
 	});
 });
 
+/** Hold that a pane's text column ends at least `--gap` short of the pane's edges and that every margin mark it draws stands inside the pane and the window. */
+async function expectInside(page: Page, index: number): Promise<void> {
+	await expect(pane(page, index).locator('.ann-gutter .mi').first()).toBeVisible();
+	const at = await pane(page, index).evaluate((p) => {
+		const body = p.querySelector('.body')!;
+		const box = body.getBoundingClientRect();
+		const right = Math.min(box.left + body.clientWidth, innerWidth);
+		const column = p.querySelector('.gutters > .column')!.getBoundingClientRect();
+		const marks = [...p.querySelectorAll('.ann-gutter .mi')].map((m) => m.getBoundingClientRect()).filter((r) => r.width);
+		return { left: box.left, right, column: [column.left, column.right], marks: Math.max(...marks.map((r) => r.right)) };
+	});
+	expect(at.column[0]).toBeGreaterThanOrEqual(at.left + 12);
+	expect(at.column[1]).toBeLessThanOrEqual(at.right - 12);
+	expect(at.marks).toBeLessThanOrEqual(at.right);
+}
+
 test.describe('a narrow window', () => {
 	test('the column goes first, folded to its strip of the four views, and the stored choice is not rewritten', async ({ page }) => {
 		await withPdfs(page);
@@ -577,6 +600,17 @@ test.describe('a narrow window', () => {
 		await page.goto(FIG);
 		await expect(pane(page, 0).getByTestId('toolbar-view')).toBeInViewport({ ratio: 1 });
 		await expect(page.getByTestId('zoom-at')).toBeVisible();
+	});
+
+	test('at 760, a document set wider than its pane narrows its text to the pane, its margin marks inside it, with the column open or folded', async ({ page }) => {
+		await page.setViewportSize({ width: 760, height: 900 });
+		// the web format's measure, 48rem, is wider than the pane the folded column leaves; the paper's, with the column open, is too
+		await prefs(page, { format: 'b1' });
+		await page.goto('/master/drafting/main');
+		await expect(pane(page, 0).locator('.fragment').first()).toBeVisible();
+		await expectInside(page, 0);
+		await page.getByTestId('panel-fold').click();
+		await expectInside(page, 0);
 	});
 
 	test("below the two-pane width one strip holds both panes' tabs, and the shown pane's toolbar leads with its views", async ({ page }) => {
