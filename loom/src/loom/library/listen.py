@@ -167,7 +167,7 @@ def _observer() -> Any:
     from watchdog.observers.fsevents import FSEventsEmitter, FSEventsObserver
 
     class Emitter(FSEventsEmitter):
-        def queue_events(self, timeout: Any, events: list[Any]) -> None:  # type: ignore[override]
+        def queue_events(self, timeout: Any, events: list[Any]) -> None:  # type: ignore[override,unused-ignore]
             if _dropped(events):
                 self.queue_event(EventsLostEvent(self.watch.path, is_directory=True))
             super().queue_events(timeout, events)
