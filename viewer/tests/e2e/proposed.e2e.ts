@@ -122,6 +122,21 @@ test('a change both sides edited whose lines fall apart is offered merged, and s
 	await expect(page.getByTestId('merged-note')).toContainText('You both changed it');
 });
 
+test("a refusal to prepare the changes is said in the viewer's words, never loom's message, which names a command", async ({ page }) => {
+	await serve(page, (m) => {
+		const c = m.contributions.find((x: { kind: string }) => x.kind === 'adopt');
+		c.choices = { ...c.choices, keys: ['sy-0002'] };
+	});
+	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: ['adopt-decision', 'adopt-preview', 'adopt-finish'], token: 't' } }));
+	await page.route('**/_api/adopt-preview', (route) => route.fulfill({ status: 409, json: { error: { code: 'adoption-refused', message: 'sy-0002 is a new result, and placing it changes the document; run `loom adopt aidoc.tex --document-changes`, with the keys you chose' } } }));
+	await page.goto('/review/proposed?copy=' + encodeURIComponent(COPY));
+	await page.getByTestId('apply').click();
+	const bar = page.getByTestId('contribution-bar');
+	await expect(bar).toContainText('Loom could not prepare these changes');
+	await expect(bar).not.toContainText('loom adopt');
+	await expect(bar).not.toContainText('sy-0002');
+});
+
 test('what taking a copy in did is said even when the copy leaves the manifest before the answer arrives', async ({ page }) => {
 	let gone = false;
 	let answer = () => {};

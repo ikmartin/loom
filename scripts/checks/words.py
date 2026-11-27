@@ -77,7 +77,6 @@ LEGACY = (
     "viewer/src/lib/review/Changed.svelte",
     "viewer/src/lib/review/ChangesMenu.svelte",
     "viewer/src/lib/review/ClosurePanel.svelte",
-    "viewer/src/lib/review/ContributionReview.svelte",
     "viewer/src/lib/review/DeletedBar.svelte",
     "viewer/src/lib/review/LookControls.svelte",
     "viewer/src/lib/review/ReviewPanel.svelte",

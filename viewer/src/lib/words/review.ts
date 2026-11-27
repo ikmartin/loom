@@ -608,6 +608,58 @@ export const review = {
 		/** Everything recorded's words for a file's version put back. */
 		restored: (name: string) => `Put ${name} back as a version`
 	},
+	/** The review of an agent's copy, opened from its row: the bar, the change shown, and what loom answered. Loom's own refusal is never shown: it is written for the command line. */
+	contribution: {
+		lead: (copy: string, source: string) => ['From ', copy, ` into ${source} · `] as const,
+		counts: (taken: number, left: number, undecided: number, clash: number) => `${taken} taken · ${left} left · ${undecided} to decide${clash ? ` · ${clash} can't be taken` : ''}`,
+		/** A change's state in the list of changes. */
+		says: { taken: 'taken', left: 'left out', undecided: 'to decide' } as Record<string, string>,
+		cannot: "can't be taken",
+		merged: ' · merged',
+		takeAll: 'Take all',
+		applying: 'Applying…',
+		apply: (n: number) => `Apply ${n} ${n === 1 ? 'change' : 'changes'}`,
+		previous: 'Previous change',
+		next: 'Next change',
+		taken: 'Taken',
+		take: 'Take it',
+		left: 'Left out',
+		leave: 'Leave it',
+		acceptHover: "Records your acceptance of this block's mathematics as it is written in, when you apply",
+		accept: 'accept as checked',
+		refresh: 'Refresh the copy',
+		about: (source: string) => `An agent's copy of ${source}. Take or leave each change; Apply writes the ones you took into ${source}, keeping it as it was first.`,
+		read: 'Read the copy',
+		noName: 'Choose your reviewer name in Settings to take changes.',
+		/** In place of the changes where loom could not compare the copy with its document. */
+		unreadable: 'Loom cannot compare this copy with your document now, so nothing of it can be taken. Ask your agent to look at the copy.',
+		mergedNote: 'You both changed it, and the edits fall apart line by line: what would be written holds both.',
+		removes: (source: string) => `The copy removes it from ${source}.`,
+		separate: 'It belongs to another document, so it is taken as a result of its own.',
+		sourceOnly: 'This changes its source, not its mathematics.',
+		yours: 'Yours',
+		copys: "The copy's",
+		both: 'With both edits',
+		isNew: 'New in this copy.',
+		removed: 'Removed.',
+		shared: (docs: string) => `This result is shared: it changes in ${docs} too.`,
+		bears: 'May bear on: ',
+		proseSource: 'Source of the prose and ordering',
+		/** What Apply did. */
+		took: (n: number, into: string, accepted: number, pending: number) => `Took ${n} ${n === 1 ? 'change' : 'changes'} into ${into}: ${accepted} accepted, ${pending} wait to be accepted. ${into} as it was is kept as a version.`,
+		/** After it, where the acceptance could not be recorded. */
+		notRecorded: ' Your acceptance could not be recorded, so the blocks wait to be accepted.',
+		/** After it, where blocks marked as checked were not accepted. */
+		dropped: (n: number) => ` ${n} marked as checked wait too, since what they rest on was not accepted.`,
+		refreshed: 'The copy now has your latest text wherever you changed it alone; a clash stays until it is reconciled.',
+		/** Loom's refusal of each step, said in the viewer's words; a refusal with a sentence of its own in the frame's words says that. */
+		refused: {
+			decide: 'Loom did not save that choice: the copy changed, or you chose in another tab. Reload Review and choose again.',
+			prepare: 'Loom could not prepare these changes: the copy or your document changed since you chose, or a change you took needs another you left out, as a new result needs the prose that places it. Choose again.',
+			apply: 'Loom did not write these changes: a file changed since they were prepared, so nothing was written. Apply again.',
+			refresh: 'Loom did not refresh the copy.'
+		}
+	},
 	/** Review › History › Sessions: the question before a session is deleted. */
 	deleteSession: {
 		/** Its heading and accessible name. */
