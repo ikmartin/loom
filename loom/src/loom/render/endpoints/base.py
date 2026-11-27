@@ -48,6 +48,15 @@ class ApiError(Exception):
         return {"error": error}
 
 
+def refusal(exc: Exception) -> ApiError:
+    """A refusal of loom's as the write API answers it: `no-reviewer` (409) for a write that has no name to be recorded under (`NoNameError`), else `refused` (400)."""
+    from loom.errors import NoNameError
+
+    if isinstance(exc, NoNameError):
+        return ApiError("no-reviewer", str(exc), status=409)
+    return ApiError("refused", str(exc))
+
+
 def _str(body: dict[str, Any], name: str, *, required: bool = False) -> str | None:
     value = body.get(name)
     if value is None or value == "":

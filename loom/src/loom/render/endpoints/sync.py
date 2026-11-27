@@ -80,7 +80,9 @@ def _adopt(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     from loom.sync import SyncError
 
     reviewer, _ = reviewer_identity(root)
-    if not reviewer or _str(body, "reviewer") != reviewer:
+    if not reviewer:
+        raise ApiError("no-reviewer", "Choose your reviewer name in Settings", status=409)
+    if _str(body, "reviewer") != reviewer:
         raise ApiError("reviewer-changed", "Choose your reviewer name and reload Review", status=409)
     if is_agent(_str(body, "author") or reviewer):
         raise ApiError("author-only", "An agent proposes; only the author incorporates", status=403)

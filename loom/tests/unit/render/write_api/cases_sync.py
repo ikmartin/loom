@@ -173,6 +173,13 @@ def _adoption(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     payload = {"copy": data["copy"], "reviewer": WHO, "fingerprint": data["fingerprint"]}
     for endpoint in ("adopt-decision", "adopt-preview", "adopt-finish"):
         refuses(s, endpoint, {**payload, "reviewer": "different"}, 409, "reviewer-changed", "reload Review")
+    # with no name saved, the refusal says so, not that the name changed
+    from loom.scan.quilt import user_config_path
+
+    saved = user_config_path().read_text()
+    user_config_path().unlink()
+    refuses(s, "adopt-decision", {**payload, "reviewer": ""}, 409, "no-reviewer", "reviewer name")
+    user_config_path().write_text(saved)
     succeeds(s, "adopt-decision", {**payload, "keys": ["dm-0004"], "document": False})
     preview = succeeds(s, "adopt-preview", payload)["result"]
     assert preview["patch"]

@@ -16,7 +16,7 @@ from loom.cli.build_cmds import engine_for, log_run
 from loom.cli.graph import keyed, natural, when
 from loom.cli.report import Group, Item, Progress, Report, counted
 from loom.clock import stamp, today
-from loom.errors import ContentError, EnvError, NotFoundError
+from loom.errors import ContentError, EnvError, NoNameError, NotFoundError
 from loom.paths import document_build
 from loom.records.annotations import (
     find_annotation,
@@ -43,7 +43,7 @@ def _author(explicit: str | None, root: Path) -> str:
     try:
         return resolve_author(explicit, root)[0]
     except NoAuthorError as exc:
-        raise EnvError(str(exc)) from exc
+        raise NoNameError(str(exc)) from exc
 
 
 def _master_compiles(result: ScanResult, master: str | None = None) -> tuple[bool, str]:

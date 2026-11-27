@@ -57,6 +57,10 @@ class EnvError(click.ClickException):
         return fit(self.message, ERROR_LEAD) + self.verbatim
 
 
+class NoNameError(EnvError):
+    """A write recorded under the person's name, refused while no source gives one (`scan.quilt.resolve_author`); the write API answers it 409 `no-reviewer`."""
+
+
 class NotFoundError(EnvError):
     """An argument names something that does not exist: a node, an annotation, a session, a cited work, a result. Exit 2, like any argument that names nothing; the write API answers it 404 `no-such-<what>`."""
 

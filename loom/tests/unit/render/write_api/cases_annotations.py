@@ -44,6 +44,8 @@ def _annotate(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     assert "session" not in the(events(q, ann), lambda e: True, "event")  # a session sent with it is ignored
     # an annotation belongs to no session, so a write that names none is written
     succeeds(s, "annotate", {"target": "dm-0003", "message": "Named no session.", "author": WHO})
+    # with no name saved and none given, a write says it is for want of the name, which the viewer asks for
+    refuses(s, "annotate", {"target": "dm-0003", "message": "No name."}, 409, "no-reviewer", "no author name")
     refuses(
         s,
         "annotate",

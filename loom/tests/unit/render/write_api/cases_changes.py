@@ -66,6 +66,7 @@ def _change_keep(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     from loom.scan.quilt import save_author
 
     s, q, _sid = on_demo(serve, tmp_path)
+    refuses(s, "change-keep", {"all": True}, 409, "no-reviewer", "no author name")
     save_author(WHO)
     opened(q)  # the paper open to agents, so an edit in it is listed
     # before a first look, keeping all takes one, then keeps what waits: the demo's suggested edit

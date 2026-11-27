@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain
+from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain, refusal
 
 
 def _author(root: Path, body: dict[str, Any]) -> tuple[str, tuple[str, str]]:
@@ -23,7 +23,7 @@ def _author(root: Path, body: dict[str, Any]) -> tuple[str, tuple[str, str]]:
     try:
         return who, _annotator(root, _str(body, "author"), sniff=False)
     except (EnvError, ContentError) as exc:
-        raise ApiError("refused", str(exc)) from exc
+        raise refusal(exc) from exc
 
 
 def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:

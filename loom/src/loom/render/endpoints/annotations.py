@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain, said
+from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain, refusal, said
 
 
 def _delete(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -31,7 +31,7 @@ def _delete(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     except NotFoundError as exc:
         raise ApiError(f"no-such-{exc.what}", str(exc), status=404) from exc
     except (EnvError, ContentError, ValueError) as exc:
-        raise ApiError("refused", str(exc)) from exc
+        raise refusal(exc) from exc
 
 
 def _review(root: Path, endpoint: str, body: dict[str, Any]) -> str:
@@ -51,7 +51,7 @@ def _review(root: Path, endpoint: str, body: dict[str, Any]) -> str:
     except NotFoundError as exc:
         raise ApiError(f"no-such-{exc.what}", str(exc), status=404) from exc
     except (EnvError, ContentError) as exc:
-        raise ApiError("refused", str(exc)) from exc
+        raise refusal(exc) from exc
 
     try:
         # `undo` opens a resolved annotation again by appending another event; the viewer offers it in place of the verb that fired, so a wrong click is one click back (DR-174).
@@ -138,7 +138,7 @@ def _take(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     except MarkRefused as exc:
         raise ApiError(exc.code, exc.message, status=exc.status) from exc
     except (EnvError, ContentError) as exc:
-        raise ApiError("refused", str(exc)) from exc
+        raise refusal(exc) from exc
     return {"ok": True, "result": f"took in {took['taken']}", **took}
 
 
