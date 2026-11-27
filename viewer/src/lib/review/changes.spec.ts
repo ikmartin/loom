@@ -200,11 +200,12 @@ describe('Keep and Discard', () => {
 		expect(history.done.map((s) => s.label)).toEqual(['resolve', 'keep']);
 		// a file that moved while loom worked: pressed again it may be undone, so the step stays
 		answer = { ok: true, result: 'undid 0', done: [], refused: [{ id: 'e-1', why: 'a file changed while loom was undoing a Keep', code: 'changed' }] };
-		expect(await undo()).toBe('a file changed while loom was undoing a Keep');
+		// said by its code in Review's words, never by loom's why
+		expect(await undo()).toBe('It changed after it was listed, so loom left it as it is.');
 		expect(history.done.map((s) => s.label)).toEqual(['resolve', 'keep']);
 		// its words changed where they were written: never, so it goes, and Undo reaches the resolve beneath
 		answer = { ok: true, result: 'undid 0', done: [], refused: [{ id: 'e-1', why: 'the suggestion “plural” has changed where it was written', code: 'changed-since' }] };
-		expect(await undo()).toBe('the suggestion “plural” has changed where it was written');
+		expect(await undo()).toBe('Its words changed in the file since, so loom left them as they are.');
 		expect(history.done.map((s) => s.label)).toEqual(['resolve']);
 	});
 
@@ -251,7 +252,7 @@ describe('Keep and Discard', () => {
 		history.done = [];
 		await keepChanges({ changes: ['e-1'] });
 		answer = { ok: false, error: { code: 'other-quilt', message: 'that Keep was made in another quilt, so nothing was undone' } };
-		expect(await undo()).toBe('that Keep was made in another quilt, so nothing was undone');
+		expect(await undo()).toBe('It was kept in another quilt.');
 		expect(history.done).toHaveLength(0);
 	});
 
@@ -283,7 +284,7 @@ describe('Keep and Discard', () => {
 		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
 		await keepChanges({ changes: ['e-1'] });
 		answer = { ok: false, error: { code: 'no-such-change', message: 'a suggestion it names is not in this quilt' } };
-		expect(await undo()).toBe('a suggestion it names is not in this quilt');
+		expect(await undo()).toBe('It no longer waits.');
 		expect(history.done).toHaveLength(0);
 	});
 
