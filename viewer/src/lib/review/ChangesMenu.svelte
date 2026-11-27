@@ -7,7 +7,7 @@
 	import { acted } from './acted.svelte';
 	import type { Annotating, ChangesView } from './annotating.svelte';
 	import { allSays, changesIn, ready } from './changes';
-	import { discardChanges, keepChanges } from './history.svelte';
+	import { changeWhy, discardChanges, keepChanges } from './history.svelte';
 	import { say } from './toasts.svelte';
 
 	let {
@@ -91,7 +91,7 @@
 		const res = how === 'keep' ? await keepChanges({ all: true, document }) : await discardChanges({ all: true, document });
 		const refused = res.refused ?? [];
 		if (!res.ok) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refusalOf(res.error)] });
-		else if (refused.length) say({ title: `${refused.length} ${refused.length === 1 ? 'change was' : 'changes were'} not ${how === 'keep' ? 'kept' : 'discarded'}`, lines: refused.slice(0, 3).map((r) => r.why) });
+		else if (refused.length) say({ title: `${refused.length} ${refused.length === 1 ? 'change was' : 'changes were'} not ${how === 'keep' ? 'kept' : 'discarded'}`, lines: refused.slice(0, 3).map((r) => changeWhy({ code: r.code ?? 'refused' })) });
 	}
 </script>
 

@@ -4,7 +4,7 @@
 //
 // A delete also stands at the foot of the window (`DeletedBar`) while it is done, since its mark goes with the annotation; its Undo there undoes that delete, wherever it is in the history.
 import { refusalOf } from '$lib/library/said';
-
+import { review } from '$lib/words/review';
 import { store } from '$lib/manifest/client.svelte';
 import type { Annotation, Look } from '$lib/manifest/types';
 import { capabilities, onCapabilities, write, type Capabilities, type WriteResult } from '$lib/write';
@@ -259,6 +259,12 @@ async function act(endpoint: 'change-keep' | 'change-discard', which: Which, ext
 /** The refusals after which a change's undo or redo can never succeed: it is not kept, loom wrote nothing to undo, its words changed where they were written, or the quilt has no such suggestion. A file that moved while loom worked (`changed`) may succeed when pressed again. */
 const FINAL = new Set(['not-kept', 'not-written', 'changed-since', 'not-open', 'no-such-change', 'other-quilt']);
 
+/** Why a change was not done, as a sentence: Review's words for a change's refusal by its code, else the frame's; never loom's own why, which names ids and commands. */
+export function changeWhy(e: { code: string } | null | undefined): string {
+	const why = review.edits.why[e?.code ?? ''];
+	return why ? why[0].toUpperCase() + why.slice(1) : refusalOf(e);
+}
+
 /** `res` as a step of the history takes it: loom having done none of the changes it was asked for is a refusal, with the first one's why, and final when every refusal is; when it did some, those refused are said under `title`. */
 function asStep(res: ChangeAnswer, title: string): StepResult & ChangeAnswer {
 	const refused = res.refused ?? [];
@@ -269,7 +275,7 @@ function asStep(res: ChangeAnswer, title: string): StepResult & ChangeAnswer {
 		const final = refused.every((r) => FINAL.has(r.code ?? ''));
 		return { ...res, ok: false, final, error: { code: refused[0].code ?? 'refused', message: refused[0].why } };
 	}
-	say({ title, lines: refused.slice(0, 3).map((r) => r.why) });
+	say({ title, lines: refused.slice(0, 3).map((r) => changeWhy({ code: r.code ?? 'refused' })) });
 	return res;
 }
 
@@ -370,7 +376,7 @@ async function move(from: 'done' | 'undone', step: Step): Promise<string> {
 			if (step.deleted) history.deletions = history.deletions.filter((d) => d !== step.deleted);
 			save();
 		}
-		return refusalOf(res.error);
+		return changeWhy(res.error);
 	}
 	if (from === 'done') {
 		history.done = history.done.filter((s) => s !== step);

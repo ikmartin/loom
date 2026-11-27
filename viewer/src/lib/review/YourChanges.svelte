@@ -16,7 +16,7 @@
 	import { acceptanceOf, todoOf, waitingIn, type BlockRow } from '$lib/review/yourChanges';
 	import { acted } from '$lib/review/acted.svelte';
 	import { allSays, ready } from '$lib/review/changes';
-	import { discardChanges, history, keepChanges, nextUndo, undo, type ChangeAnswer } from '$lib/review/history.svelte';
+	import { changeWhy, discardChanges, history, keepChanges, nextUndo, undo, type ChangeAnswer } from '$lib/review/history.svelte';
 	import { itemLabel, dotVars } from '$lib/fragments/gutter';
 	import { reviewRowBadge, shortDate } from '$lib/badges';
 	import NoDrafts from '$lib/components/NoDrafts.svelte';
@@ -147,7 +147,7 @@
 		const done = res.done?.length;
 		const refused = res.refused ?? [];
 		const verb = how === 'keep' ? 'Kept' : 'Discarded';
-		const text = !res.ok ? refusalOf(res.error) : [done !== undefined ? `${verb} ${done} ${done === 1 ? 'change' : 'changes'} in ${g.label}.` : `${verb} the changes in ${g.label}.`, ...refused.map((r) => r.why)].join('\n');
+		const text = !res.ok ? refusalOf(res.error) : [done !== undefined ? `${verb} ${done} ${done === 1 ? 'change' : 'changes'} in ${g.label}.` : `${verb} the changes in ${g.label}.`, ...refused.map((r) => changeWhy({ code: r.code ?? 'refused' }))].join('\n');
 		said = { at: '*', text, refused: !res.ok || (done === 0 && refused.length > 0) };
 		busy = '';
 	}

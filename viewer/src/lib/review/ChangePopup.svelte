@@ -13,7 +13,7 @@
 	import { can } from '$lib/write';
 	import { typeOf } from './annotationTypes';
 	import { actSays, changeById, kindName, ready, refusal, whoMade } from './changes';
-	import { annotate, discardChanges, keepChanges } from './history.svelte';
+	import { annotate, changeWhy, discardChanges, keepChanges } from './history.svelte';
 	import { say } from './toasts.svelte';
 	import MirroredActs from '$lib/overleaf/MirroredActs.svelte';
 	import { mirrors } from '$lib/overleaf/said';
@@ -65,7 +65,8 @@
 	async function act(how: 'keep' | 'discard'): Promise<void> {
 		onclose();
 		const res = how === 'keep' ? await keepChanges({ changes: [id] }) : await discardChanges({ changes: [id] });
-		const refused = res.refused?.find((r) => r.id === id)?.why;
+		const no = res.refused?.find((r) => r.id === id);
+		const refused = no ? changeWhy({ code: no.code ?? 'refused' }) : undefined;
 		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? refusalOf(res.error)] });
 	}
 

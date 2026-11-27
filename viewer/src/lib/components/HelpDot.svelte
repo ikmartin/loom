@@ -28,14 +28,14 @@
 
 <style>
 	button {
-		width: 18px;
-		height: 18px;
+		width: 15px;
+		height: 15px;
 		border-radius: 999px;
 		border: 1px solid var(--rule-strong);
 		background: var(--leaf);
 		color: var(--ink-faint);
 		font-family: var(--sans);
-		font-size: 11px;
+		font-size: 9px;
 		line-height: 1;
 		cursor: pointer;
 		vertical-align: middle;

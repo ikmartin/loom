@@ -381,7 +381,10 @@ export const review = {
 			'not-utf8': 'its file is not text loom can read.',
 			'not-writable': 'its file cannot be written.',
 			'outside-quilt': 'its file is outside the quilt.',
-			mirrored: 'its document mirrors Overleaf: make the change there, then choose Done in Overleaf.'
+			mirrored: 'its document mirrors Overleaf: make the change there, then choose Done in Overleaf.',
+			'not-kept': 'it is open again, so there is no keep of it to undo.',
+			'not-written': 'loom cannot take its words back out from its record; an earlier version of the file can be restored instead.',
+			'other-quilt': 'it was kept in another quilt.'
 		} as Record<string, string>,
 		/** The column's message when the last keep or discard could not be undone. */
 		notUndone: 'The last keep or discard could not be undone.'

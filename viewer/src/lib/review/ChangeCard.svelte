@@ -12,7 +12,7 @@
 	import { keyName, linkName } from '$lib/workspace/names';
 	import { can } from '$lib/write';
 	import { actSays, kindName, ready, refusal, whoMade } from './changes';
-	import { discardChanges, keepChanges, type ChangeAnswer } from './history.svelte';
+	import { changeWhy, discardChanges, keepChanges, type ChangeAnswer } from './history.svelte';
 	import { say } from './toasts.svelte';
 	import MirroredActs from '$lib/overleaf/MirroredActs.svelte';
 	import { mirrors } from '$lib/overleaf/said';
@@ -64,7 +64,8 @@
 		e.stopPropagation();
 		const res = how === 'keep' ? await keepChanges({ changes: [c.id] }) : await discardChanges({ changes: [c.id] });
 		if (onanswer) return onanswer(how, res);
-		const refused = res.refused?.find((r) => r.id === c.id)?.why;
+		const no = res.refused?.find((r) => r.id === c.id);
+		const refused = no ? changeWhy({ code: no.code ?? 'refused' }) : undefined;
 		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? refusalOf(res.error)] });
 	}
 </script>

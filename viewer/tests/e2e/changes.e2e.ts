@@ -120,7 +120,8 @@ test('a Keep is still undone from the toolbar after the page reloads, and a step
 	// loom answers that it is open again, as after a restore: the step goes, and says why
 	await page.route('**/_api/change-undo', (r) => r.fulfill({ json: { ok: true, result: 'undid 0', done: [], refused: [{ id: SUGGESTED, why: 'the suggestion “Hence” is open, so there is no Keep of it to undo', code: 'not-kept' }] } }));
 	await pane(page, 0).getByTestId('annotate-undo').click();
-	await expect(page.getByText('the suggestion “Hence” is open, so there is no Keep of it to undo')).toBeVisible();
+	// said in the viewer's words for the code, never loom's own why
+	await expect(page.getByText('It is open again, so there is no keep of it to undo.')).toBeVisible();
 	await expect(pane(page, 0).getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo');
 });
 
