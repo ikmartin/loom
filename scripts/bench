@@ -7,7 +7,7 @@ Usage:
     scripts/bench PATH --skip cold   leave out rows by name (cold, cached, edit, commands, serve, compiled)
     scripts/bench PATH --loom EXE    time another build of loom, e.g. a frozen copy of the last commit's, for a baseline
 
-Every command runs as the author would run it, in a shell with the agent markers removed, through the `loom` on PATH. The copy lives in a temporary directory removed at the end unless `--keep` is given. `serve` rows are measured over HTTP against `loom serve --no-compile` on a free port: a write is timed until it answers, an edit until the published manifest changes. `compiled` is the edit again against `loom serve` as a person runs it, with compiles on, so the edited block is made by TeX before it is published. Each edit writes a word never written before, so no cache holds its text.
+Every command runs as the author would run it, in a shell with the agent markers removed, through the `loom` on PATH. The copy lives in a temporary directory removed at the end unless `--keep` is given; `loom init` and `loom serve` put it on loom's home list, so it is taken off the list as it is removed, through the same loom's Python. HOME stays the person's, where loom's own TeX and caches are. `serve` rows are measured over HTTP against `loom serve --no-compile` on a free port: a write is timed until it answers, an edit until the published manifest changes. `compiled` is the edit again against `loom serve` as a person runs it, with compiles on, so the edited block is made by TeX before it is published. Each edit writes a word never written before, so no cache holds its text.
 """
 
 from __future__ import annotations
@@ -65,6 +65,40 @@ def copy_of(source: Path | None, home: Path) -> Path:
     else:
         shutil.copytree(source, q, ignore=shutil.ignore_patterns(".git"), symlinks=True)
     return q
+
+
+#: Takes the quilt at argv[1] off loom's home list, where `loom init` and `loom serve` put it; a list that does not name it is left unwritten.
+FORGET = """
+import sys
+from pathlib import Path
+from loom.app import registry
+from loom.machine import quilt_id
+
+key = quilt_id(Path(sys.argv[1]))
+if registry.find(key) is not None:
+    registry.forget(key)
+"""
+
+
+def loom_python() -> str:
+    """The Python the timed loom runs on, from its script's first line; this one where that line names none."""
+    exe = shutil.which(LOOM[0])
+    try:
+        first = Path(exe).read_text(encoding="utf-8", errors="replace").split("\n", 1)[0] if exe else ""
+    except (OSError, UnicodeError):
+        first = ""
+    words = first[2:].split() if first.startswith("#!") else []
+    if words and Path(words[0]).name == "env":
+        words = words[1:]
+    return words[0] if words else sys.executable
+
+
+def forget(q: Path) -> None:
+    """Take the copy at `q` off loom's home list before it is removed, so no row is left pointing at a deleted folder; one line on stderr where that fails."""
+    done = subprocess.run([loom_python(), "-c", FORGET, str(q)], env=ENV, capture_output=True, text=True)
+    if done.returncode != 0:
+        said = (done.stderr.strip().splitlines() or [""])[-1]
+        print(f"bench: the copy may still be on loom's home list: {said}", file=sys.stderr)
 
 
 def a_result(q: Path) -> tuple[str, str]:
@@ -258,6 +292,8 @@ def main() -> None:
         if args.keep:
             print(f"copy kept at {home / 'q'}")
         else:
+            if (home / "q").exists():
+                forget(home / "q")
             shutil.rmtree(home, ignore_errors=True)
 
 

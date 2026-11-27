@@ -38,7 +38,7 @@ def test_no_reserved_write_operation_is_served() -> None:
 
 
 def test_install_reserves_no_operation() -> None:
-    """Install's operations are the home's endpoints (specs/write-api.md §7), all served: a paper dropped on the home makes a quilt (`quilt-create`), one dropped on an open quilt is the library's."""
+    """Install's operations are the home's endpoints (specs/write-api.md §7), all served: New quilt makes an empty quilt (`quilt-create`), and a paper is brought into a quilt on its own page (`paper-import`)."""
     assert [name for name in first_cells(section("Write operations")) if name.startswith("quilt-")] == []
 
 

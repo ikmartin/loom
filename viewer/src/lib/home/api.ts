@@ -23,7 +23,7 @@ export interface Job {
 	job: string;
 	kind: 'create' | 'repair';
 	state: 'running' | 'done' | 'failed';
-	/** The step running: a create's `making`, `importing`, `starting`; Repair TeX's latest line. */
+	/** The step running: a create's `making` or `starting`; Repair TeX's latest line. */
 	step: string;
 	/** A create's quilt, by name and folder, from its first answer. */
 	name?: string;
@@ -31,10 +31,7 @@ export interface Job {
 	/** A create's, once done. */
 	quilt?: string;
 	url?: string;
-	document?: string;
-	typeset?: boolean;
-	untypeset?: string;
-	differs?: boolean;
+	/** Repair TeX's, once done. */
 	tex?: Tex;
 	/** A failed job's code and loom's words. */
 	why?: string;
@@ -94,40 +91,6 @@ export async function call<T>(endpoint: string, body: Record<string, unknown> = 
 		const said = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
 		if (res.ok) return { ok: true, value: said as T };
 		return { ok: false, code: said.error?.code ?? 'failed', message: said.error?.message ?? '' };
-	} catch (err) {
-		return { ok: false, code: 'unreachable', message: (err as Error).message };
-	}
-}
-
-/**
- * Send one dropped file's bytes to the home (`quilt-receive`), joining `drop` when given.
- *
- * Parameters
- * ----------
- * file : Blob
- *     The file.
- * path : str
- *     Its path within what was dropped, `/`-separated.
- * drop : str, optional
- *     The drop it joins; a new one when absent.
- *
- * Returns
- * -------
- * Answer
- *     `{drop, path, size}`, or the refusal (`too-large`, `bad-path`, …).
- */
-export async function receive(file: Blob, path: string, drop?: string): Promise<Answer<{ drop: string; path: string; size: number }>> {
-	try {
-		const caps = await capabilities();
-		const query = new URLSearchParams({ path, ...(drop ? { drop } : {}) });
-		const res = await fetch(`${url('quilt-receive')}?${query}`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/octet-stream', ...(caps?.token ? { 'X-Loom-Token': caps.token } : {}) },
-			body: file
-		});
-		const said = (await res.json().catch(() => ({}))) as { drop: string; path: string; size: number; error?: { code?: string; message?: string } };
-		if (res.ok) return { ok: true, value: said };
-		return { ok: false, code: said.error?.code ?? (res.status === 413 ? 'too-large' : 'failed'), message: said.error?.message ?? '' };
 	} catch (err) {
 		return { ok: false, code: 'unreachable', message: (err as Error).message };
 	}

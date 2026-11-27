@@ -60,7 +60,7 @@ jobs:
         run: |
           loom init demo --demo --yes
           cd demo
-          loom serve --no-compile > "$RUNNER_TEMP/serve.log" 2>&1 &
+          loom serve --no-compile --port 8791 > "$RUNNER_TEMP/serve.log" 2>&1 &
           pid=$!
           up=""
           for _ in $(seq 60); do

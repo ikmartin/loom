@@ -21,6 +21,8 @@ from loom.machine import data_dir, quilt_id
 HOME_PORT = 8790
 #: Where the ports given to quilts start; the next is always one no quilt was given before.
 FIRST_PORT = 8800
+#: Seconds `loom serve` and `loom init` wait for the list's lock before going on without it (`join`).
+JOIN_WAIT = 2.0
 
 
 class Unreadable(EnvError):
@@ -105,10 +107,10 @@ def _write(entries: dict[str, Entry], given: set[int]) -> None:
     own.replace(tmp, p, root=data_dir())
 
 
-def _locked() -> AbstractContextManager[None]:
+def _locked(wait: float | None = None) -> AbstractContextManager[None]:
     from loom.locks import locked
 
-    return locked(folder() / ".lock", root=data_dir())
+    return locked(folder() / ".lock", wait=wait, root=data_dir())
 
 
 def free(port: int) -> bool:
@@ -156,13 +158,15 @@ def port_of(root: Path) -> int | None:
     return found.port if found else None
 
 
-def remember(root: Path) -> Entry:
+def remember(root: Path, wait: float | None = None) -> Entry:
     """Put the quilt at `root` on the list, or find it there.
 
     Parameters
     ----------
     root : Path
         The quilt's root.
+    wait : float, optional
+        Seconds to wait for the list's lock before refusing with EnvError; default the lock's own.
 
     Returns
     -------
@@ -172,7 +176,7 @@ def remember(root: Path) -> Entry:
     from loom.render.serve import open_url, read_serve_json
 
     key = quilt_id(root)
-    with _locked():
+    with _locked(wait):
         listed, given = _read()
         if key in listed:
             return listed[key]
@@ -182,6 +186,29 @@ def remember(root: Path) -> Entry:
         listed[key] = entry
         _write(listed, given | {port})
         return entry
+
+
+def join(root: Path) -> Entry | None:
+    """Put the quilt at `root` on the list, as `loom serve` does once it listens and `loom init` once its quilt is made, never failing either.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+
+    Returns
+    -------
+    Entry or None
+        Its entry, as `remember` gives it; None when the list cannot be read, stays locked past `JOIN_WAIT` or cannot be written, which leaves it as it was.
+
+    See Also
+    --------
+    remember : The same, refusing instead.
+    """
+    try:
+        return remember(root, wait=JOIN_WAIT)
+    except (EnvError, OSError):
+        return None
 
 
 def readdress(key: str) -> Entry:

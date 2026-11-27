@@ -231,7 +231,7 @@ From: index (the node, its edges, its proofs, what uses it), evidence (`digested
 
 ### 3.5 The drop of a paper (1b, 4d, and the column's message)
 
-**Drawn.** A file dragged over any view covers it: "Drop to add to your library.", and only while papers wait for their file, "If it is one of the 3 papers waiting to be fetched, it is attached to that paper." The drop adds it; the column's foot says what happened, with `undo` ("Added Gadget towers, Halberd and Ravel 2021, found by its arXiv number, with its TeX source."); the view does not change, and in the Library the new row is selected.
+**Drawn.** A file dragged over any view covers it: "Drop to add to your library.", and only while papers wait for their file, "If it is one of the 3 papers waiting to be fetched, it is attached to that paper." The one exception is the drop area of a quilt with nothing to read, which takes what is dropped on it for itself and brings it in as the quilt's paper, or a PDF into the library (`write-api.md` §2, `paper-import`). The drop adds it; the column's foot says what happened, with `undo` ("Added Gadget towers, Halberd and Ravel 2021, found by its arXiv number, with its TeX source."); the view does not change, and in the Library the new row is selected.
 
 **Reads.** The number of papers waiting: `review-counts`, its `kinds.fetch` (§4.1), asked when a drag enters the window.
 

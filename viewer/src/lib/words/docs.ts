@@ -1,4 +1,4 @@
-// Docs' words: its column, the picker, a work beside a draft, the notes tab, the Lean marks and the formalize panel. Every sentence the viewer says is written in this folder (`frame.ts` says how); a component holds none.
+// Docs' words: its column, the page of a quilt with nothing to read, the picker, a work beside a draft, the notes tab, the Lean marks and the formalize panel. Every sentence the viewer says is written in this folder (`frame.ts` says how); a component holds none.
 
 /** TeX's messages the viewer says in the person's words, by how each begins; any other is said as TeX said it. */
 const TEX: [RegExp, string][] = [
@@ -25,6 +25,52 @@ export const docs = {
 		const file = /^(?:LaTeX Error: )?File [`'"‘]([^`'"’]+)['"’] not found/i.exec(e)?.[1];
 		if (file) return `${file}, a file it reads, is missing`;
 		return TEX.find(([re]) => re.test(e))?.[1] ?? e.replace(/\.$/, '');
+	},
+	start: {
+		/** The page of a quilt with nothing to read, where the publisher takes no paper. */
+		nothing: 'Nothing to read yet.',
+		/** The heading of the dashed drop area on the page of a quilt with nothing to read. */
+		heading: 'Drop your paper here',
+		/** The drop area's first line, before and after the monospaced `.tex`. */
+		paper: ['Its ', '.tex', ' file, its folder, or its source archive comes into this quilt, open on your paper.'] as const,
+		/** The drop area's second line. */
+		pdf: 'A PDF comes into its library, for reading it.',
+		/** The link under the drop area's lines, which opens the system's file dialog. */
+		choose: 'or choose a file…',
+		/** While a dropped paper comes in, in place of the link. */
+		bringingPaper: 'Bringing your paper in and typesetting it',
+		/** While dropped PDFs come in. */
+		bringingPdf: 'Bringing the PDF into its library',
+		/** While the file dialog is open, and while what was chosen in it comes in. */
+		bringingChosen: 'Bringing it in',
+		/** The grey line under a paper coming in. */
+		bringingSub: 'The first time can take a few minutes.',
+		/** The one question, when several files could be the paper. */
+		question: 'Which file is the paper?',
+		/** The button under the question that brings in the file chosen. */
+		bring: 'Bring it in',
+		/** Hover text on that button while no file is chosen. */
+		chooseFirst: 'Choose the paper first',
+		/** The quiet button under the question that puts it away. */
+		cancel: 'Cancel',
+		/** Refused: no `.tex` that begins a document. */
+		noPaper: 'That holds no LaTeX file that begins a document.',
+		/** The hint under it, before and after the monospaced `.tex`. */
+		noPaperHint: ["Drop the folder or archive that holds your paper's ", '.tex', ' file, or a PDF to read it.'] as const,
+		/** Refused: an archive loom cannot open safely. */
+		badArchive: 'Loom cannot open that archive.',
+		/** The hint under it. */
+		badArchiveHint: 'Open it yourself, and drop the folder it holds.',
+		/** Refused: more than a drop may hold. */
+		tooLarge: 'That is more than 1 GB.',
+		/** The hint under it. */
+		tooLargeHint: 'Drop only the folder that holds the paper.',
+		/** Refused: the system has no file dialog. */
+		noDialog: 'Loom cannot show a file dialog here; drop the file instead.',
+		/** Failed: the paper could not come in, above what loom said. */
+		failed: 'Loom could not bring your paper in:',
+		/** Failed, with nothing more to say. */
+		failedPlain: 'Loom could not bring it in.'
 	},
 	work: {
 		/** A work's tab in Docs, where its short name is not known: the library no longer holds it, or the works list is being read. */

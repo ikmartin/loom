@@ -23,7 +23,7 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 | `library-dismiss` | dismisses works an agent suggested | the library |
 | `changed-seen` | marks what changed as seen, one row or all | Review |
 
-Prefixes: `change-` and `history-` belong to the safe write path; `library-` to the library; `session-` and `agents-` to attaching an agent; `overleaf-` to Overleaf, whose endpoints are built (`write-api.md`); `adopt-`, `review-` and `changed-` to Review; `formal-` to formalization; `quilt-` to install and launch; `web-` to the Web, whose reads are built (`write-api.md`).
+Prefixes: `change-` and `history-` belong to the safe write path; `library-` to the library; `session-` and `agents-` to attaching an agent; `overleaf-` to Overleaf, whose endpoints are built (`write-api.md`); `adopt-`, `review-` and `changed-` to Review; `formal-` to formalization; `quilt-` to install and launch; `paper-` to bringing a paper into a quilt from its empty page, whose endpoints are built (`write-api.md`); `web-` to the Web, whose reads are built (`write-api.md`).
 
 ## Refusals, and what a write answers
 

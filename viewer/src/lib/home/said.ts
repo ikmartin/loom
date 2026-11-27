@@ -1,6 +1,4 @@
-// The home's own words, worded for the person before the page shows them. A quilt's `said` is the last lines its `loom serve` wrote, which hold its address lines ("Ctrl-C to stop"), loom's refusal wrapped to a terminal's width with full paths, and, when it lost its port, advice to pass a port; `untypeset` is TeX's first error, or that a tool is missing; a create's failure is loom's line with the drop's paths. Each is reduced here to what it says of the quilt or the paper, with no command and with paths written short.
-
-import { home as words } from '$lib/words/home';
+// The home's own words, worded for the person before the page shows them. A quilt's `said` is the last lines its `loom serve` wrote, which hold its address lines ("Ctrl-C to stop"), loom's refusal wrapped to a terminal's width with full paths, and, when it lost its port, advice to pass a port. Each is reduced here to what it says of the quilt, with no command and with paths written short.
 
 /** What a refused quilt's server said, as the row shows it. */
 export type Refusal = { port: true } | { newer: { found: number; reads: number } } | { text: string };
@@ -63,45 +61,4 @@ export function refusalOf(said: string, folder = '', home = ''): Refusal {
  */
 export function cannotStartOf(said: string, home = ''): string {
 	return short(said.replace(/^\[Errno \d+\]\s*/, ''), '', home);
-}
-
-/**
- * Where TeX stopped, for a paper that came in shown as its source.
- *
- * Parameters
- * ----------
- * untypeset : str
- *     The create's `untypeset`: TeX's first error line, or why TeX did not run.
- * tex : str, default ''
- *     The TeX in use, `none` when loom has none.
- *
- * Returns
- * -------
- * str
- *     The viewer's sentence: TeX's own error, or that loom has no TeX, or that TeX stopped.
- */
-export function untypesetOf(untypeset: string, tex = ''): string {
-	if (tex === 'none' || /is not installed|not found on PATH|no TeX/i.test(untypeset)) return words.window.noTex;
-	const error = /^!\s*(.+?)\.?$/.exec(untypeset.trim());
-	if (error) return words.window.texStopped(error[1]);
-	return words.window.texStoppedPlain;
-}
-
-/**
- * What loom said when a paper could not come in, as the window shows it: the drop's own paths written as the person dropped them.
- *
- * Parameters
- * ----------
- * said : str
- *     The failed create's `said`.
- * home : str, default ''
- *     The person's home folder.
- *
- * Returns
- * -------
- * str
- */
-export function importSaidOf(said: string, home = ''): string {
-	// the drop's folder, in loom's folder for the machine, whose name may hold a space ("Application Support"): from the path's first slash to the drop's own files
-	return short(said.replace(/(?<=^|[\s'"(])\/[^'"\n]*?\/app\/incoming\/[0-9a-f]+\/(?:files|unpacked)\//g, ''), '', home);
 }

@@ -17,7 +17,7 @@ describe("loom's home page", () => {
 	});
 
 	it('lists a quilt being made by its name until the list holds it, and the quilts after', () => {
-		const making: Job = { job: 'j', kind: 'create', state: 'running', step: 'importing', name: 'Gadget', folder: '/Users/someone/Quilts/Gadget' };
+		const making: Job = { job: 'j', kind: 'create', state: 'running', step: 'making', name: 'Gadget', folder: '/Users/someone/Quilts/Gadget' };
 		expect(rowsOf(listing([row({})], [making])).map((r) => ('making' in r ? 'making' : 'quilt'))).toEqual(['making', 'quilt']);
 		// once on the list, the quilt's own row stands for it
 		expect(rowsOf(listing([row({ folder: '/Users/someone/Quilts/Gadget' })], [making]))).toHaveLength(1);

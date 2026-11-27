@@ -48,16 +48,26 @@ class HomeRunning(Exception):
 
 def choose_folder(prompt: str) -> Path | None:
     """The folder the person picks in the system's folder dialog, on their click; None when they cancel."""
+    return _dialog("folder", prompt)
+
+
+def choose_file(prompt: str) -> Path | None:
+    """The file the person picks in the system's file dialog, on their click; None when they cancel."""
+    return _dialog("file", prompt)
+
+
+def _dialog(what: str, prompt: str) -> Path | None:
+    """The system's dialog for a `folder` or a `file`; ApiError `no-dialog` where there is none."""
     try:
         done = subprocess.run(
-            ["osascript", "-e", f"POSIX path of (choose folder with prompt {json.dumps(prompt)})"],
+            ["osascript", "-e", f"POSIX path of (choose {what} with prompt {json.dumps(prompt)})"],
             capture_output=True,
             text=True,
             timeout=3600,
             check=False,
         )
     except FileNotFoundError as exc:
-        raise ApiError("no-dialog", "this system has no folder dialog loom can show", status=501) from exc
+        raise ApiError("no-dialog", f"this system has no {what} dialog loom can show", status=501) from exc
     return Path(done.stdout.strip()) if done.returncode == 0 and done.stdout.strip() else None
 
 
@@ -181,40 +191,23 @@ def _check(home: Home, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
-    """`quilt-create`: a new quilt named `name` in `place` (default `~/Quilts`), from the paper in `drop` when one is given, or for reading the PDFs it holds, made as a job; or, when the drop holds several files a paper could be typeset from and `main` does not say which, the question."""
+    """`quilt-create`: a new, empty quilt named `name` in `place` (default `~/Quilts`), made as a job; the person brings a paper into it on its own page."""
     from loom.app import create
 
-    name, place, drop, main = (body.get(k) for k in ("name", "place", "drop", "main"))
-    if not isinstance(name, str) or not all(v is None or isinstance(v, str) for v in (place, drop, main)):
-        raise ApiError("bad-field", "name, and place, drop and main where given, are strings")
+    name, place = body.get("name"), body.get("place")
+    if not isinstance(name, str) or not (place is None or isinstance(place, str)):
+        raise ApiError("bad-field", "name, and place where given, are strings")
     where = create.target(name, place)
     registry.entries()  # a list that cannot be read refuses the create, which could not put its quilt on it
     home.makings.claim(where)
-    try:
-        read = create.reading(drop) if drop else []
-        paper = create.paper(drop, main) if drop and not read else None
-    except BaseException:
-        home.makings.release(where)
-        raise
-    if isinstance(paper, list):
-        home.makings.release(where)
-        return {"question": {"choices": paper}}
 
     def work(step: Callable[[str], None]) -> dict[str, Any]:
         try:
-            done = create.make(where, paper, step, home.supervisor.open, home.makings, read)
+            return create.make(where, step, home.supervisor.open, home.makings)
         finally:
             home.makings.release(where)
-        if drop:
-            create.let_go(drop)
-        return done
 
     return {"job": home.start_job("create", work, name=where.name, folder=str(where))}
-
-
-def _receive_json(home: Home, body: dict[str, Any]) -> dict[str, Any]:
-    """`quilt-receive` is answered from the file's bytes (`HomeHandler._take`), never from JSON."""
-    raise ApiError("not-a-stream", "a dropped file is sent as its bytes, application/octet-stream")
 
 
 def _repair(home: Home, body: dict[str, Any]) -> dict[str, Any]:
@@ -238,7 +231,6 @@ HANDLERS: dict[str, Callable[[Home, dict[str, Any]], dict[str, Any]]] = {
     "quilt-choose": _choose,
     "quilt-name": _person,
     "quilt-check": _check,
-    "quilt-receive": _receive_json,
     "quilt-create": _create,
     "quilt-repair": _repair,
 }
@@ -280,10 +272,6 @@ class HomeHandler(LoomHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
-        kind = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
-        if path == "/_api/quilt-receive" and kind == "application/octet-stream":
-            self._take()
-            return
         handler = HANDLERS.get(path.removeprefix("/_api/")) if path.startswith("/_api/") else None
         if handler is None:
             self._json(
@@ -320,31 +308,6 @@ class HomeHandler(LoomHandler):
             self._json(HTTPStatus.CONFLICT, {"error": {"code": "list-unreadable", "message": exc.message}})
         except Exception as exc:  # noqa: BLE001
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": {"code": "failed", "message": str(exc)}})
-
-    def _take(self) -> None:
-        """`quilt-receive`: one dropped file's bytes, streamed into its drop (`create.receive`); its path and drop in the query, the token in its header, and from this server's own pages only."""
-        from urllib.parse import parse_qs, urlsplit
-
-        from loom.app.create import MAX_DROP, receive
-
-        elsewhere = from_elsewhere(self)
-        if elsewhere or self.headers.get("X-Loom-Token") != self.token:
-            self._json(HTTPStatus.FORBIDDEN, {"error": {"code": "refused", "message": elsewhere or "no valid token"}})
-            return
-        try:
-            length = int(self.headers["Content-Length"])
-        except (KeyError, TypeError, ValueError):
-            self._json(HTTPStatus.LENGTH_REQUIRED, {"error": {"code": "length-required", "message": "no length"}})
-            return
-        query = parse_qs(urlsplit(self.path).query)
-        drop = query["drop"][0] if query.get("drop") else None
-        try:
-            self._json(HTTPStatus.OK, receive(drop, (query.get("path") or [""])[0], self.rfile, length))
-        except ApiError as exc:
-            if 0 < length <= MAX_DROP:
-                while length > 0 and (chunk := self.rfile.read(min(length, 1 << 20))):
-                    length -= len(chunk)  # read to its end, so the browser hears the refusal
-            self._json(exc.status, exc.answer())
 
 
 class Home:
@@ -401,7 +364,7 @@ class Home:
     def start_job(self, kind: str, work: Callable[[Callable[[str], None]], dict[str, Any]], **about: str) -> str:
         """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, with `about` (a create's `name` and `folder`), then `done` with what `work` answered or `failed` with `why` and `said`.
 
-        The thread runs `at_the_viewer`, since a job is the home page's request and a new thread starts outside the one that asked: a quilt made from a drop is the person's act whichever shell started the home.
+        The thread runs `at_the_viewer`, since a job is the home page's request and a new thread starts outside the one that asked: a quilt made on the home page is the person's act whichever shell started the home.
         """
         key = secrets.token_hex(6)
         job: dict[str, Any] = {"job": key, "kind": kind, "state": "running", "step": "", **about}

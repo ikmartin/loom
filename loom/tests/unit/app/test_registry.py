@@ -1,4 +1,4 @@
-"""The home's list of quilts (`loom.app.registry`): each quilt keeps one port for good, no port passes to another quilt, a copy is another quilt, a list that cannot be read is kept and gives nothing, a port another program holds on any address is passed over, and `loom serve` takes the port its quilt keeps.
+"""The home's list of quilts (`loom.app.registry`): each quilt keeps one port for good, no port passes to another quilt, a copy is another quilt, a list that cannot be read is kept and gives nothing, a port another program holds on any address is passed over, `loom serve` takes the port its quilt keeps, and every quilt `loom serve` serves or `loom init` makes joins the list, which an unreadable or locked list never stops.
 
 Every test runs under the suite's own HOME and XDG folders (`conftest.isolated_env`), so the list is a temporary one.
 """
@@ -140,3 +140,92 @@ def test_loom_serve_listens_on_the_port_its_quilt_keeps(tmp_path: Path, monkeypa
     refused("serve", "--quilt", str(q), code=2, match=f"port {kept}")
     refused("serve", "--quilt", str(q), "--port", "9123", code=2, match="port 9123")
     assert asked == [8791, kept, 9123]
+
+
+class Listening:
+    """A stand-in for the server: it records itself as listening on its port, as `ServeSession.listen` does, and stops at once."""
+
+    def __init__(self, quilt: object, bundle: object, port: int, **_: object) -> None:
+        self.root = quilt.root  # type: ignore[attr-defined]
+        self.port, self.url, self.older = port, f"http://127.0.0.1:{port}/", None
+
+    def listen(self) -> None:
+        from loom.render.serve import write_serve_json
+
+        write_serve_json(self.root, self.port)  # this process stands in for the server, and it is alive
+
+    def start(self) -> None:
+        raise KeyboardInterrupt
+
+    def stop(self) -> None:
+        from loom.paths import SERVE_JSON
+
+        (self.root / SERVE_JSON).unlink()
+
+
+@pytest.fixture
+def serving(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`loom serve` with `Listening` for its server, its stand-in viewer and no SIGTERM handler left behind."""
+    import signal
+
+    from loom.cli import serve_cmd
+    from tests.unit.render._serve import fake_bundle
+
+    monkeypatch.setattr(serve_cmd, "ServeSession", Listening)
+    bundle = fake_bundle(tmp_path)
+    monkeypatch.setattr(serve_cmd, "locate_bundle", lambda: bundle)
+    monkeypatch.setattr(signal, "signal", lambda *_: None)
+
+
+@pytest.mark.usefixtures("serving")
+def test_a_quilt_served_or_made_joins_the_list(tmp_path: Path) -> None:
+    """Served, it keeps the port it is served on; made with `loom init`, a port of its own from `FIRST_PORT`."""
+    from tests.helpers import ok
+
+    served = quilt(tmp_path / "served")
+    ok("serve", "--quilt", str(served), "--port", "9124")
+    made = tmp_path / "made"
+    ok("init", str(made), "--prefix", "q", "--ai", "none", "--yes")
+    first, second = registry.entries()
+    assert (Path(first.root), first.port) == (served.resolve(), 9124)
+    assert Path(second.root) == made.resolve() and second.port >= registry.FIRST_PORT
+    # served again, on another port, it keeps its own
+    ok("serve", "--quilt", str(served), "--port", "9125")
+    assert registry.port_of(served) == 9124 and len(registry.entries()) == 2
+
+
+@pytest.mark.usefixtures("serving")
+def test_an_unreadable_or_locked_list_stops_neither_serve_nor_init(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The list is left as it was, and the command goes on as if there were none."""
+    import threading
+
+    from tests.helpers import ok
+
+    registry.remember(quilt(tmp_path / "first"))
+    listed = registry.folder() / "quilts.json"
+    torn = listed.read_text()[:20]
+    listed.write_text(torn)
+    ok("serve", "--quilt", str(quilt(tmp_path / "a")), "--port", "9126")
+    ok("init", str(tmp_path / "b"), "--prefix", "q", "--ai", "none", "--yes")
+    assert listed.read_text() == torn
+    listed.unlink()
+    monkeypatch.setattr(registry, "JOIN_WAIT", 0.2)
+    held, done = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with registry._locked():
+            held.set()
+            done.wait(30)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    try:
+        held.wait(30)
+        ok("serve", "--quilt", str(quilt(tmp_path / "c")), "--port", "9127")
+        ok("init", str(tmp_path / "d"), "--prefix", "q", "--ai", "none", "--yes")
+    finally:
+        done.set()
+        holder.join()
+    assert not listed.exists()

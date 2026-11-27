@@ -759,8 +759,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         kind = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
-        if path == "/_api/library-receive" and kind == "application/octet-stream":
-            self._receive()
+        if path in ("/_api/library-receive", "/_api/paper-receive") and kind == "application/octet-stream":
+            self._receive(path.removeprefix("/_api/"))
             return
         refused = self._csrf()
         if refused:
@@ -841,13 +841,14 @@ class LoomHandler(SimpleHTTPRequestHandler):
         if pubs is not None and pubs.last_published < n and pubs.last_failed < n:
             pubs.failed(n, "the server stopped before it published")
 
-    def _receive(self) -> None:
-        """`library-receive`: a dropped file's bytes, streamed to the library's intake as they arrive (specs/write-api.md §6), the one write whose body is not JSON.
+    def _receive(self, endpoint: str) -> None:
+        """`library-receive` and `paper-receive`: a dropped file's bytes, streamed as they arrive to the library's intake (specs/write-api.md §6) or to a drop outside the quilt that `paper-import` brings in, the two writes whose body is not JSON.
 
         Checked as every write is but for its type, which keeps out what requiring JSON keeps out: a page of another site may not send `application/octet-stream` without asking first. It writes only the drop, so it takes no lock a publication holds, and nothing is rebuilt after it.
         """
         from urllib.parse import parse_qs, urlsplit
 
+        from loom.render.endpoints import paper
         from loom.render.endpoints.base import ApiError
         from loom.render.endpoints.library import answered, receive_stream
 
@@ -877,9 +878,15 @@ class LoomHandler(SimpleHTTPRequestHandler):
             )
             return
         length = int(told)
-        name = (parse_qs(urlsplit(self.path).query).get("name") or [""])[0]
+        query = parse_qs(urlsplit(self.path).query)
         try:
-            answer = receive_stream(self.quilt_root, name, self.rfile, length)
+            if endpoint == "paper-receive":
+                drop = (query.get("drop") or [""])[0] or None
+                self._json(
+                    HTTPStatus.OK, paper.receive_stream(drop, (query.get("path") or [""])[0], self.rfile, length)
+                )
+                return
+            answer = receive_stream(self.quilt_root, (query.get("name") or [""])[0], self.rfile, length)
             gen = self.library_gen() if self.library_gen is not None else None
             self._json(HTTPStatus.OK, answered("library-receive", answer, gen))
         except ApiError as exc:

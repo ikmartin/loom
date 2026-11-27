@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Loom's home page, drawn in place of a quilt when `GET /_api` says `home` (`listing.svelte.ts`): the person's quilts, each with its state and controls, Open a quilt… and New quilt, the TeX notice with Repair TeX, the list that cannot be read, and the person's name (`YourName.svelte`). It asks for the list once a second while it is in view. Files dragged over any part of it cover it with a sheet saying what they will make; dropped, they open the window for a new quilt (`QuiltWindow.svelte`), as New quilt does with no paper.
+	// Loom's home page, drawn in place of a quilt when `GET /_api` says `home` (`listing.svelte.ts`): the person's quilts, each with its state and controls, Open a quilt… and New quilt, the TeX notice with Repair TeX, the list that cannot be read, and the person's name (`YourName.svelte`). It asks for the list once a second while it is in view. It takes no drops: a paper is brought into a quilt on the quilt's own empty page. New quilt opens the window for a new, empty quilt (`QuiltWindow.svelte`).
 	import { onDestroy, onMount } from 'svelte';
 	import { call } from './api';
 	import { homePage, repairOf, rowsOf, shortPath } from './listing.svelte';
@@ -7,48 +7,13 @@
 	import CopyDetails from './CopyDetails.svelte';
 	import QuiltWindow from './QuiltWindow.svelte';
 	import YourName from './YourName.svelte';
-	import { draggingPdf, readDrop, type Drop } from './drop';
 	import { home as words } from '$lib/words/home';
 
 	onDestroy(() => homePage.stop());
+	onMount(() => homePage.start());
 
-	/** The window for a new quilt: closed, from New quilt (no drop), or from a drop. */
-	let win = $state<{ drop: Drop | null } | null>(null);
-	/** Whether the window shows a create's steps, which another drop does not replace. */
-	let creating = $state(false);
-	/** The sheet over the page while files are dragged over it, saying what they will make; null when none are. */
-	let cover = $state<'paper' | 'pdf' | null>(null);
-
-	onMount(() => {
-		homePage.start();
-		let timer: ReturnType<typeof setTimeout> | null = null;
-		const carries = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
-		// the sheet stays while the drag moves over the window, and goes a moment after the moves stop: leaving the window, or Escape
-		const move = (e: DragEvent) => {
-			if (!carries(e) || unreadable) return;
-			e.preventDefault();
-			if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-			cover = draggingPdf(e.dataTransfer?.items) ? 'pdf' : 'paper';
-			if (timer) clearTimeout(timer);
-			timer = setTimeout(() => (cover = null), 200);
-		};
-		const drop = async (e: DragEvent) => {
-			cover = null;
-			if (!carries(e)) return;
-			e.preventDefault();
-			// a create under way keeps its window; another drop waits for it to be put away
-			if (unreadable || (win && creating)) return;
-			const read = await readDrop(e.dataTransfer!);
-			if (read) win = { drop: read };
-		};
-		window.addEventListener('dragover', move);
-		window.addEventListener('drop', drop);
-		return () => {
-			window.removeEventListener('dragover', move);
-			window.removeEventListener('drop', drop);
-			if (timer) clearTimeout(timer);
-		};
-	});
+	/** Whether the window for a new quilt is open. */
+	let win = $state(false);
 
 	const listing = $derived(homePage.listing);
 	const unreadable = $derived(listing?.list === 'unreadable');
@@ -66,6 +31,12 @@
 		await homePage.refresh();
 	}
 
+	/** Refuse a file dragged over or dropped on the page, which takes none, so the browser does not open it in the page's place. */
+	function refuseDrop(e: DragEvent): void {
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+	}
+
 	async function repairTex(): Promise<void> {
 		await call('quilt-repair');
 		await homePage.refresh();
@@ -76,13 +47,16 @@
 	<title>{words.title}</title>
 </svelte:head>
 
+<!-- a file dragged over the page is refused, so the browser does not open it in the page's place -->
+<svelte:window ondragover={refuseDrop} ondrop={refuseDrop} />
+
 <div class="homepage" data-testid="home">
 	<div class="scroll">
 		<div class="hwrap">
 			<div class="hhead">
 				<h1>{words.heading}</h1>
 				<button type="button" class="btn" disabled={unreadable} onclick={() => void openQuilt()} data-testid="home-open-quilt">{words.openQuilt}</button>
-				<button type="button" class="btn primary" disabled={unreadable} onclick={() => (win = { drop: null })} data-testid="home-new-quilt">{words.newQuilt}</button>
+				<button type="button" class="btn primary" disabled={unreadable} onclick={() => (win = true)} data-testid="home-new-quilt">{words.newQuilt}</button>
 			</div>
 
 			{#if note}
@@ -113,13 +87,6 @@
 					<div class="t">{words.unreadable}</div>
 					<CopyDetails />
 				</div>
-			{:else if listing && rows.length === 0}
-				<div class="empty" data-testid="home-empty">
-					<h2>{words.empty.heading}</h2>
-					<p>{words.empty.paper[0]}<span class="mono">{words.empty.paper[1]}</span>{words.empty.paper[2]}</p>
-					<p>{words.empty.pdf}</p>
-					<p class="what">{words.empty.what}</p>
-				</div>
 			{:else if listing}
 				<div class="qlist" data-testid="home-list">
 					{#each rows as r ('quilt' in r ? r.quilt.quilt : r.making.job)}
@@ -138,49 +105,21 @@
 								<div></div>
 							</div>
 						{/if}
+					{:else}
+						<p class="none" data-testid="home-empty">{words.none}</p>
 					{/each}
 				</div>
-				<p class="drophint">{words.hint[0]}<span class="mono">{words.hint[1]}</span>{words.hint[2]}</p>
 			{/if}
 		</div>
 	</div>
 	<YourName place="foot" />
 </div>
 
-{#if cover}
-	<div class="dragcover" aria-hidden="true" data-testid="home-drop-cover" data-kind={cover}>
-		<div>{cover === 'pdf' ? words.cover.pdf : words.cover.paper}</div>
-	</div>
-{/if}
-
 {#if win}
-	{#key win}
-		<QuiltWindow drop={win.drop} onclose={() => ((win = null), (creating = false))} onsteps={(r) => (creating = r)} />
-	{/key}
+	<QuiltWindow onclose={() => (win = false)} />
 {/if}
 
 <style>
-	.dragcover {
-		position: fixed;
-		inset: 0;
-		z-index: 300;
-		pointer-events: none;
-		background: color-mix(in srgb, var(--leaf) 82%, transparent);
-		backdrop-filter: blur(2px);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-family: var(--sans);
-	}
-	.dragcover div {
-		background: var(--sheet);
-		border: 1px solid var(--rule);
-		border-radius: 12px;
-		box-shadow: var(--float-shadow);
-		padding: 16px 24px;
-		font-size: 16px;
-		color: var(--ink);
-	}
 	.homepage {
 		position: fixed;
 		inset: 0;
@@ -316,34 +255,9 @@
 	.soft {
 		color: var(--ink-faint);
 	}
-	.mono {
-		font-family: var(--mono);
-	}
-	.drophint {
-		margin: 14px 4px 0;
-		font-size: 11px;
+	.none {
+		margin: 0;
+		padding: 12px 4px;
 		color: var(--ink-faint);
-	}
-	.empty {
-		border: 1.5px dashed var(--rule-strong);
-		border-radius: 12px;
-		padding: 40px 44px;
-		text-align: center;
-		margin: 6px 0 0;
-		background: var(--sheet);
-	}
-	.empty h2 {
-		font-size: 16px;
-		font-weight: 500;
-		margin: 0 0 8px;
-	}
-	.empty p {
-		margin: 0 auto 6px;
-		max-width: 640px;
-	}
-	.empty .what {
-		margin-top: 18px;
-		color: var(--ink-faint);
-		font-size: 11px;
 	}
 </style>

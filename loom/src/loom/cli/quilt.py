@@ -340,6 +340,9 @@ def init(
         # the person's first look, so an agent's edit before the first `loom serve` is listed
         first_look(load_quilt(target))
     gitted = git_init and _git_init(target)
+    from loom.app.registry import join
+
+    join(target)  # on the home's list, which an unreadable or locked list leaves as it was
     groups = list(imported.groups) if imported else []
     setup = [Item(line) for line in said_ai]
     if gitted:

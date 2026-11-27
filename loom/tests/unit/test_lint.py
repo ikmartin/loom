@@ -103,7 +103,7 @@ _DANGLING = "\\ref{nowhere-at-all}"
 
 
 def test_a_quilt_with_nothing_to_read_says_how_to_begin(tmp_path: Path) -> None:
-    """With no document and no landmark, the viewer's how-to-start page is these fixes: a paper being written, a paper being read."""
+    """With no document and no landmark, the fixes an agent or a terminal reads: a paper being written, a paper being read; the viewer offers its drop area instead."""
     q = tmp_path / "empty"
     ok("init", str(q), "--ai", "none", cwd=tmp_path)
     found = [d for d in json_of("lint", "--json", cwd=q)["diagnostics"] if d["code"] == "loom:no-live-document"]
