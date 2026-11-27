@@ -1,4 +1,4 @@
-// What was dropped on the home page, read off the drop: its files with their paths, whether it is a PDF to read or a paper, the name it suggests for its quilt, and how the window names it. A folder is walked through the browser's entries (`webkitGetAsEntry`), since a dropped folder is no file of its own.
+// What was dropped on an empty quilt's page, read off the drop: its files with their paths, and whether it is PDFs to read or a paper. A folder is walked through the browser's entries (`webkitGetAsEntry`), since a dropped folder is no file of its own.
 
 /** One file to send, by its path within what was dropped. */
 export interface Dropped {
@@ -6,51 +6,19 @@ export interface Dropped {
 	path: string;
 }
 
-/** What a drop holds, for the window. */
+/** What a drop holds. */
 export interface Drop {
 	files: Dropped[];
-	/** A PDF to read, or a paper (a `.tex`, a folder, an archive). */
+	/** PDFs to read, or a paper (a `.tex`, a folder, an archive). */
 	kind: 'pdf' | 'paper';
-	/** The name a quilt from it is given at first. */
-	name: string;
-	/** How the window says what was dropped. */
-	shown: { folder: boolean; name: string; count: number };
 }
 
 /** Folders and files of a machine's, never of the paper: walked past. */
 const SKIPPED = new Set(['.git', '.DS_Store', '__MACOSX', '.loom', '.Trash']);
 
-/** The endings an archive or a paper's file carries, longest first, taken off to name its quilt. */
-const ENDINGS = ['.tar.gz', '.tar.bz2', '.tar.xz', '.tgz', '.tar', '.zip', '.gz', '.tex', '.pdf'];
-
-/**
- * The name a dropped file or folder gives its quilt.
- *
- * Parameters
- * ----------
- * name : str
- *     The file's or folder's name.
- *
- * Returns
- * -------
- * str
- *     The name without its ending.
- */
-export function quiltName(name: string): string {
-	const low = name.toLowerCase();
-	const end = ENDINGS.find((e) => low.endsWith(e) && low.length > e.length);
-	return end ? name.slice(0, -end.length) : name;
-}
-
 /** Whether a file is a PDF, by its type or its name. */
 export function isPdf(f: { type: string; name?: string }): boolean {
 	return f.type === 'application/pdf' || !!f.name?.toLowerCase().endsWith('.pdf');
-}
-
-/** Whether what is being dragged is all PDFs, read from a drag's items, whose names a browser does not give until the drop. */
-export function draggingPdf(items: DataTransferItemList | null | undefined): boolean {
-	const all = Array.from(items ?? []).filter((i) => i.kind === 'file');
-	return all.length > 0 && all.every((i) => i.type === 'application/pdf');
 }
 
 /** A folder entry's children, every batch of them. */
@@ -102,13 +70,6 @@ export async function readDrop(data: DataTransfer): Promise<Drop | null> {
 		else for (const e of entries) await walk(e, '', files);
 	} else for (const file of Array.from(data.files ?? [])) files.push({ file, path: file.name });
 	if (!files.length) return null;
-	const first = entries[0]?.name ?? files[0].file.name;
-	const one = entries.length ? entries.length === 1 : files.length === 1;
 	const pdf = files.every((f) => isPdf(f.file)) && !folders.length;
-	return {
-		files,
-		kind: pdf ? 'pdf' : 'paper',
-		name: one ? quiltName(first) : '',
-		shown: { folder: one && folders.length === 1, name: one ? first : '', count: files.length }
-	};
+	return { files, kind: pdf ? 'pdf' : 'paper' };
 }
