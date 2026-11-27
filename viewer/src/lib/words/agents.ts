@@ -64,8 +64,8 @@ export const agents = {
 		meaning: 'Connected means its conversation is open; active, that it called loom in the last two minutes. Neither says it is working now.',
 		/** The second part's heading. */
 		told: 'What it is told',
-		/** Before the line loom puts in the app's root file. */
-		toldFirst: 'First, in the file its app reads on starting here:',
+		/** What the line loom puts in the app's root file asks, said in words: the line itself names commands. */
+		toldFirst: 'First, a line in the file its app reads on starting here: this folder is a quilt loom manages, it is to ask loom how to work here before doing anything, and it may write anywhere but the files loom protects.',
 		/** After it: the orientation and the modes. */
 		toldThen: (modes: number) => `Then loom's orientation and rules, and the quilt's ${modes} modes, each a way of working it may be asked for.`,
 		/** With no agent layer. */
