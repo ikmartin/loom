@@ -9,7 +9,7 @@ describe("the home page's window for a new quilt", () => {
 	it('finds the step loom names, and takes one it does not list for the first', () => {
 		expect(stepAt('making')).toBe(0);
 		expect(stepAt('starting')).toBe(1);
-		expect(stepAt('importing')).toBe(0);
+		expect(stepAt('')).toBe(0);
 	});
 
 	it('says a name already taken under the name, as being made while a create of it runs, and a dead end in place of the form', () => {

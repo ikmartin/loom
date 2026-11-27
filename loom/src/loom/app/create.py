@@ -1,6 +1,6 @@
-"""A paper brought into a quilt from what the person drops or chooses: the files kept where they wait, an archive opened, the paper's main file found and brought in through the door's one `import` act, or PDFs taken into the library (`bring`); and a new quilt made on the home page (`make`), then served.
+"""A paper brought into a quilt from what the person drops or chooses on its empty page: the files kept where they wait, an archive opened, the paper's main file found and brought in through the door's one `import` act, or PDFs taken into the library (`bring`); and a new, empty quilt made on the home page (`make`), then served.
 
-Dropped files wait in `app/incoming/<drop>/files/` in loom's folder for the machine: outside every quilt and never under a cache, so nothing loom sweeps can take them before they are used. A drop goes once its quilt is made, or `KEEP_DAYS` after it was last added to.
+Dropped files wait in `app/incoming/<drop>/files/` in loom's folder for the machine: outside every quilt and never under a cache, so nothing loom sweeps can take them before they are used. A drop goes once it is brought in or refused, or `KEEP_DAYS` after it was last added to, which the home's start sweeps.
 
 A quilt comes into being whole or not at all: it is made in a hidden folder beside its place (`.loom-making-<key>/<name>`) and moved into its place by one rename at the end. A record in `app/making/` names that folder while the create runs, so the home's next start clears whatever a create cut short left (`recover`).
 """
@@ -404,13 +404,11 @@ def bring_chosen(root: Path, chosen: Path) -> dict[str, Any]:
 
 def make(
     where: Path,
-    main: Path | None,
     step: Callable[[str], None],
     start: Callable[[Entry], dict[str, Any]],
     makings: Makings | None = None,
-    read: Sequence[Path] = (),
 ) -> dict[str, Any]:
-    """Make the quilt at `where`, bring in the paper at `main` when there is one, or take the PDFs `read` into its library (`bring`), put it on the list as open and serve it.
+    """Make an empty quilt at `where`, put it on the list as open and serve it; the person brings a paper into it on its own page (`bring`).
 
     The quilt is made beside `where` and moved there in one rename once it is whole; whatever stops the create first leaves nothing in `where`.
 
@@ -418,27 +416,21 @@ def make(
     ----------
     where : Path
         The new quilt's folder, which `target` chose.
-    main : Path or None
-        The paper's main file; None makes an empty quilt.
     step : callable
-        Told each step as it begins: `making`, `importing`, `starting`.
+        Told each step as it begins: `making`, `starting`.
     start : callable
         Serves the quilt's entry and answers its state.
     makings : Makings, optional
         The home's creates, which hold the move back once the home is stopping; default one of its own.
-    read : sequence of Path, default ()
-        PDFs to read, as `bring` takes them.
 
     Returns
     -------
     dict
-        `{quilt, folder, tex, state, url?}`, with what `bring` answered.
+        `{quilt, folder, state, url?}`.
     """
     from loom.cli.quilt import write_minimal_quilt
-    from loom.config_edit import set_values
     from loom.looks import first
     from loom.scan.quilt import load_quilt
-    from loom.tex import private
 
     makings = makings if makings is not None else Makings()
     key = secrets.token_hex(8)
@@ -458,12 +450,6 @@ def make(
         step("making")
         nest.mkdir(parents=True)
         write_minimal_quilt(staged, "q", readme=False)
-        if main is not None or read:
-            step("importing")
-            done.update(bring(staged, main, read))
-        if main is not None:
-            # the quilt opens on the paper, not on a page about loom
-            set_values(load_quilt(staged), {"quilt.home": done["document"]})
         first(load_quilt(staged))
         with makings.lock:
             if makings.closed:
@@ -485,7 +471,7 @@ def make(
     nest.rmdir()
     own.unlink(record, root=data_dir())
     step("starting")
-    return {**done, "quilt": entry.id, "tex": private.active(year=False).kind, **start(entry)}
+    return {**done, "quilt": entry.id, **start(entry)}
 
 
 def recover() -> None:
@@ -533,5 +519,5 @@ def sweep() -> None:
 
 
 def let_go(drop: str) -> None:
-    """Remove a drop whose quilt is made."""
+    """Remove a drop that is brought in or refused."""
     own.rmtree(_drop_dir(drop), root=data_dir(), ignore_errors=True)
