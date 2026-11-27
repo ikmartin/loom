@@ -170,7 +170,8 @@
 			const of = linkName(m, `quilt:${region.container}`);
 			return n ? `equation (${n}) in ${of}` : `an equation in ${of}`;
 		}
-		if (inDoc && key !== inDoc) return `${linkName(m, `quilt:${inDoc}`)}, ${linkName(m, `quilt:${key}`)}`;
+		// a result in a document by the number the document shows
+		if (inDoc && key !== inDoc) return `${linkName(m, `quilt:${inDoc}`)}, ${linkName(m, `quilt:${inDoc}#${key}`)}`;
 		return linkName(m, `quilt:${key}`);
 	}
 

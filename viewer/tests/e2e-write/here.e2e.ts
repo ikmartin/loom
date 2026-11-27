@@ -29,6 +29,16 @@ readOnly('the words selected in a result are what loom here reports, by the key 
 	expect(looking(served).selection.link).toBe('quilt:sy-0003');
 });
 
+readOnly('the words selected in a document, in a result its file inputs, are reported at that result, never as the input file', async ({ page, served }) => {
+	await page.goto('/master/drafting/main');
+	const statement = '[data-pane="0"] .fragment .included .env[data-id="sy-0003"] > p[data-src]';
+	await page.locator(statement).first().locator('mjx-container').first().waitFor();
+	await expect.poll(() => looking(served).item?.link).toBe('quilt:drafting/main.tex');
+	await select(page, statement);
+	await expect.poll(() => looking(served).selection?.text ?? '').toContain('widget');
+	expect(looking(served).selection.link).toBe('quilt:sy-0003');
+});
+
 readOnly('beside Review\'s panel it is the block under review, and with two tabs open the one touched last', async ({ page, served }) => {
 	await page.goto('/node/sy-0003');
 	await expect.poll(() => looking(served).item?.link).toBe('quilt:sy-0003');

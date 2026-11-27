@@ -11,18 +11,18 @@ interface Named {
 }
 
 /**
- * A result as a reader refers to it in a list: its taxon and number where the default document numbers it, or else the document holding it, else its taxon and title, else its place where loom knows it by that alone (`placeName`), else its id.
+ * A result as a reader refers to it in a list: its taxon and number as `doc`, the document it is read in, numbers it, else the default document, else the document holding it; else its taxon and title, else its place where loom knows it by that alone (`placeName`), else its id.
  *
  * A proof is named for the result it proves.
  */
-export function nodeName(m: Named, id: string): string {
+export function nodeName(m: Named, id: string, doc?: string): string {
 	const n = m.nodes[id];
 	if (!n) return id;
 	const owner = m.keys?.[id]?.node;
-	if (n.kind === 'proof' && owner && owner !== id) return `proof of ${nodeName(m, owner)}`;
-	// numbered as the default document numbers it, else as the document that holds it does: an agent's copy numbers its own nodes, and a node of it named by its id read as a hash
+	if (n.kind === 'proof' && owner && owner !== id) return `proof of ${nodeName(m, owner, doc)}`;
+	// numbered as the document read in numbers it, else the default document, else the document that holds it: an agent's copy numbers its own nodes, and a node of it named by its id read as a hash
 	const main = m.masters.find((x) => x.default)?.path;
-	const number = (main ? n.numbers[main]?.number : undefined) ?? Object.values(n.numbers).find((x) => x?.number)?.number;
+	const number = (doc ? n.numbers[doc]?.number : undefined) ?? (main ? n.numbers[main]?.number : undefined) ?? Object.values(n.numbers).find((x) => x?.number)?.number;
 	if (number) return `${n.taxon} ${number}`;
 	return n.title ? `${n.taxon} · ${titleSaid(m, n.title)}` : (placeName(m, id) ?? unnumberedName(m, id) ?? id);
 }
@@ -51,17 +51,17 @@ export function pdfFileName(masters: readonly { path: string }[], path: string):
 /**
  * Any key a session or a context names, as a reader would: a document by its file, a result by `nodeName`, an unlabelled proof as the proof of its result, an equation by its number in its result; anything else as itself.
  *
- * Callers keep the key itself as the name's title, so nothing is hidden by the shortening.
+ * Callers keep the key itself as the name's title, so nothing is hidden by the shortening. `doc`, the document the key is read in, numbers a result as that document shows it.
  */
-export function keyName(m: Named, key: string): string {
+export function keyName(m: Named, key: string, doc?: string): string {
 	// '' names no block (a note on none)
 	if (!key) return '';
 	if (m.masters.some((x) => x.path === key)) return documentLabel(m.masters, key);
-	if (m.nodes[key]) return nodeName(m, key);
+	if (m.nodes[key]) return nodeName(m, key, doc);
 	const region = regionName(m, key);
 	if (region) return `${region.number} in ${region.within}`;
 	const owner = m.keys?.[key]?.node;
-	if (owner && owner !== key) return `proof of ${nodeName(m, owner)}`;
+	if (owner && owner !== key) return `proof of ${nodeName(m, owner, doc)}`;
 	return placeName(m, key) ?? key;
 }
 
@@ -129,7 +129,8 @@ export function linkName(m: Linked, href: string): string {
 		return page ? `${name} p. ${page}` : name;
 	}
 	if (m.canon?.some((c) => c.path === key)) return key.split('/').pop() ?? key;
-	if (place && m.masters.some((x) => x.path === key)) return keyName(m, place);
+	// a place in a document is numbered as that document shows it
+	if (place && m.masters.some((x) => x.path === key)) return keyName(m, place, key);
 	if (place) return keyName(m, m.regions?.[`${key}#${place}`] ? `${key}#${place}` : place);
 	return keyName(m, key);
 }

@@ -173,6 +173,8 @@ export const agents = {
 		document: (name: string) => `The document, ${name}`,
 		/** A choice: the result at the top of the pane. */
 		reading: (name: string) => `${name}, where you are reading`,
+		/** A choice, the first: the words selected in the pane, in the result or document named. */
+		selected: (name: string) => `The words you selected in ${name}`,
 		/** The field of modes, and its first option. */
 		mode: 'Mode',
 		noMode: 'None: just look',

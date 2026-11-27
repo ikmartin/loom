@@ -114,8 +114,8 @@ function textSelection(item: string): Selection | null {
 	const range = sel.getRangeAt(0);
 	const at = range.commonAncestorContainer;
 	const el = at.nodeType === Node.ELEMENT_NODE ? (at as Element) : at.parentElement;
-	// a project file's drawn body says which file it is; its words are quoted as written
-	const file = el?.closest<HTMLElement>('[data-file]')?.dataset.file;
+	// a project file's drawn body says which file it is; its words are quoted as written. A document's `\input` file says so too (`div.included`), and its words stay the document's, at their result
+	const file = el?.closest<HTMLElement>('.item.file[data-file]')?.dataset.file;
 	if (file) {
 		const words = sel.toString().trim();
 		return words ? { item, file, text: words.slice(0, 4000) } : null;

@@ -8,6 +8,7 @@ const m = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Man
 
 beforeEach(() => {
 	here.block = {};
+	here.selection = null;
 });
 
 describe('what Ask your agent is about from a toolbar', () => {
@@ -24,6 +25,30 @@ describe('what Ask your agent is about from a toolbar', () => {
 		const got = placesFor(m, { kind: 'document', id: 'drafting/main.tex' });
 		expect(got.map((p) => p.href)).toEqual(['quilt:drafting/main.tex#sy-0003', 'quilt:drafting/main.tex']);
 		expect(got[0].label).toMatch(/where you are reading$/);
+	});
+
+	it('offers the words selected in the pane first, at the result they are in, under the number the document read shows', () => {
+		// Lemma 1.2 in main.tex is Lemma 3 in the talk, and Definition 2.4 Definition 1
+		here.block = { 'document:drafting/talk.tex': { src: 'x', key: 'sy-0008' } };
+		here.selection = { item: 'document:drafting/talk.tex', key: 'sy-0002', text: 'every orbit' };
+		const got = placesFor(m, { kind: 'document', id: 'drafting/talk.tex' });
+		expect(got.map((p) => [p.href, p.label, p.words])).toEqual([
+			['quilt:drafting/talk.tex#sy-0002', 'The words you selected in Lemma 3', 'every orbit'],
+			['quilt:drafting/talk.tex#sy-0008', 'Definition 1, where you are reading', undefined],
+			['quilt:drafting/talk.tex', 'The document, talk.tex', undefined]
+		]);
+		expect(got[0].name).toBe('talk.tex, Lemma 3');
+	});
+
+	it('leaves out words selected in another pane, and the reading place where it is the one selected in', () => {
+		here.block = { 'document:drafting/main.tex': { src: 'x', key: 'sy-0003' } };
+		here.selection = { item: 'document:drafting/talk.tex', key: 'sy-0002', text: 'every orbit' };
+		expect(placesFor(m, { kind: 'document', id: 'drafting/main.tex' }).map((p) => p.href)).toEqual(['quilt:drafting/main.tex#sy-0003', 'quilt:drafting/main.tex']);
+		here.selection = { item: 'document:drafting/main.tex', key: 'sy-0003', text: 'finite widget' };
+		expect(placesFor(m, { kind: 'document', id: 'drafting/main.tex' }).map((p) => [p.href, p.words])).toEqual([
+			['quilt:drafting/main.tex#sy-0003', 'finite widget'],
+			['quilt:drafting/main.tex', undefined]
+		]);
 	});
 
 	it('asks nothing without a manifest', () => {

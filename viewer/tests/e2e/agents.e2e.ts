@@ -126,6 +126,25 @@ test("Ask your agent stands on a document's toolbar, a reasonable size, about th
 	await expect(page.getByTestId('ask-agent')).toHaveCount(0);
 });
 
+test("Ask your agent on a document's toolbar offers the words selected first, at their result, under the number that document shows", async ({ page }) => {
+	await page.goto('/master/drafting/talk');
+	// Lemma 1.2 in main.tex is Lemma 3 in the talk
+	const lemma = page.locator('.fragment .env[data-id="sy-0002"] p[data-src]').first();
+	await lemma.scrollIntoViewIfNeeded();
+	await lemma.evaluate((node) => {
+		const range = document.createRange();
+		range.selectNodeContents(node);
+		const sel = window.getSelection();
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+		node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+	});
+	await page.getByTestId('item-controls').first().getByTestId('toolbar-ask').click();
+	await expect(page.getByTestId('ask-about-0')).toBeChecked();
+	await expect(page.locator('label', { has: page.getByTestId('ask-about-0') })).toHaveText('The words you selected in Lemma 3');
+	await expect(page.getByTestId('ask-request')).toContainText('In loom, look at talk.tex, Lemma 3 (quilt:drafting/talk.tex#sy-0002), at the words “');
+});
+
 test("Ask your agent on a result's own page is about the result", async ({ page }) => {
 	await page.goto('/node/sy-0003');
 	await page.getByTestId('toolbar-ask').click();
