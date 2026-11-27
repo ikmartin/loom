@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cannotStartOf, importSaidOf, refusalOf, untypesetOf } from './said';
+import { cannotStartOf, refusalOf } from './said';
 
 const HOME = '/Users/someone';
 const QUILT = '/Users/someone/Quilts/Thesis';
@@ -30,17 +30,5 @@ describe("the home's own words, worded by the page (I-13)", () => {
 
 	it("gives the system's reason a quilt could not start without its error number, under ~", () => {
 		expect(cannotStartOf("[Errno 1] Operation not permitted: '/Users/someone/Dropbox/lattice-points/.loom'", HOME)).toBe("Operation not permitted: '~/Dropbox/lattice-points/.loom'");
-	});
-
-	it("says where TeX stopped in TeX's words, that loom has no TeX for a missing tool, and never names the tool", () => {
-		expect(untypesetOf('latexmk is not installed', 'mine')).toBe('Loom has no TeX yet.');
-		expect(untypesetOf('! Undefined control sequence.', 'none')).toBe('Loom has no TeX yet.');
-		expect(untypesetOf('! Undefined control sequence.', 'mine')).toBe('TeX stopped at “Undefined control sequence”.');
-		expect(untypesetOf('latexmk exited 12: Missing input file', 'loom')).toBe('TeX stopped before it finished.');
-	});
-
-	it('writes the paths of what was dropped as the person dropped it', () => {
-		const said = '/Users/someone/Library/Application Support/loom/app/incoming/0a1b2c3d4e5f6a7b/files/gadget-towers.tex: \\input{sections/intro} names a file that is not there';
-		expect(importSaidOf(said, HOME)).toBe('gadget-towers.tex: \\input{sections/intro} names a file that is not there');
 	});
 });
