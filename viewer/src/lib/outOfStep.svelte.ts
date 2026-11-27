@@ -1,4 +1,4 @@
-// Whether this page and the loom serving it are out of step. A running `loom serve` keeps the code it started with and serves the viewer it started with; loom updated under it (`stale`) means a restart, and a page older than the viewer the server now serves means a reload. Judged on every probe of `/_api`, so a server restarted under an open tab is noticed when the stream reconnects.
+// Whether this page and the loom serving it are out of step. A running `loom serve` keeps the code it started with and serves the viewer it started with; loom updated under it (`stale`) means its server is restarted, which the home page does by itself, and a page older than the viewer the server now serves means a reload. Either is said as "Loom was updated." with Reload, never a command. Judged on every probe of `/_api`, so a server restarted under an open tab is noticed when the stream reconnects.
 
 import { dev, version } from '$app/environment';
 import type { Capabilities } from '$lib/write';

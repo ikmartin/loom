@@ -121,7 +121,7 @@
 				<button class="close" aria-label="Close settings" onclick={() => (open = false)}>×</button>
 			</header>
 			<div class="body" data-testid="settings-page" data-section={shown}>
-				{#if readOnly}<p class="note info" data-testid="settings-read-only">{#if served}The loom serving this quilt is older than this page and cannot save these. Stop <code>loom serve</code> and run it again, then reload.{:else}Shown as published. Change these in {shown === 'annotations' ? '.loom/records/annotation-types.toml' : 'config.toml'}.{/if}</p>{/if}
+				{#if readOnly}<p class="note info" data-testid="settings-read-only">{#if served}The loom serving this quilt is older than this page and cannot save these. Reload this page once loom has restarted with its update.{:else}Shown as published. Change these in {shown === 'annotations' ? '.loom/records/annotation-types.toml' : 'config.toml'}.{/if}</p>{/if}
 				{#if config?.warnings.length && SECTION[shown].group === 'quilt'}
 					<div class="note warn">config.toml: {config.warnings.join('; ')}</div>
 				{/if}

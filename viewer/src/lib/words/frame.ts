@@ -149,6 +149,28 @@ export const frame = {
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
 		unreachable: 'The service that looks papers up could not be reached. Try again later.'
 	} as Record<string, string>,
+	/** The note above the document in the left pane, for what the quilt's first page has to say; elsewhere than a document, the same words float near the foot of the window. */
+	note: {
+		/** A quilt just made from a paper whose working copy does not typeset as the paper did (the home page opens it so). */
+		differs: "Loom's working copy of your paper does not typeset exactly as the paper did; your paper is kept as you gave it.",
+		/** Loom was updated under the page, or serves a newer viewer than the page runs. */
+		updated: 'Loom was updated.',
+		/** The button beside it, which loads the page again. */
+		reload: 'Reload',
+		/** The close button on the note. */
+		close: 'close'
+	},
+	/** The card over a quilt's page whose server stopped. */
+	stopped: {
+		/** Its sentence. */
+		said: 'Loom has stopped serving this quilt.',
+		/** The link to loom's home page, where the quilt is opened again. */
+		home: 'Open it again from your quilts',
+		/** Under the link. */
+		homeDown: 'If that page does not load either, open Loom from your Applications folder or the Dock.',
+		/** In place of the link, where no home page was running. */
+		noHome: 'Open Loom from your Applications folder or the Dock, and open it again from your quilts.'
+	},
 	/** A quilt an earlier loom made, while the publisher waits on it: the one sentence, its button, and what is said while it runs and if it fails. */
 	upgrade: {
 		said: 'This quilt was made by an earlier version of loom; upgrading it carries its papers over to this one.',

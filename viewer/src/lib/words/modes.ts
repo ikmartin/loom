@@ -54,7 +54,7 @@ export const modes = {
 	/** When loom refused a save with no sentence of its own. */
 	refused: 'Loom did not save it.',
 	/** Where the loom serving the quilt cannot save a mode. */
-	older: 'The loom serving this quilt is older than this page and cannot save a mode. Stop loom serve, run it again, then reload.',
+	older: 'The loom serving this quilt is older than this page and cannot save a mode. Reload this page once loom has restarted with its update.',
 	/** In place of a mode's text, where the loom serving the quilt does not send it. */
-	noText: "The loom serving this quilt does not send a mode's text. Stop loom serve, run it again, then reload."
+	noText: "The loom serving this quilt does not send a mode's text. Reload this page once loom has restarted with its update."
 };

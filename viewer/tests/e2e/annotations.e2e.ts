@@ -1278,12 +1278,14 @@ test.describe('Settings › Annotations', () => {
 		expect((sent['types-save'].types as unknown[]).length).toBe(3);
 	});
 
-	test('served by a loom that cannot save types, it says the server is older than the page and to restart it', async ({ page }) => {
+	test('served by a loom that cannot save types, it says the server is older than the page and to reload once loom has restarted', async ({ page }) => {
 		await writes(page, ['annotate']);
 		await page.goto('/master/drafting/main');
 		await settings(page, 'annotations');
 		await expect(page.getByTestId('settings-read-only')).toContainText('older than this page');
-		await expect(page.getByTestId('settings-read-only')).toContainText('loom serve');
+		// what to do is to reload, never a command
+		await expect(page.getByTestId('settings-read-only')).toContainText('Reload this page');
+		await expect(page.getByTestId('settings-read-only')).not.toContainText('loom serve');
 		await expect(page.getByTestId('types-add')).toHaveCount(0);
 	});
 });

@@ -8,6 +8,8 @@ import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { judge } from '$lib/outOfStep.svelte';
 import { judgeFormat } from '$lib/shell/upgrade.svelte';
+import { judgeHome } from '$lib/home/listing.svelte';
+import { judgeStopped } from '$lib/shell/gone.svelte';
 import { updating } from '$lib/manifest/updating.svelte';
 
 export interface Capabilities {
@@ -33,6 +35,8 @@ export interface Capabilities {
 	format?: { found: number; reads: number };
 	/** The publisher's process, which the stream's `built` event names too, so a write's answer is matched with the server that gave it. */
 	pid?: number;
+	/** `true` from loom's home page itself (`$lib/home`), which serves no quilt; from a quilt's server, the home page's address while a home runs, so a page whose server stopped can send the person there. */
+	home?: true | string;
 }
 
 /** The versions of the write API this viewer knows how to speak. */
@@ -52,6 +56,8 @@ export function capabilities(): Promise<Capabilities | null> {
 			const res = await fetch(apiUrl());
 			if (!res.ok) return null;
 			const body = (await res.json()) as Capabilities;
+			// the home speaks its own endpoints, not the write API, and says so
+			if (body?.home === true) return { ...body, write_api: 0, capabilities: body.capabilities ?? [] };
 			return ACCEPTED.includes(body?.write_api) ? body : null;
 		} catch {
 			return null;
@@ -60,6 +66,8 @@ export function capabilities(): Promise<Capabilities | null> {
 		settled = caps;
 		judge(caps);
 		judgeFormat(caps);
+		judgeHome(caps);
+		judgeStopped(caps);
 		for (const watch of watchers) watch(caps);
 		return caps;
 	});

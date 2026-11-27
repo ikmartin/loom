@@ -96,6 +96,6 @@ export const notes = {
 		/** Where it is kept, after its path. */
 		kept: (path: string) => `Kept in ${path}`,
 		/** When the publisher cannot keep a command, or a viewer with none serving it. */
-		cannot: 'The loom serving this quilt cannot keep a command. Stop loom serve, run it again, then reload.'
+		cannot: 'The loom serving this quilt cannot keep a command. Reload this page once loom has restarted with its update.'
 	}
 };

@@ -78,7 +78,7 @@ def _name(entry: Entry) -> str:
 
 
 def _list(home: Home, body: dict[str, Any]) -> dict[str, Any]:
-    """`quilt-list`: every quilt with its state, the person's name and where it comes from, which TeX is in use, and the jobs running or done."""
+    """`quilt-list`: every quilt with its state, the person's name and where it comes from, which TeX is in use, the jobs running or done, and the person's home folder, which the page shortens paths by."""
     from loom.scan.quilt import reviewer_identity
     from loom.tex import private
 
@@ -97,6 +97,7 @@ def _list(home: Home, body: dict[str, Any]) -> dict[str, Any]:
         "name": {"name": name, "source": source},
         "tex": private.active(year=False).kind,
         "jobs": home.jobs_listing(),
+        "home_folder": str(Path.home()),
     }
 
 
@@ -178,7 +179,7 @@ def _check(home: Home, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
-    """`quilt-create`: a new quilt named `name` in `place` (default `~/Quilts`), from the paper in `drop` when one is given, made as a job; or, when the drop holds several files a paper could be typeset from and `main` does not say which, the question."""
+    """`quilt-create`: a new quilt named `name` in `place` (default `~/Quilts`), from the paper in `drop` when one is given, or for reading the PDFs it holds, made as a job; or, when the drop holds several files a paper could be typeset from and `main` does not say which, the question."""
     from loom.app import create
 
     name, place, drop, main = (body.get(k) for k in ("name", "place", "drop", "main"))
@@ -188,7 +189,8 @@ def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     registry.entries()  # a list that cannot be read refuses the create, which could not put its quilt on it
     home.makings.claim(where)
     try:
-        paper = create.paper(drop, main) if drop else None
+        read = create.reading(drop) if drop else []
+        paper = create.paper(drop, main) if drop and not read else None
     except BaseException:
         home.makings.release(where)
         raise
@@ -198,14 +200,14 @@ def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
 
     def work(step: Callable[[str], None]) -> dict[str, Any]:
         try:
-            done = create.make(where, paper, step, home.supervisor.open, home.makings)
+            done = create.make(where, paper, step, home.supervisor.open, home.makings, read)
         finally:
             home.makings.release(where)
         if drop:
             create.let_go(drop)
         return done
 
-    return {"job": home.start_job("create", work)}
+    return {"job": home.start_job("create", work, name=where.name, folder=str(where))}
 
 
 def _receive_json(home: Home, body: dict[str, Any]) -> dict[str, Any]:
@@ -394,13 +396,13 @@ class Home:
             if isinstance(job, dict) and isinstance(job.get("job"), str) and job.get("state") in ("done", "failed"):
                 self.jobs[job["job"]] = job
 
-    def start_job(self, kind: str, work: Callable[[Callable[[str], None]], dict[str, Any]]) -> str:
-        """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, then `done` with what `work` answered or `failed` with `why` and `said`.
+    def start_job(self, kind: str, work: Callable[[Callable[[str], None]], dict[str, Any]], **about: str) -> str:
+        """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, with `about` (a create's `name` and `folder`), then `done` with what `work` answered or `failed` with `why` and `said`.
 
         The thread runs `at_the_viewer`, since a job is the home page's request and a new thread starts outside the one that asked: a quilt made from a drop is the person's act whichever shell started the home.
         """
         key = secrets.token_hex(6)
-        job: dict[str, Any] = {"job": key, "kind": kind, "state": "running", "step": ""}
+        job: dict[str, Any] = {"job": key, "kind": kind, "state": "running", "step": "", **about}
         self.jobs[key] = job
         while len(self.jobs) > KEPT_JOBS:
             self.jobs.pop(next(iter(self.jobs)))

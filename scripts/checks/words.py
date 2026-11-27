@@ -56,7 +56,6 @@ LEGACY = (
     "viewer/src/lib/components/HelpDot.svelte",
     "viewer/src/lib/components/LinkPreview.svelte",
     "viewer/src/lib/components/NoDrafts.svelte",
-    "viewer/src/lib/components/OutOfStep.svelte",
     "viewer/src/lib/components/Palette.svelte",
     "viewer/src/lib/fragments/Fragment.svelte",
     "viewer/src/lib/fragments/FragmentNotes.svelte",

@@ -2,6 +2,7 @@
 	// One pane (plan 0.13.3 W1, W10–W11): its tab strip, its toolbar beneath (ItemToolbar, drawn by the kind's controls), and the active item's renderer in a body that scrolls. Neither pane is primary; both hold every kind and behave alike, and each draws its own toolbar, the unfocused one's dimmer, as its tabs are.
 	//
 	// **Focus is taken by any interaction** — a press on its text, a wheel over it, a tab into it — in the capture phase, so whatever acts on the focused pane reads the new value in the same frame. A pane scrolling itself (a paper sent to its page) is not an interaction, which is why the scroll event is not what is listened for. **The focused pane is marked** by its shadow while both are open, and the other is not dimmed: making a document harder to read to say it is not the current one is the wrong trade in a reading tool.
+	import PageNote from '$lib/shell/PageNote.svelte';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import CompareLayer from './CompareLayer.svelte';
 	import PaneHead from './PaneHead.svelte';
@@ -148,6 +149,7 @@
 		{#key key}<Controls {item} {name} />{/key}
 	{/if}
 	<div class="body" bind:this={body} style:width={held === null ? null : `${held}px`} onscroll={remember}>
+		{#if index === 0}<PageNote />{/if}
 		{#if item}
 			{#each [item] as it (key)}
 				{@const Renderer = kinds[it.kind].renderer}

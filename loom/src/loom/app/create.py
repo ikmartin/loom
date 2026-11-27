@@ -17,7 +17,7 @@ import tarfile
 import threading
 import time
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
@@ -263,6 +263,18 @@ def target(name: str, place: str | None) -> Path:
     return there
 
 
+def reading(drop: str) -> list[Path]:
+    """The PDFs dropped to be read, when the drop holds PDFs and nothing else, by what each file holds; [] for any other drop."""
+    files = sorted(p for p in (_drop_dir(drop) / "files").rglob("*") if p.is_file())
+    pdfs = []
+    for p in files:
+        with open(p, "rb") as f:
+            if f.read(5) != b"%PDF-":
+                return []
+        pdfs.append(p)
+    return pdfs
+
+
 def paper(drop: str, main: str | None) -> Path | list[str]:
     """The dropped paper's main file, or the files that could be when it is not one and `main` does not say which."""
     src = sources(drop)
@@ -282,8 +294,9 @@ def make(
     step: Callable[[str], None],
     start: Callable[[Entry], dict[str, Any]],
     makings: Makings | None = None,
+    read: Sequence[Path] = (),
 ) -> dict[str, Any]:
-    """Make the quilt at `where`, bring in the paper at `main` when there is one, put it on the list as open and serve it.
+    """Make the quilt at `where`, bring in the paper at `main` when there is one, or take the PDFs `read` into its library, put it on the list as open and serve it.
 
     The quilt is made beside `where` and moved there in one rename once it is whole; whatever stops the create first leaves nothing in `where`.
 
@@ -299,11 +312,13 @@ def make(
         Serves the quilt's entry and answers its state.
     makings : Makings, optional
         The home's creates, which hold the move back once the home is stopping; default one of its own.
+    read : sequence of Path, default ()
+        PDFs to read: each taken into the new quilt's library as the library's intake takes a dropped file, by the person, with no look-up on the network; a document it cannot place waits there as the library's question.
 
     Returns
     -------
     dict
-        `{quilt, folder, tex, state, url?}`, and with a paper `{document, typeset, untypeset, differs}`: `differs` when the drafted document does not typeset as the paper did, which is then brought in all the same and nothing reads as checked.
+        `{quilt, folder, tex, state, url?}`, with PDFs `{read}` (how many), and with a paper `{document, typeset, untypeset, differs}`: `differs` when the drafted document does not typeset as the paper did, which is then brought in all the same and nothing reads as checked.
     """
     from loom.cli.paper import Differs, run_import
     from loom.cli.quilt import write_minimal_quilt
@@ -345,6 +360,13 @@ def make(
             # the quilt opens on the paper, not on a page about loom
             set_values(load_quilt(staged), {"quilt.home": document})
             done.update(document=document, typeset=brought.data["typeset"], untypeset=brought.data["untypeset"])
+        elif read:
+            from loom.identity import whoever
+            from loom.library.intake import Item, take
+
+            step("importing")
+            take(staged, [Item(path=p) for p in read], by=whoever(staged, sniff=False), online=False)
+            done["read"] = len(read)
         first(load_quilt(staged))
         with makings.lock:
             if makings.closed:

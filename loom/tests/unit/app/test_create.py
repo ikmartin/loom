@@ -121,6 +121,24 @@ def test_a_new_quilt_goes_in_quilts_in_the_home_folder_by_default(home: Path) ->
     assert create.target("Notes", None) == home / "Quilts" / "Notes"
 
 
+def test_a_dropped_pdf_makes_a_quilt_for_reading_it_with_the_pdf_in_its_library(tmp_path: Path) -> None:
+    from loom.library.intake import Library
+
+    pdf = (
+        Path(__file__).resolve().parents[2] / "quilts" / "sources" / "demo-works" / "calloway-fixed-loci.pdf"
+    ).read_bytes()
+    key = drop({"calloway-fixed-loci.pdf": pdf})
+    read = create.reading(key)
+    assert [p.name for p in read] == ["calloway-fixed-loci.pdf"]
+    steps: list[str] = []
+    done = create.make(create.target("Reading", str(tmp_path)), None, steps.append, served, read=read)
+    assert done["read"] == 1 and "document" not in done and steps == ["making", "importing", "starting"]
+    # taken in as the library takes a dropped PDF, as a work of its own: it says nothing the library already has
+    assert Library.read(tmp_path / "Reading").by_doc
+    # a drop that holds anything but PDFs is a paper's, never read
+    assert create.reading(drop({"a.pdf": pdf, "paper.tex": PAPER})) == []
+
+
 def test_a_paper_whose_theorem_shares_its_line_comes_in(tmp_path: Path) -> None:
     done = made(tmp_path, {"paper.tex": UNANCHORED})
     assert "\\begin{thm}" in (tmp_path / "My paper" / done["document"]).read_text()
@@ -231,6 +249,8 @@ def test_a_paper_dropped_over_the_wire_becomes_a_quilt_that_is_served(home_serve
         jobs = post(home_server.url + "_api/quilt-list", {})[1]["jobs"]
         return next(j for j in jobs if j["job"] == said["job"])  # type: ignore[no-any-return]
 
+    # the list shows the quilt being made by its name and folder from the first answer, so a page that closed its window still lists it
+    assert job()["name"] == "Dropped" and job()["folder"] == str(tmp_path / "Dropped")
     until(lambda: job()["state"] != "running", "the quilt made")
     done = job()
     assert done["state"] == "done" and done["document"] == "paper/paper.tex", done
