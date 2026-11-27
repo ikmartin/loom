@@ -75,6 +75,10 @@ def serve(port: int | None, open_browser: bool, no_compile: bool, viewer: str | 
         # anything else the start could not do: the quilt's record of the server, a folder of the machine's
         where = f" ({exc.filename})" if exc.filename else ""
         raise EnvError(f"cannot start the server: {exc.strerror or exc}{where}") from exc
+    from loom.app.registry import join
+
+    # on the home's list from now on, keeping the port it listens on where no other quilt was given it
+    join(quilt.root)
     # the URL first: a cold first build compiles every block the converter cannot translate, and a silent wait looks like a hang
     said = (
         "this quilt was made by an earlier loom: the viewer offers to bring it forward"
