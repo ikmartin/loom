@@ -4,7 +4,7 @@
 
 import { join } from 'node:path';
 
-const slot = Number(process.env.VIEWER_SLOT ?? 0);
+export const slot = Number(process.env.VIEWER_SLOT ?? 0);
 
 /** The scratch directory for `name`, relative to `viewer/`. */
 export function scratch(name: string): string {

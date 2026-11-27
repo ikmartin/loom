@@ -1,11 +1,11 @@
-// The home page's tests run the real viewer against a real `loom app`, the home server, in a home folder of the test's own: HOME, the XDG folders and the temporary folder are under the suite's scratch directory, so nothing the home keeps for the machine (its list of quilts, its drops, a saved name) reaches the person's, and a quilt the test makes goes in that home's `~/Quilts`. The quilts the home serves are given ports from 9000, past the ports a person's own home gives.
+// The home page's tests run the real viewer against a real `loom app`, the home server, in a home folder of the test's own: HOME, the XDG folders and the temporary folder are under the suite's scratch directory, so nothing the home keeps for the machine (its list of quilts, its drops, a saved name) reaches the person's, and a quilt the test makes goes in that home's `~/Quilts`. The quilts the home serves are given ports from 9000, past the ports a person's own home gives, each home from a base of its own (`firstPort`): every home gives the first port nothing holds yet, so two homes of tests running at once, each making a quilt before the other's server has bound, would both give it the same port and one server could not listen.
 
 import { test as base, expect } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOOM, VIEWER, scratchDir, suiteOf } from './served';
-import { patient } from './sites';
+import { patient, slot } from './sites';
 
 /** The variables by which loom tells an agent's shell (`loom.identity.AGENT_MARKERS`): a home started from an agent's shell would take the person for an agent. */
 const AGENT_MARKERS = ['AI_AGENT', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_SANDBOX', 'CURSOR_AGENT', 'GEMINI_CLI'];
@@ -28,9 +28,9 @@ function machineFolder(home: string, env: NodeJS.ProcessEnv): string {
 /**
  * Start `loom app` on a free port in a home folder of its own.
  *
- * `name` is the folder under the suite's scratch directory; `author`, when given, is saved as the person's name, else none is known (no git name either, since git's global config is under the same home).
+ * `name` is the folder under the suite's scratch directory; `author`, when given, is saved as the person's name, else none is known (no git name either, since git's global config is under the same home). `firstPort` is the first port the home gives a quilt, every port below it from 8800 counted as given.
  */
-export async function startHome(scratch: string, name: string, author?: string): Promise<{ homed: Homed; stop(): Promise<void>; log: string }> {
+export async function startHome(scratch: string, name: string, author?: string, firstPort = 9000): Promise<{ homed: Homed; stop(): Promise<void>; log: string }> {
 	const dir = join(scratch, 'homes', name);
 	rmSync(dir, { recursive: true, force: true });
 	const folder = join(dir, 'home');
@@ -50,10 +50,10 @@ export async function startHome(scratch: string, name: string, author?: string):
 		mkdirSync(join(env.XDG_CONFIG_HOME!, 'loom'), { recursive: true });
 		writeFileSync(join(env.XDG_CONFIG_HOME!, 'loom', 'config.toml'), `[author]\nname = ${JSON.stringify(author)}\n`);
 	}
-	// every port below 9000 counted as given, so the test's quilts keep clear of a person's own
+	// every port below `firstPort` counted as given, so the test's quilts keep clear of a person's own and of other homes'
 	const app = join(machineFolder(folder, env), 'app');
 	mkdirSync(app, { recursive: true });
-	writeFileSync(join(app, 'quilts.json'), JSON.stringify({ quilts: [], given: Array.from({ length: 200 }, (_, i) => 8800 + i) }) + '\n');
+	writeFileSync(join(app, 'quilts.json'), JSON.stringify({ quilts: [], given: Array.from({ length: firstPort - 8800 }, (_, i) => 8800 + i) }) + '\n');
 	const log = join(dir, 'app.log');
 	const out = createWriteStream(log, { flags: 'a' });
 	const proc: ChildProcess = spawn(LOOM, ['app', '--port', '0'], { cwd: VIEWER, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -117,7 +117,8 @@ export const test = base.extend<Fixtures>({
 		async ({ author }, use, info) => {
 			const scratch = scratchDir(suiteOf(info));
 			const name = `${info.testId}-${info.retry}`;
-			const running = await startHome(scratch, name, author);
+			// one base a worker, whose tests run one at a time, and a thousand ports a run's slot (`VIEWER_SLOT`), so no two homes running at once give a quilt the same port
+			const running = await startHome(scratch, name, author, 9000 + 1000 * slot + 50 * info.parallelIndex);
 			await use(running.homed);
 			await running.stop();
 			if (info.status !== info.expectedStatus) await info.attach('loom app', { path: running.log, contentType: 'text/plain' });
