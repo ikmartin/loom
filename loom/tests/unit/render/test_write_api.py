@@ -117,7 +117,9 @@ def test_a_refused_write_answers_rather_than_dying(session) -> None:  # type: ig
     }, body
     # nobody to sign it: the quilt names no author and the browser gave none
     status, body = post(s.url + "_api/annotate", {"session": sid, "target": "dm-0003", "message": "unsigned"})
-    assert status == 400 and body["error"]["code"] == "refused" and "no author name" in body["error"]["message"], body
+    assert status == 409 and body["error"]["code"] == "no-reviewer" and "no author name" in body["error"]["message"], (
+        body
+    )
 
 
 def test_a_write_without_the_token_is_refused_over_the_wire(session) -> None:  # type: ignore[no-untyped-def]
