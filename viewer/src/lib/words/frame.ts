@@ -111,8 +111,6 @@ export const frame = {
 		unreachable: 'Loom could not be reached.',
 		/** Where the publisher answered with no reason a person can read, or a refusal this viewer has no sentence for. */
 		failed: 'Loom could not do that.',
-		/** An annotation refused while loom knows no name to write it under. */
-		noName: 'Loom does not know your name yet. Set it in Settings, under Profile, and try again.',
 		/** Edited pages saved under a name loom refused: one outside the quilt, or not ending in .pdf. */
 		pdfName: 'Name the new file inside the quilt, ending in .pdf.'
 	},
@@ -212,7 +210,16 @@ export const frame = {
 		saving: 'Saving…',
 		unset: 'not set',
 		/** Under the field, where no name was saved and git's is used. */
-		fromGit: "From git's name for you, until you save one here."
+		fromGit: "From git's name for you, until you save one here.",
+		/** Said under the field when loom refused the name with no sentence of its own. */
+		refused: 'Loom could not save your name.'
+	},
+	/** The box over the page when a write is refused because loom knows no name to record it under: the name field, then the write is sent again. */
+	nameAsk: {
+		title: 'Loom does not know your name yet',
+		lead: 'It is written beside your comments, annotations and decisions, in every quilt on this computer. Save it and loom does what you asked.',
+		/** The quiet button that leaves the name unsaved, and the write undone. */
+		later: 'Not now'
 	},
 	/** The note above the document in the left pane, for what the quilt's first page has to say; elsewhere than a document, the same words float near the foot of the window. */
 	note: {

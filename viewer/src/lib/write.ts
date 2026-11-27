@@ -11,6 +11,7 @@ import { judgeFormat } from '$lib/shell/upgrade.svelte';
 import { judgeHome } from '$lib/home/listing.svelte';
 import { judgeStopped } from '$lib/shell/gone.svelte';
 import { updating } from '$lib/manifest/updating.svelte';
+import { askName } from '$lib/shell/name.svelte';
 
 export interface Capabilities {
 	write_api: number;
@@ -124,8 +125,15 @@ export interface WriteResult {
 	publication?: number;
 }
 
-/** Ask the publisher to write. Errors come back as the publisher's own refusal rather than as an exception, because a refused annotation is an answer a reader needs to see. The answer comes once loom has recorded the write, before the manifest carries it: an answer naming the build that publishes it marks the page updating until it has (`updating`), and a caller that reads the manifest after its write awaits `landed`. */
+/** Ask the publisher to write. Errors come back as the publisher's own refusal rather than as an exception, because a refused annotation is an answer a reader needs to see. The answer comes once loom has recorded the write, before the manifest carries it: an answer naming the build that publishes it marks the page updating until it has (`updating`), and a caller that reads the manifest after its write awaits `landed`. A write refused because loom knows no name to record it under asks for the name over the page (`NameAsk`) and, once it is saved, is sent again; left unsaved, the refusal is the answer. */
 export async function write(endpoint: string, body: Record<string, unknown>): Promise<WriteResult> {
+	const said = await sendOnce(endpoint, body);
+	if (said.error?.code !== 'no-reviewer' || endpoint === 'reviewer-settings') return said;
+	return (await askName()) ? sendOnce(endpoint, body) : said;
+}
+
+/** One write sent, the token probed again once on a 403. */
+async function sendOnce(endpoint: string, body: Record<string, unknown>): Promise<WriteResult> {
 	try {
 		if (endpoint === 'review-accept' || endpoint.startsWith('adopt-')) {
 			body = { reviewer: store.manifest?.reviewer?.name ?? '', ...body };

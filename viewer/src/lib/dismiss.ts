@@ -17,7 +17,8 @@ import type { Action } from 'svelte/action';
 export const dismiss: Action<HTMLElement, () => void> = (node, close) => {
 	let fn = close;
 	const onDown = (e: PointerEvent) => {
-		if (!node.contains(e.target as Node)) fn?.();
+		// the ask for the person's name stands over a box whose write it answers, which stays open beneath it
+		if (!node.contains(e.target as Node) && !(e.target as Element | null)?.closest?.('[data-testid="name-ask"]')) fn?.();
 	};
 	const onKey = (e: KeyboardEvent) => {
 		if (e.key === 'Escape') fn?.();

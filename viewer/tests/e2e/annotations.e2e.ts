@@ -452,6 +452,47 @@ test.describe('the toolbar', () => {
 		expect(sent.annotate).not.toHaveProperty('quote');
 	});
 
+	test('a comment refused for want of a name asks for the name over the page, and once it is saved is written', async ({ page }) => {
+		const posts: string[] = [];
+		let named = false;
+		await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['annotate', 'reviewer-settings'], token: 't' } }));
+		await page.route('**/_api/*', (r) => {
+			const endpoint = new URL(r.request().url()).pathname.split('/').pop() ?? '';
+			posts.push(endpoint);
+			if (endpoint === 'reviewer-settings') {
+				named = true;
+				return r.fulfill({ json: { ok: true, result: 'reviewer settings', reviewer: { name: 'A Reader', source: 'config' } } });
+			}
+			if (!named) return r.fulfill({ status: 409, json: { error: { code: 'no-reviewer', message: 'no author name' } } });
+			return r.fulfill({ json: { ok: true, result: 'a-2026-11-12-new000  sy-0003  untyped  (you)' } });
+		});
+		await page.goto('/master/drafting/main');
+		await page.getByTestId('tool-comment').click();
+		await pane(page, 0).locator('.fragment .env[data-id="sy-0003"] > p[data-src]').first().click({ position: { x: 4, y: 4 } });
+		await popup(page).getByTestId('popup-comment-field').fill('Say where parity is used.');
+		await popup(page).getByTestId('popup-comment-field').press('Enter');
+		const ask = page.getByTestId('name-ask');
+		await expect(ask).toContainText('Loom does not know your name yet');
+		await ask.getByTestId('name-field').fill('A Reader');
+		await ask.getByTestId('name-save').click();
+		await expect(ask).toHaveCount(0);
+		await expect.poll(() => posts).toEqual(['annotate', 'reviewer-settings', 'annotate']);
+		await expect(popup(page)).toHaveCount(0);
+	});
+
+	test('a comment refused for want of a name, left unsaved, says why in its popup', async ({ page }) => {
+		await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['annotate', 'reviewer-settings'], token: 't' } }));
+		await page.route('**/_api/*', (r) => r.fulfill({ status: 409, json: { error: { code: 'no-reviewer', message: 'no author name' } } }));
+		await page.goto('/master/drafting/main');
+		await page.getByTestId('tool-comment').click();
+		await pane(page, 0).locator('.fragment .env[data-id="sy-0003"] > p[data-src]').first().click({ position: { x: 4, y: 4 } });
+		await popup(page).getByTestId('popup-comment-field').fill('Say where parity is used.');
+		await popup(page).getByTestId('popup-comment-field').press('Enter');
+		await page.getByTestId('name-ask-later').click();
+		await expect(page.getByTestId('name-ask')).toHaveCount(0);
+		await expect(popup(page)).toContainText('Loom does not know your name yet. Set it in Settings, under Profile, and try again.');
+	});
+
 	test('with no write API there are no tools and no verbs, and the popup still shows what is written', async ({ page }) => {
 		await page.goto('/node/sy-0003');
 		await expect(page.getByTestId('step-next')).toBeVisible();

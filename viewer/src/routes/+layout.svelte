@@ -14,6 +14,7 @@
 	import OutOfStep from '$lib/components/OutOfStep.svelte';
 	import Stopped from '$lib/shell/Stopped.svelte';
 	import Toast from '$lib/review/Toast.svelte';
+	import NameAsk from '$lib/shell/NameAsk.svelte';
 	import Column from '$lib/shell/Column.svelte';
 	import Workspace from '$lib/workspace/Workspace.svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
@@ -191,4 +192,5 @@
 <OutOfStep />
 <Stopped />
 <Toast />
+<NameAsk />
 {/if}

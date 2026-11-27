@@ -272,7 +272,7 @@
 		if (!drafting) return;
 		const away = (e: PointerEvent) => {
 			const t = e.target as Element | null;
-			if (!t?.closest?.('.ann-popup-host, [data-testid="settings-window"]')) closeDraft();
+			if (!t?.closest?.('.ann-popup-host, [data-testid="settings-window"], [data-testid="name-ask"]')) closeDraft();
 		};
 		document.addEventListener('pointerdown', away, true);
 		return () => document.removeEventListener('pointerdown', away, true);

@@ -79,3 +79,46 @@ it('marks the page updating from an answer naming the build that publishes it, b
 	expect((await write('annotate', { target: 'k', message: 'm' })).publication).toBe(6);
 	expect(updating.awaited).toEqual({ server: 4242, n: 6 });
 });
+
+describe('a write refused for want of the person’s name', () => {
+	/** A publisher that refuses `annotate` with `no-reviewer` until `named`; every POST counted. */
+	function nameless() {
+		const state = { named: false, posts: 0 };
+		vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
+			if (!init) return Response.json({ write_api: 1, capabilities: ['annotate'], token: 'token' });
+			state.posts++;
+			if (state.named) return Response.json({ ok: true, result: 'a-1' });
+			return Response.json({ ok: false, error: { code: 'no-reviewer', message: 'no author name' } }, { status: 409 });
+		});
+		return state;
+	}
+
+	it('asks for the name over the page and, once it is saved, sends the write again', async () => {
+		const { answer, mountAsk, naming } = await import('$lib/shell/name.svelte');
+		const unmount = mountAsk();
+		const p = nameless();
+		const done = write('annotate', { target: 'k', message: 'm' });
+		await vi.waitFor(() => expect(naming.open).toBe(true));
+		p.named = true;
+		answer(true);
+		expect(await done).toEqual({ ok: true, result: 'a-1' });
+		expect(p.posts).toBe(2);
+		expect(naming.open).toBe(false);
+		unmount();
+	});
+
+	it('answers with the refusal when the name is left unsaved, or nothing on the page can ask', async () => {
+		const { answer, mountAsk, naming } = await import('$lib/shell/name.svelte');
+		const unmount = mountAsk();
+		const p = nameless();
+		const done = write('annotate', { target: 'k', message: 'm' });
+		await vi.waitFor(() => expect(naming.open).toBe(true));
+		answer(false);
+		expect((await done).error?.code).toBe('no-reviewer');
+		expect(p.posts).toBe(1);
+		unmount();
+		expect((await write('annotate', { target: 'k', message: 'm' })).error?.code).toBe('no-reviewer');
+		expect(naming.open).toBe(false);
+		expect(p.posts).toBe(2);
+	});
+});

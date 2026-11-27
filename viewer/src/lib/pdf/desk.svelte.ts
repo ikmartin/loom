@@ -12,7 +12,6 @@ import { annotate, edit } from '$lib/review/history.svelte';
 import { say } from '$lib/review/toasts.svelte';
 import { ui } from '$lib/ui.svelte';
 import { said } from '$lib/library/said';
-import { frame } from '$lib/words/frame';
 import { document_, pdfjs, sourceOf } from './document';
 import { boundOfStrokes, copyColor, markOf, mergeLines, ON_WORDS, type MarkKind, type PageMark } from './marks';
 import { annotatedCopy, notTheSamePaper, readAnnotations, type Incoming, type Outgoing, type Replaced } from './portable';
@@ -41,9 +40,8 @@ export interface Surface {
 
 const INK_PAUSE = 900;
 
-/** A refused write on the pages in the viewer's words (`said`); one refused while loom knows no name to write it under says where to give it one. */
+/** A refused write on the pages in the viewer's words (`said`). */
 function refusal(e?: { code: string; message: string }): string {
-	if (e?.code === 'refused' && !store.manifest?.reviewer?.name) return frame.errors.noName;
 	return said(e ?? { code: 'failed', message: '' });
 }
 

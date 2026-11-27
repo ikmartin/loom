@@ -217,7 +217,7 @@ export function popups(source: () => Manifest | null, opts: { host?: HTMLElement
 		if (!open) return;
 		const t = e.target as Element | null;
 		// a click on a mark is the mark's to answer, on the margin's icons, the stepper or the list theirs, in the popup or a menu it opened its own, and a press on a PDF mark's grip moves the mark the popup is open on
-		if (t?.closest?.('.ann-popup-host, mark.annotation, .annotation-block, .mark[data-annotation], span.change[data-change], .changes-menu, .ann-gutter, .ann-pick, .annotate-bar, .format-menu, .side-host, [data-testid="mark-grab"], [data-testid="settings-window"]')) return;
+		if (t?.closest?.('.ann-popup-host, mark.annotation, .annotation-block, .mark[data-annotation], span.change[data-change], .changes-menu, .ann-gutter, .ann-pick, .annotate-bar, .format-menu, .side-host, [data-testid="mark-grab"], [data-testid="settings-window"], [data-testid="name-ask"]')) return;
 		close();
 	};
 	// Escape closes the popup and nothing else: the tool in hand stays up
