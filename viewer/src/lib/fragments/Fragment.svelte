@@ -22,6 +22,9 @@
 	import { hold, type Hold } from './hold';
 	import { keep, take } from './kept';
 	import { parse, patch } from './patch';
+	import { drafts, drawDrafts, type Draft } from './drafts.svelte';
+	import { LITE_CSS } from '$lib/node/latexlite';
+	import { docs as words } from '$lib/words/docs';
 	import { lightRange, quoteRange } from './quote';
 
 	let {
@@ -198,10 +201,25 @@
 		return t.innerHTML;
 	}
 
-	async function load(p: string, hash: string) {
+	/** The markup with each block a save changed drawn from its source until TeX's arrives (`drafts.svelte.ts`, a demonstration); unchanged where none stands. */
+	function withDrafts(h: string, shown: Draft[]): string {
+		if (!shown.length) return h;
+		const m = store.manifest;
+		const main = master || m?.masters.find((x) => x.default)?.path || '';
+		const numbers: Record<string, string> = {};
+		for (const [key, n] of Object.entries(m?.nodes ?? {})) {
+			const num = n.numbers?.[main]?.number;
+			if (num) numbers[key] = num;
+		}
+		const t = document.createElement('template');
+		t.innerHTML = h;
+		return drawDrafts(t, shown, numbers, m?.macros.default ?? [], words.draft) ? t.innerHTML : h;
+	}
+
+	async function load(p: string, hash: string, shown: Draft[] = []) {
 		const version = ++loadVersion;
 		try {
-			const fragment = await withChanges(await fetchFragment(p, hash), hash);
+			const fragment = withDrafts(await withChanges(await fetchFragment(p, hash), hash), shown);
 			if (version !== loadVersion) return;
 			html = fragment;
 			error = '';
@@ -212,7 +230,8 @@
 	}
 
 	$effect(() => {
-		if (path && store.hash) void load(path, store.hash);
+		const shown = [...drafts.shown.values()];
+		if (path && store.hash) void load(path, store.hash, shown);
 	});
 
 	async function expand(target: HTMLElement, key: string) {
@@ -670,6 +689,8 @@
 	});
 </script>
 
+<svelte:head>{@html `<style>${LITE_CSS}</style>`}</svelte:head>
+
 {#if error}
 	<p class="problem">Fragment unavailable: {error}</p>
 {:else}
@@ -710,5 +731,32 @@
 	/* Focusable so a click in it gives it the keys that scroll it. A browser rings it once a key is pressed, and around a document taller than the window the ring is two blue rules down the text's edges. */
 	.fragment:focus {
 		outline: none;
+	}
+	/* A block drawn from its saved source while TeX typesets it: quiet, faded, with a small note, until TeX's block takes its place. */
+	.fragment :global(.draft .draft-body),
+	.fragment :global(div.draft) {
+		opacity: 0.62;
+	}
+	.fragment :global(.draft-note) {
+		float: right;
+		margin-left: var(--gap-tight, 8px);
+		font-family: var(--sans);
+		font-style: normal;
+		font-size: 11px;
+		color: var(--ink-soft);
+	}
+	.fragment :global(.draft .tx-unknown) {
+		color: var(--ink-soft);
+	}
+	/* Set as TeX's block is: a plain statement italic, and in the paper's formats run in after its label (theme.css, "Run-in heads"). */
+	.fragment :global(.env.draft[data-style='plain'] > .draft-body) {
+		font-style: italic;
+	}
+	:global(.viewer:is([data-format='p1'], [data-format='p2'])) .fragment :global(.env.draft > .env-label + .draft-body),
+	:global(.viewer:is([data-format='p1'], [data-format='p2'])) .fragment :global(.env.draft > .env-label + .draft-body > .tx-par:first-child) {
+		display: inline;
+	}
+	:global(.viewer:is([data-format='p1'], [data-format='p2'])) .fragment :global(.env.draft > .env-label + .draft-body::before) {
+		content: ' ';
 	}
 </style>

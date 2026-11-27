@@ -228,6 +228,11 @@ export const docs = {
 		fewer: (n: number) => `only the newest ${n}`,
 		olderName: (of: string) => `the older versions of ${of}`
 	},
+	/** A block drawn from the person's saved source while TeX typesets it (a demonstration): the note beside it, and that note's hover text. */
+	draft: {
+		text: 'typesetting…',
+		title: 'Drawn from your saved source by the viewer. TeX’s typesetting replaces it when it is ready.'
+	},
 	column: {
 		/** The label over the focused document's sections, low in Docs' column. */
 		outline: 'Outline',
