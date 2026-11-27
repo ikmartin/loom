@@ -226,26 +226,31 @@ export class Workspace {
 	}
 
 	/**
-	 * Move a tab to the other pane, and focus it there (W6). With one pane, the other is made; a pane left empty closes.
+	 * The tab's ⇄ (W6), and focus follows the tab. With one pane, the tab splits off into a second; with two, it swaps places with the other pane's front tab, each the front tab of its new pane, so two panes of one tab each swap sides and no pane is left empty.
 	 */
 	move(pane: number, key: string): void {
 		const p = this.panes[pane];
 		const item = p?.items.find((i) => itemKey(i) === key);
 		if (!item) return;
 		if (this.panes.length === 1 && p.items.length === 1) return; // it would empty one pane to refill the other with the same thing (W5)
-		const dest = this.panes.length === 2 ? this.panes[1 - pane] : null;
-		this.#drop(pane, key);
-		if (!dest) {
+		if (this.panes.length === 1) {
 			// the source pane kept its other tabs; the moved one makes the second pane
+			this.#drop(pane, key);
 			this.panes = [this.panes[0], { items: [item], active: key }];
 			this.#shown.set(key, ++this.#tick);
 			this.focus = 1;
 			this.#settle();
 			return;
 		}
-		dest.items.push(item);
+		const dest = this.panes[1 - pane];
+		const j = dest.items.findIndex((i) => itemKey(i) === dest.active);
+		const there = dest.items[j];
+		if (!there) return;
+		p.items[p.items.indexOf(item)] = there;
+		dest.items[j] = item;
+		this.#front(p, itemKey(there));
 		this.#front(dest, key);
-		this.focus = this.panes.indexOf(dest);
+		this.focus = 1 - pane;
 	}
 
 	/** Close a tab. Its neighbour becomes active; a pane left empty closes, and the other takes the width. */

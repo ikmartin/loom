@@ -43,6 +43,20 @@ export const frame = {
 		/** The column's head while the manifest has not come yet, in place of the quilt's name; also the browser tab's title meanwhile. */
 		unnamed: 'loom'
 	},
+	/** A pane's row of tabs and each tab's two controls. */
+	tabs: {
+		/** The row's accessible name. */
+		row: 'open in this pane',
+		/** A tab's ⇄ with one pane: its hover text, and its accessible name with the tab's name. */
+		split: 'Split: open in a second pane beside',
+		splitLabel: (name: string) => `Split: open ${name} in a second pane beside`,
+		/** A tab's ⇄ with two panes, where it takes the other pane's front tab's place and that tab takes its. */
+		swap: 'Swap with the other pane',
+		swapLabel: (name: string, other: string) => `Swap ${name} with ${other}, in the other pane`,
+		/** A tab's × : its hover text, and its accessible name with the tab's name. */
+		close: 'Close',
+		closeLabel: (name: string) => `Close ${name}`
+	},
 	message: {
 		/** The column's message, its accessible name as a group. */
 		label: 'What was just done',
