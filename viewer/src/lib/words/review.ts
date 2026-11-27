@@ -384,7 +384,9 @@ export const review = {
 			mirrored: 'its document mirrors Overleaf: make the change there, then choose Done in Overleaf.',
 			'not-kept': 'it is open again, so there is no keep of it to undo.',
 			'not-written': 'loom cannot take its words back out from its record; an earlier version of the file can be restored instead.',
-			'other-quilt': 'it was kept in another quilt.'
+			'other-quilt': 'it was kept in another quilt.',
+			kept: 'it was kept; undo its keep instead, which takes its words out of the file too.',
+			'not-settled': 'it is open, so there is nothing to undo.'
 		} as Record<string, string>,
 		/** The column's message when the last keep or discard could not be undone. */
 		notUndone: 'The last keep or discard could not be undone.'

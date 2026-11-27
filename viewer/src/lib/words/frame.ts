@@ -97,7 +97,9 @@ export const frame = {
 		/** Where the publisher answered with no reason a person can read, or a refusal this viewer has no sentence for. */
 		failed: 'Loom could not do that.',
 		/** An annotation refused while loom knows no name to write it under. */
-		noName: 'Loom does not know your name yet. Set it in Settings, under Profile, and try again.'
+		noName: 'Loom does not know your name yet. Set it in Settings, under Profile, and try again.',
+		/** Edited pages saved under a name loom refused: one outside the quilt, or not ending in .pdf. */
+		pdfName: 'Name the new file inside the quilt, ending in .pdf.'
 	},
 	/** What a refusal of loom's says, by its code: never loom's own message, which may name a setting, a field or an id. A code with none here says `errors.failed`. */
 	refused: {
@@ -110,6 +112,7 @@ export const frame = {
 		closed: 'That has been answered already.',
 		'compile-failed': 'The document did not compile, so nothing was changed.',
 		'cut-short': 'The file arrived cut short. Drop it again.',
+		exists: 'A file of that name is there already, and loom never replaces one. Give it another name.',
 		'format-unknown': 'Loom does not know this kind of file.',
 		'has-results': 'Results have been read from this document, so it stays with its work. Delete the work instead.',
 		'key-taken': 'Another work in the library already has that key.',
@@ -166,7 +169,26 @@ export const frame = {
 		'state-refused': 'Loom will not write a research state that holds a link that names nothing or a character that is not text. Mend it, then try again.',
 		stub: 'Loom has no text of this result yet, so there is nothing to compare or correct.',
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
-		unreachable: 'The service that looks papers up could not be reached. Try again later.'
+		unreachable: 'The service that looks papers up could not be reached. Try again later.',
+		hidden: 'The viewer does not show that place, so nothing was saved there. Choose a folder it shows.',
+		'not-a-file': 'That is a folder, or something else that is not a file, so nothing was written.',
+		'too-large': 'That is too large for loom to take.',
+		empty: 'Nothing is written in it, so it was not kept. Write something first.',
+		'not-on-page': 'Those words are not on that page, so nothing was written.',
+		'not-a-pdf': 'That PDF is not held on this computer.',
+		'cannot-restore': 'That version cannot be put back now.',
+		'cannot-keep': 'Loom could not keep the text as it is now first, so nothing was put back.',
+		'no-text': "That version is missing from loom's history, so it cannot be put back.",
+		'not-text': 'That file is no longer one loom keeps versions of, so it was left as it is.',
+		'bad-command': 'Loom cannot run that new-note command: it must be one line, not empty, with every quote closed.',
+		'no-dialog': 'Loom cannot ask you outside the browser on this computer, so the new-note command was not set.',
+		'not-confirmed': 'The new-note command was not set: it is set only when you choose Set in the dialog loom opens.',
+		'no-agent-layer': "This quilt is not set up for an agent yet. Set up an agent's app in Settings › Agents first.",
+		'needs-label': 'A result it needs has no label yet. Give it one in your source, then ask again.',
+		'no-lean': 'No Lean that loom checked states this text now, so it cannot be attested.',
+		unchecked: 'Something it rests on has not been read and compared with its paper yet, so it cannot be attested.',
+		moved: 'The library changed while it was read. Try again.',
+		unsupported: 'This computer gives loom no way to open an application.'
 	} as Record<string, string>,
 	/** Settings › Profile: the name field and where the name now comes from. */
 	profile: {

@@ -63,3 +63,15 @@ describe('a refusal of the library', () => {
 		expect(said({ code: 'unreachable', message: 'arXiv timed out', status: 409 })).toBe(frame.refused.unreachable);
 	});
 });
+
+describe('a refusal of the rest of the write API', () => {
+	// codes a person's own act can meet, whose message told them what to do: a saved file's name, a version put back, the new-note command, an agent's setup, a Lean ask or attest, a mark on a page
+	const ACTED = ['exists', 'hidden', 'not-a-file', 'too-large', 'empty', 'not-on-page', 'not-a-pdf', 'cannot-restore', 'cannot-keep', 'no-text', 'not-text', 'bad-command', 'no-dialog', 'not-confirmed', 'no-agent-layer', 'needs-label', 'no-lean', 'unchecked', 'moved', 'unsupported'];
+	for (const code of ACTED)
+		it(`${code} has a sentence of the viewer's`, () => {
+			expect(frame.refused[code]).toBeTruthy();
+			expect(refusalOf({ code, status: 409 })).toBe(frame.refused[code]);
+		});
+
+	it('says a saved file never replaces one, as loom did', () => expect(frame.refused.exists).toContain('never replaces'));
+});
