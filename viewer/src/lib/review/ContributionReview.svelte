@@ -1,6 +1,8 @@
 <script lang="ts">
 	// One review of an agent's copy (plan 0.25.2), its words Review's (`words/review.ts`, `contribution`): every change it makes, named as the person reads it and grouped by section in the list the counter opens (`ChangeList`), decided one at a time in a bar that never moves, the two texts compared across the page's full width. Take it and Leave it are saved at once and step to the next change to decide; Apply writes what was taken into the paper in one press, keeping the paper as it was first and accepting the blocks the person marked as checked. Whatever loom answers, done or refused, is said in the bar beside the controls that asked, in the viewer's words and never loom's message.
 	import ActionBar from './ActionBar.svelte';
+	import AppliedUndo from './AppliedUndo.svelte';
+	import { undoOf, type Answer } from './applied';
 	import Said from './Said.svelte';
 	import ChangeList from './ChangeList.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
@@ -20,10 +22,10 @@
 	/** A refusal of loom's in the viewer's words: one for the step where loom refused the copy, else the frame's sentence for its code. */
 	const refusal = (e: ApiError | undefined, step: keyof typeof words.refused): string => (!e || e.code === 'adoption-refused' ? words.refused[step] : said(e));
 
-	let { contribution: c, onanswer }: { contribution: AdoptionReview; onanswer?: (a: { text: string; refused: boolean } | null) => void } = $props();
+	let { contribution: c, onanswer }: { contribution: AdoptionReview; onanswer?: (a: Answer | null) => void } = $props();
 	// the last answer, said in the bar and handed to the page, which keeps saying it once this contribution is gone
-	let answer = $state<{ text: string; refused: boolean } | null>(null);
-	function say(a: { text: string; refused: boolean } | null): void {
+	let answer = $state<Answer | null>(null);
+	function say(a: Answer | null): void {
 		answer = a;
 		onanswer?.(a);
 	}
@@ -101,7 +103,7 @@
 			// marked as checked yet not accepted: recording failed, or what they rest on was not accepted
 			const dropped = checked.filter((k) => choices.keys.includes(k)).length - accept.length;
 			const why = o.acceptance_error ? words.notRecorded : dropped > 0 ? words.dropped(dropped) : '';
-			say({ text: words.took(taken, into, o.accepted?.length ?? 0, o.pending?.length ?? 0) + why, refused: false });
+			say({ text: words.took(taken, into, o.accepted?.length ?? 0, o.pending?.length ?? 0) + why, refused: false, undo: await undoOf(source, o.landmark) });
 			checked = [];
 			await landed();
 		} else say({ text: refusal(done.error, 'apply'), refused: true });
@@ -126,6 +128,7 @@
 				<button class="btn" disabled={!!busy || n.undecided + n.left === 0} onclick={() => save(takeAll(items))} data-testid="take-all">{words.takeAll}</button>
 				<button class="btn primary" disabled={!!busy || !n.taken} onclick={apply} data-testid="apply">{busy === 'apply' ? words.applying : words.apply(n.taken)}</button>
 			{/if}
+			{#if answer?.undo}<AppliedUndo undo={answer.undo} onanswer={say} />{/if}
 		{/snippet}
 		{#snippet below()}
 			<div class="step">

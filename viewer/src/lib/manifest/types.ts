@@ -774,6 +774,8 @@ export interface IncorporationMathReview {
   items: IncorporationMathItem[];
 }
 export interface IncorporationOutcome {
+  /** The version Apply kept of the document as it was, by name: restoring it undoes the Apply. */
+  landmark?: string;
   accepted?: string[];
   pending?: string[];
   acceptance_error?: string;

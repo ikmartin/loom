@@ -119,12 +119,13 @@ def _reopen(root: Path, ids: list[str], writer: tuple[str, str]) -> dict[str, An
 
 
 def _history(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
-    """`history-record` keeps a version of a document under the author's name for it, as `loom stamp DOC -m NAME`; `history-restore` puts a version back into its document (`document`, `version`), a file's own version back into the file (`file`, `version`), or the text an undo set aside back into its file (`path`, `text`), keeping what it replaces first. The author's acts, refused to a declared agent."""
+    """`history-record` keeps a version of a document under the author's name for it, as `loom stamp DOC -m NAME`; `history-restore` puts a version back into its document (`document`, `version`), a file's own version back into the file (`file`, `version`), or the text an undo set aside back into its file (`path`, `text`), keeping what it replaces first. The author's acts, refused to a declared agent, and refused whole (`other-quilt`) when `quilt` names another quilt."""
     from loom.history.acts import RestoreRefused, put_back, restore, restore_file
     from loom.history.ledger import actor_for, load_history
     from loom.history.steps import slug, stamp_document
     from loom.identity import is_agent
     from loom.looks import open_texts
+    from loom.machine import quilt_id
     from loom.scan.quilt import load_quilt, reviewer_identity
 
     who = reviewer_identity(root)[0] or actor_for(root)
@@ -132,6 +133,9 @@ def _history(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
         raise ApiError(
             "author-only", "An agent reads and annotates; only the author records or restores a version", status=403
         )
+    # an undo offered where it was done names its quilt, so a tab that followed its port to another quilt restores nothing there
+    if "quilt" in body and body["quilt"] != quilt_id(root):
+        raise ApiError("other-quilt", "that was asked for in another quilt, so nothing was restored", status=409)
     quilt = load_quilt(root)
     if endpoint == "history-restore" and body.get("file") is not None:
         path = _str(body, "file", required=True) or ""
