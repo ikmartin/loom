@@ -288,7 +288,8 @@ test.describe('previews', () => {
 		// the card a `quilt:sy-0003` link shows
 		await links.nth(0).hover();
 		await expect(card.locator('.env[data-id="sy-0003"]').first()).toBeVisible();
-		await expect(card).toContainText('sy-0003');
+		// named as a reader names it, its internal id only under Show ids
+		await expect(card).not.toContainText('sy-0003');
 		// a click opens the document at the place, beside; `open here` opens the same in the link's own pane
 		await card.getByTestId('preview-open-here').click();
 		await expect(pane(page, 0).getByTestId('item-tab').filter({ hasText: 'main.tex' })).toHaveCount(1);
@@ -331,7 +332,7 @@ test.describe('previews', () => {
 		await expect(display.locator('mjx-container [data-mml-node="mlabeledtr"]')).toHaveCount(1);
 		await expect(card).toContainText('(1)');
 		await expect(card).toContainText('in Section 1');
-		await expect(card).toContainText('sy-0100#eq:prose');
+		await expect(card).not.toContainText('sy-0100');
 		await expect(card).not.toContainText('in this section');
 		await page.keyboard.press('Escape');
 		await expect(card).toHaveCount(0);

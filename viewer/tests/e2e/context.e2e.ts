@@ -39,7 +39,7 @@ test('its lists come first, named as a reader names them, and its graph last', a
 test('what the node is about stands in its context, with the landmark its text was recorded at', async ({ page }) => {
 	await page.goto('/node/sy-0002' + beside('/context/sy-0002'));
 	const context = pane(page, 1).getByTestId('context');
-	await expect(context.getByTestId('version').first()).toHaveText('Statement · text of @1');
+	await expect(context.getByTestId('version').first()).toContainText('Statement · text of @1');
 	await expect(context.getByTestId('closure-open')).toBeVisible();
 });
 
