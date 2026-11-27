@@ -10,7 +10,7 @@ export interface LeanJob {
 	step: string;
 	/** Why it failed, in loom's words; shown only folded. */
 	said: string;
-	found: { steps?: { step: string; seconds: number }[]; written?: string[]; unchanged?: string[]; unknown?: string[]; errors?: string[] };
+	found: { steps?: { step: string; seconds: number }[]; written?: string[]; unchanged?: string[]; unknown?: string[]; errors?: string[]; unprinted?: string[] };
 }
 
 /** `formal-state`'s answer. */
@@ -40,7 +40,7 @@ function step(job: LeanJob): string {
  * Returns
  * -------
  * string[]
- *     One line while it runs; after it, what it did, then Lean's errors and the markers that name no result, where there are any.
+ *     One line while it runs; after it, what it did, then Lean's errors, the markers that name no result and the results recorded without Lean's print, where there are any.
  */
 export function jobLines(job: LeanJob): string[] {
 	if (job.state === 'running') return [job.kind === 'install' ? words.installing(step(job) || words.installStep['']) : words.checking(step(job) || words.checkStep[''])];
@@ -49,6 +49,7 @@ export function jobLines(job: LeanJob): string[] {
 	const lines = [words.checked(job.found.written?.length ?? 0, job.found.unchanged?.length ?? 0)];
 	if (job.found.errors?.length) lines.push(words.errors(job.found.errors.length));
 	if (job.found.unknown?.length) lines.push(words.unknown(job.found.unknown.length));
+	if (job.found.unprinted?.length) lines.push(words.unprinted(job.found.unprinted.length));
 	return lines;
 }
 

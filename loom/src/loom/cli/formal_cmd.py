@@ -116,6 +116,7 @@ def check_command(as_json: bool, quilt_path: str | None) -> None:
         Group("as recorded before", [Item(n) for n in done.unchanged]),
         Group("markers that name no result", [Item(n) for n in done.unknown]),
         Group("Lean's errors", [Item(e) for e in done.errors]),
+        Group("recorded without Lean's print, which failed; check again", [Item(n) for n in done.unprinted]),
         Group("steps", [Item(f"{step}: {seconds:.0f} s") for step, seconds in done.steps]),
     ]
     report = Report(
@@ -129,6 +130,7 @@ def check_command(as_json: bool, quilt_path: str | None) -> None:
             "unchanged": done.unchanged,
             "unknown": done.unknown,
             "errors": done.errors,
+            "unprinted": done.unprinted,
             "steps": [{"step": s, "seconds": round(t, 1)} for s, t in done.steps],
         },
     )

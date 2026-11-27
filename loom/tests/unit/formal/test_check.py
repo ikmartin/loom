@@ -81,12 +81,12 @@ def quilt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return q
 
 
-def _steps(monkeypatch: pytest.MonkeyPatch, probe: dict[str, Any], *, build_out: str = "", during: Any = None) -> list[list[str]]:  # fmt: skip
-    """Stand in for the fenced steps: the build makes every module's .olean and the probe answers `probe`; each step's command kept."""
+def _steps(monkeypatch: pytest.MonkeyPatch, probe: dict[str, Any], *, build_out: str = "", during: Any = None, printed: Any = None) -> list[list[str]]:  # fmt: skip
+    """Stand in for the fenced steps: the build makes every module's .olean, the replay answers `probe` but each declaration's `shown`, and the print each one's `shown`, or what `printed` makes of the command; each step's command kept."""
     ran: list[list[str]] = []
 
     def fenced(
-        argv: list[str], places: dict[str, str], cwd: Path, env: dict[str, str]
+        argv: list[str], places: dict[str, str], cwd: Path, env: dict[str, str], timeout: float = check.TIMEOUT
     ) -> subprocess.CompletedProcess[str]:
         ran.append(argv)
         out = ""
@@ -96,8 +96,13 @@ def _steps(monkeypatch: pytest.MonkeyPatch, probe: dict[str, Any], *, build_out:
                 o.parent.mkdir(parents=True, exist_ok=True)
                 o.write_bytes(b"")
             out = build_out
-        if "--run" in argv:
-            out = json.dumps(probe)
+        if "mode=print" in argv:
+            if printed is not None:
+                return printed(argv)  # type: ignore[no-any-return]
+            rows = [{"name": d["name"], "statement": d["statement"], "shown": d.get("shown")} for d in probe["declarations"] if not d["internal"]]  # fmt: skip
+            out = json.dumps({"shown": rows})
+        elif "--run" in argv:
+            out = json.dumps({**probe, "declarations": [{k: v for k, v in d.items() if k != "shown"} for d in probe["declarations"]]})  # fmt: skip
             if during is not None:
                 during()
         return subprocess.CompletedProcess(argv, 1 if "error:" in out else 0, out, "")
@@ -158,7 +163,7 @@ def test_it_records_what_the_build_states_for_each_result_a_marker_names(
     _steps(monkeypatch, _probe())
     done = check.check(quilt)
     assert sorted(done.written) == ["sh-0003", "sh-0004", "sh-0007"]
-    [record] = replay(quilt).about("label", "sh-0007", of="lean")
+    record = replay(quilt).about("label", "sh-0007", of="lean")[-1]
     rows = {d["name"]: d for d in record.get("declarations")}
     assert list(rows) == ["Formal.cycleLattice_saturated", "Formal.helper", "Formal.cycleLattice", "Formal.divergence"]
     assert rows["Formal.cycleLattice_saturated"]["names"] == {"label": "sh-0007"}
@@ -171,12 +176,77 @@ def test_it_records_what_the_build_states_for_each_result_a_marker_names(
     assert (found.lean, found.role) == ("unattested", "proved")
 
 
-def test_a_second_check_saying_the_same_records_nothing(quilt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _steps(monkeypatch, _probe())
+def test_a_second_check_saying_the_same_records_nothing_and_prints_nothing(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ran = _steps(monkeypatch, _probe())
     check.check(quilt)
+    ran.clear()
     again = check.check(quilt)
     assert again.written == [] and sorted(again.unchanged) == ["sh-0003", "sh-0004", "sh-0007"]
-    assert len(replay(quilt).of_kind("lean")) == 3
+    assert len(replay(quilt).of_kind("lean")) == 6 and not any("mode=print" in argv for argv in ran)
+
+
+def test_the_verdict_is_recorded_before_the_print_and_never_waits_on_it(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The replay's verdict is recorded first, its print missing; the print, a step of its own, then writes the record again with each declaration as Lean prints it, the verdict the same."""
+    seen: list[list[Any]] = []
+
+    def printing(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        seen.append([(r.get("print"), r.get("replay")["exit"]) for r in replay(quilt).about("label", "sh-0007", of="lean")])  # fmt: skip
+        rows = [{"name": "Formal.cycleLattice_saturated", "statement": "theorem saturated", "shown": "theorem Formal.cycleLattice_saturated : True"}]  # fmt: skip
+        return subprocess.CompletedProcess(argv, 0, json.dumps({"shown": rows}), "")
+
+    ran = _steps(monkeypatch, _probe(), printed=printing)
+    done = check.check(quilt)
+    assert seen == [[("missing", 0)]] and done.unprinted == []
+    probe, printed = [argv for argv in ran if "--run" in argv]
+    assert printed == [*probe, "mode=print"]
+    verdict, record = replay(quilt).about("label", "sh-0007", of="lean")
+    assert verdict.get("print") == "missing" and all(d["shown"] is None for d in verdict.get("declarations"))
+    assert record.get("print") is None and record.get("replay") == verdict.get("replay")
+    rows = {d["name"]: d["shown"] for d in record.get("declarations")}
+    assert rows == {"Formal.cycleLattice_saturated": "theorem Formal.cycleLattice_saturated : True", "Formal.helper": None, "Formal.cycleLattice": None, "Formal.divergence": None}  # fmt: skip
+    assert _status(quilt, "sh-0007").lean == "unattested"
+
+
+@pytest.mark.parametrize("how", ["failed", "timed out", "unreadable"])
+def test_a_print_that_fails_leaves_the_verdict_recorded_and_its_print_missing(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    """A print that fails, runs past its time or says nothing loom can read takes nothing from the verdict: the record says the Lean was checked and its print is missing, and the next check prints it without recording the verdict again."""
+
+    def printing(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        if how == "timed out":
+            raise check.Refused("a step of the check ran past 15 minutes and was stopped")
+        return subprocess.CompletedProcess(argv, 1 if how == "failed" else 0, "" if how == "failed" else "{", "out of memory")  # fmt: skip
+
+    _steps(monkeypatch, _probe(), printed=printing)
+    done = check.check(quilt)
+    assert sorted(done.written) == sorted(done.unprinted) == ["sh-0003", "sh-0004", "sh-0007"]
+    [record] = replay(quilt).about("label", "sh-0007", of="lean")
+    assert record.get("print") == "missing" and record.get("replay")["exit"] == 0
+    assert _status(quilt, "sh-0007").lean == "unattested"
+    _steps(monkeypatch, _probe())
+    again = check.check(quilt)
+    assert again.written == [] and again.unprinted == [] and sorted(again.unchanged) == ["sh-0003", "sh-0004", "sh-0007"]  # fmt: skip
+    assert [r.get("print") for r in replay(quilt).about("label", "sh-0007", of="lean")] == ["missing", None]
+
+
+def test_a_print_of_a_declaration_the_replay_did_not_read_is_not_kept(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A declaration whose statement the print read otherwise than the replay, as when the build changed between the two steps, keeps no print."""
+
+    def printing(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        rows = [{"name": "Formal.cycleLattice_saturated", "statement": "theorem other", "shown": "theorem Formal.cycleLattice_saturated : False"}]  # fmt: skip
+        return subprocess.CompletedProcess(argv, 0, json.dumps({"shown": rows}), "")
+
+    _steps(monkeypatch, _probe(), printed=printing)
+    check.check(quilt)
+    record = replay(quilt).about("label", "sh-0007", of="lean")[-1]
+    assert record.get("print") is None and all(d["shown"] is None for d in record.get("declarations"))
 
 
 def test_a_sorry_reads_as_failed(quilt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -188,7 +258,7 @@ def test_a_sorry_reads_as_failed(quilt: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_a_build_error_in_a_module_it_rests_on_is_not_ok(quilt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _steps(monkeypatch, _probe(), build_out=f"error: ./{SATURATION}:12:4: unknown identifier 'foo'\n")
     done = check.check(quilt)
-    [record] = replay(quilt).about("label", "sh-0007", of="lean")
+    record = replay(quilt).about("label", "sh-0007", of="lean")[-1]
     assert record.get("ok") is False and record.get("errors") == [f"{SATURATION}:12:4: unknown identifier 'foo'"]
     assert done.errors and _status(quilt, "sh-0007").lean == "failed"
 
@@ -344,7 +414,7 @@ def test_a_record_keeps_each_declaration_as_lean_printed_it_and_what_its_stateme
     ]
     _steps(monkeypatch, _probe(extra=extra))
     check.check(quilt)
-    [record] = replay(quilt).about("label", "sh-0002", of="lean")
+    record = replay(quilt).about("label", "sh-0002", of="lean")[-1]
     rows = {d["name"]: d for d in record.get("declarations")}
     assert rows["Formal.t"]["shown"] == shown and rows["Formal.t"]["means"] == ["Formal.D"]
     assert rows["Formal.D"]["means"] == ["Formal.E"] and rows["Formal.D"]["shown"].startswith("def Formal.D")

@@ -23,6 +23,8 @@ describe('a job', () => {
 		const done = job({ kind: 'check', state: 'done', step: 'probe', found: { written: ['lem:a', 'lem:b'], unchanged: ['thm:c'], unknown: ['Formal.x: lem:gone'], errors: ['Formal/A.lean:3:1: unknown identifier'] } });
 		expect(jobLines(done)).toEqual(['Checked. 2 results recorded anew, 1 result as before.', 'Lean reported 1 error.', 'One declaration is marked for a result the quilt does not have.']);
 		expect(jobLines(job({ kind: 'check', state: 'done', found: { written: [], unchanged: [] } }))).toEqual(['Checked. No declaration states a result yet.']);
+		expect(jobLines(job({ kind: 'check', step: 'print' }))).toEqual(['Checking the Lean: printing what it states…']);
+		expect(jobLines(job({ kind: 'check', state: 'done', found: { written: ['lem:a'], unchanged: [], unprinted: ['lem:a'] } }))).toEqual(['Checked. 1 result recorded anew.', 'Lean’s print of 1 result is missing; check again to read it.']);
 		expect(jobLines(job({ kind: 'check', state: 'failed', step: '', said: 'the fence is not up (nested)' }))).toEqual(['The check did not run, and recorded nothing.']);
 	});
 });

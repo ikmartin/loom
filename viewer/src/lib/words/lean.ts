@@ -56,13 +56,16 @@ export const lean = {
 		'': 'starting',
 		mathlib: 'making sure Mathlib’s build is whole',
 		build: 'building the project from clean',
-		probe: 'replaying it in Lean’s kernel'
+		probe: 'replaying it in Lean’s kernel',
+		print: 'printing what it states'
 	} as Record<string, string>,
 	/** The check finished: what it recorded. */
 	checked: (written: number, unchanged: number) =>
 		written || unchanged ? `Checked. ${written ? `${plural(written, 'result', 'results')} recorded anew` : 'Nothing new to record'}${unchanged ? `, ${plural(unchanged, 'result', 'results')} as before` : ''}.` : 'Checked. No declaration states a result yet.',
 	/** After it: Lean's errors. */
 	errors: (n: number) => `Lean reported ${plural(n, 'error', 'errors')}.`,
+	/** After it: results recorded without Lean’s print, which failed or ran too long. */
+	unprinted: (n: number) => `Lean’s print of ${plural(n, 'result', 'results')} is missing; check again to read it.`,
 	/** After it: markers that name no result of the quilt. */
 	unknown: (n: number) => (n === 1 ? 'One declaration is marked for a result the quilt does not have.' : `${n} declarations are marked for results the quilt does not have.`),
 	/** The check stopped, at the step it was on. */

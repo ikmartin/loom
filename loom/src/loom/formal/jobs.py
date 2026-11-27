@@ -67,6 +67,6 @@ def start_check(root: Path) -> Job | None:
 
     def work(tell: Callable[[str], None]) -> dict[str, Any]:
         done = check.check(root, say=tell)
-        return {"written": done.written, "unchanged": done.unchanged, "unknown": done.unknown, "errors": done.errors}
+        return {"written": done.written, "unchanged": done.unchanged, "unknown": done.unknown, "errors": done.errors, "unprinted": done.unprinted}  # fmt: skip
 
     return start(root, "check", work)

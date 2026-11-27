@@ -1,5 +1,9 @@
 /-
-Loom's probe of a built Lake project. Given the project's own build (`own=DIR`), each package's (`path=DIR`) and the project's module names, it finds modules in the toolchain first, refuses an import the project built that is not among those named, reads their .olean files as leanchecker does, imports only the modules they import from outside the project, with no initializer and no environment extension run, and hands every declaration of the project to Lean's kernel over them: nothing the project's modules hold executes here. Then it reads those same declarations. It prints one JSON object: `replay`, whether the kernel accepted every declaration (`exit` 0) or what it said; `modules`, each module's imports within the project; and `declarations`, each with its module, kind, statement, the axioms it rests on, the marker naming it, the declarations of the project it uses directly, and those its statement names (`means`). A declaration Lean made for another (`Name.isInternalDetail`) is listed with no axioms, so that what reaches through it is followed.
+Loom's probe of a built Lake project, in two modes, each its own run. Given the project's own build (`own=DIR`), each package's (`path=DIR`) and the project's module names, it finds modules in the toolchain first, refuses an import the project built that is not among those named, reads their .olean files as leanchecker does, and imports only the modules they import from outside the project; nothing the project's modules hold executes here.
+
+The replay (the default) imports those with no initializer and no environment extension run and hands every declaration of the project to Lean's kernel over them, then reads those same declarations. It prints one JSON object: `replay`, whether the kernel accepted every declaration (`exit` 0) or what it said; `modules`, each module's imports within the project; and `declarations`, each with its module, kind, statement, the axioms it rests on, the marker naming it, the declarations of the project it uses directly, and those its statement names (`means`). A declaration Lean made for another (`Name.isInternalDetail`) is listed with no axioms, so that what reaches through it is followed.
+
+The print (`mode=print`) runs the outside modules' initializers and loads their extensions, never the project's, so that Lean's printer knows their notation, puts the project's declarations in unchecked, and prints one JSON object, `shown`: each declaration not made for another, with its statement as the replay writes it and what it says as Lean prints it, null where the printer failed. It decides nothing: the verdict is the replay's alone.
 -/
 import Lean
 
@@ -124,10 +128,11 @@ unsafe def readModule (m : Name) : IO (Array Import × Array ConstantInfo) := do
   return (first.imports, last.constants)
 
 unsafe def main (args : List String) : IO UInt32 := do
-  -- `own=DIR`, the project's own build; `path=DIR`, a package's build; the rest, the project's modules
+  -- `own=DIR`, the project's own build; `path=DIR`, a package's build; `mode=print`, the print; the rest, the project's modules
   let own := args.filterMap (·.dropPrefix? "own=" |>.map (·.toString)) |>.head? |>.getD "/nowhere"
   let paths := args.filterMap (·.dropPrefix? "path=" |>.map (fun d => System.FilePath.mk d.toString))
-  let mods := args.filter (fun a => !a.startsWith "own=" && !a.startsWith "path=") |>.map String.toName
+  let printing := args.contains "mode=print"
+  let mods := args.filter (fun a => !a.startsWith "own=" && !a.startsWith "path=" && !a.startsWith "mode=") |>.map String.toName
   -- the toolchain's own modules first, so no build can stand in for Init or Lean
   initSearchPath (← findSysroot)
   searchPathRef.modify (· ++ paths ++ [System.FilePath.mk own])
@@ -149,29 +154,39 @@ unsafe def main (args : List String) : IO UInt32 := do
   for i in outside do
     if (← findOLean i.module).toString.startsWith (own ++ "/") then
       throw <| IO.userError s!"the module {i.module} is the project's own and not one loom checks"
-  enableInitializersExecution
-  let env ← importModules outside {} (loadExts := true)
+  if printing then
+    enableInitializersExecution
+  let env ← importModules outside {} (loadExts := printing)
+  let find (c : Name) : Option ConstantInfo := constants[c]? <|> env.find? c
+  let listed (c : ConstantInfo) : Bool := !(c matches .ctorInfo _ || c matches .recInfo _ || c matches .quotInfo _)
+  if printing then
+    let withOurs := withProject constants env
+    let ctx : Core.Context := { fileName := "<loom>", fileMap := default, options := {}, maxHeartbeats := 0 }
+    let print (c : ConstantInfo) : IO (Option String) := do
+      try
+        return some (← ((shown c).run' {} {}).toIO' ctx { env := withOurs })
+      catch _ => return none
+    let mut said : Array Json := #[]
+    for (_, consts) in held do
+      for c in consts do
+        if !listed c || c.name.isInternalDetail then continue
+        said := said.push <| Json.mkObj [("name", toJson c.name.toString), ("statement", toJson (statement find c)), ("shown", toJson (← print c))]
+    IO.println (Json.mkObj [("shown", Json.arr said)]).compress
+    return 0
   let replay ← try
       discard <| env.toKernelEnv.replay constants
       pure (Json.mkObj [("exit", toJson (0 : Nat)), ("output", toJson "")])
     catch e =>
       pure (Json.mkObj [("exit", toJson (1 : Nat)), ("output", toJson e.toString)])
-  let find (c : Name) : Option ConstantInfo := constants[c]? <|> env.find? c
   let owner (c : Name) : Name := match find c with
     | some (.ctorInfo v) => v.induct
     | some (.recInfo v) => v.getMajorInduct
     | _ => c
-  let printing := withProject constants env
-  let ctx : Core.Context := { fileName := "<loom>", fileMap := default, options := {}, maxHeartbeats := 0 }
-  let print (c : ConstantInfo) : IO (Option String) := do
-    try
-      return some (← ((shown c).run' {} {}).toIO' ctx { env := printing })
-    catch _ => return none
   let mut decls : Array Json := #[]
   let mut seen : NameMap NameSet := {}
   for (m, consts) in held do
     for c in consts do
-      if c matches .ctorInfo _ || c matches .recInfo _ || c matches .quotInfo _ then continue
+      if !listed c then continue
       let marker := match c with
         | .defnInfo v => if c.name matches .str _ "_loom" then
             match v.value with | .lit (.strVal s) => some s | _ => none
@@ -184,12 +199,10 @@ unsafe def main (args : List String) : IO UInt32 := do
         seen := s
         axioms := found.toArray.qsort Name.lt
       let uses := (mentions c).map owner |>.filter fun n => n != c.name && constants.contains n
-      let said ← if internal then pure none else print c
       let means := (meaning find c).map owner |>.filter fun n => n != c.name && constants.contains n
       decls := decls.push <| Json.mkObj [
         ("name", toJson c.name.toString), ("module", toJson m.toString), ("kind", toJson (kind c)),
         ("internal", toJson internal), ("statement", toJson (statement find c)),
-        ("shown", toJson said),
         ("means", toJson ((means.foldl (·.insert ·) ({} : NameSet)).toArray.map (·.toString))),
         ("axioms", toJson (axioms.map (·.toString))), ("marker", toJson marker),
         ("uses", toJson ((uses.foldl (·.insert ·) ({} : NameSet)).toArray.map (·.toString)))]

@@ -165,6 +165,15 @@ def test_a_lean_record_needs_what_lean_said(root: Path) -> None:
         write(root, "lean", LOOM, on=Subject("label", "lem:b", H), **stating_nothing)
     with pytest.raises(EvidenceRefused, match="files"):
         write(root, "lean", LOOM, on=Subject("label", "lem:b", H), **{**good, "files": {}})
+    # a record whose print is missing says so, and then shows no declaration
+    write(root, "lean", LOOM, on=Subject("label", "lem:b", H), **{**good, "print": "missing"})
+    with pytest.raises(EvidenceRefused, match="print is 'missing'"):
+        write(root, "lean", LOOM, on=Subject("label", "lem:b", H), **{**good, "print": "late"})
+    shown = [{**good["declarations"][0], "shown": "theorem A.b : True"}]
+    with pytest.raises(EvidenceRefused, match="shows no declaration"):
+        write(
+            root, "lean", LOOM, on=Subject("label", "lem:b", H), **{**good, "print": "missing", "declarations": shown}
+        )
 
 
 def test_a_line_that_cannot_be_used_is_reported_and_the_rest_read(root: Path) -> None:

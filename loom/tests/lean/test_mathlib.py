@@ -1,4 +1,4 @@
-"""Lean tier on a project that requires Mathlib: what turning formalization on leaves lets the first fenced check pass, and Lean's print shows Mathlib's notation.
+"""Lean tier on a project that requires Mathlib: what turning formalization on leaves lets the first fenced check pass, and the check records the replay's verdict before Lean's print, which shows Mathlib's notation.
 
 Gated by `LOOM_LEAN_MATHLIB`, a Lake project whose `.lake/packages` holds Mathlib at the release loom pins with its build, and by Mathlib's cache on this machine (`MATHLIB_CACHE_DIR`, else `~/.cache/mathlib`), both read before a test's HOME is replaced. The packages are cloned into the test's quilt and Mathlib's build unpacked from the cache again, as `lake update` leaves it; nothing is fetched.
 """
@@ -62,8 +62,10 @@ end Formal
 """
 
 
-def test_the_first_check_after_turning_on_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Turning formalization on with Mathlib unpacked from its cache, as `lake update` unpacks it, builds nothing of the project, and the first fenced check finds Mathlib's build whole and records Lean's print in Mathlib's notation."""
+def test_the_first_check_after_turning_on_passes_and_records_the_verdict_before_the_print(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Turning formalization on with Mathlib unpacked from its cache, as `lake update` unpacks it, builds nothing of the project, and the first fenced check finds Mathlib's build whole; the record of the replay's verdict comes first, its print missing, and then the record with Lean's print, in Mathlib's notation."""
     assert SOURCE is not None
     q = showcase(tmp_path)
     switch.turn_on(q)
@@ -88,8 +90,10 @@ def test_the_first_check_after_turning_on_passes(tmp_path: Path, monkeypatch: py
     install.install(q)
     assert not (proj / paths.LAKE_BUILD).exists(), "turning formalization on built the project"
     done = check.check(q)
-    assert done.written == ["sh-0007"] and done.errors == []
-    [record] = replay(q).about("label", "sh-0007", of="lean")
-    assert record.get("replay")["exit"] == 0
-    [row] = record.get("declarations")
+    assert done.written == ["sh-0007"] and done.errors == [] and done.unprinted == []
+    verdict, printed = replay(q).about("label", "sh-0007", of="lean")
+    assert verdict.get("replay")["exit"] == 0 and verdict.get("print") == "missing"
+    assert [d["shown"] for d in verdict.get("declarations")] == [None]
+    assert printed.get("print") is None and printed.get("replay") == verdict.get("replay")
+    [row] = printed.get("declarations")
     assert row["shown"] == "theorem Formal.gauss (n : ℕ) : 2 * ∑ i ∈ Finset.range (n + 1), i = n * (n + 1)"
