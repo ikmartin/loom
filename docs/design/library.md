@@ -137,7 +137,7 @@ Four views, each for one kind of work, as the author set them on 2026-11-20 afte
 
 **Less is shown by default.** The first mock-up was noisy, and it is not to feel like a trading terminal (V6).
 
-**One vocabulary says how a thing stands**, on every surface: one shape for the reading of the paper and another for Lean, filled for a person's yes, a colour for what waits on a person, an outline for nothing yet. The marks and their words are `library-views.md`'s (§2, "Status"), and the column's foot opens their legend in every view. A node a person has compared with its paper "matches the paper", decided with the author because "checked" was read as possibly meaning the mathematics, or Lean.
+**One vocabulary says how a thing stands**, on every surface: one shape for the reading of the paper and another for Lean, filled for a person's yes, a colour for what waits on a person, an outline for nothing yet. The marks and their words are `library-views.md`'s (§2, "Status"), and the column's foot opens them, in every view, in How loom works. A node a person has compared with its paper "matches the paper", decided with the author because "checked" was read as possibly meaning the mathematics, or Lean.
 
 **Open.** What a control for orphaned things in Docs holds: annotations whose document is gone, which today are one row on Problems (`loom:document-gone`), files no document reads, or both.
 

@@ -65,17 +65,25 @@ test('a view name shows its hover card after a moment, is described by it, and e
 	}
 });
 
-test('the legend of the marks opens from the foot in every view and closes on a click elsewhere or on Escape', async ({ page }) => {
+test('How loom works opens from the foot in every view, says the margin, the marks, versions and compare, and closes on a click elsewhere or on Escape', async ({ page }) => {
 	await open(page, 1440);
 	for (const v of ['docs', 'library', 'web', 'review']) {
 		await page.getByTestId(`primary-${v}`).click();
+		await expect(page.getByTestId('legend-open')).toHaveText('How loom works');
 		await page.getByTestId('legend-open').click();
 		await expect(page.getByTestId('legend').locator('[data-mark]')).toHaveCount(8);
 		await page.mouse.click(800, 400);
 		await expect(page.getByTestId('legend')).toHaveCount(0);
 	}
 	await page.getByTestId('legend-open').click();
-	await expect(page.getByTestId('legend-open')).toHaveAttribute('aria-controls', 'marks-legend');
+	const panel = page.getByTestId('legend');
+	await expect(panel.getByTestId('legend-margin')).toContainText('a proposed edit, to keep or discard');
+	await expect(panel.getByTestId('legend-versions')).toContainText('Saving a file makes none.');
+	await expect(panel).toContainText('choose compare beside a version');
+	// the whole panel is on screen, at the foot of a 900 px window
+	const box = (await panel.boundingBox())!;
+	expect(box.y).toBeGreaterThanOrEqual(0);
+	await expect(page.getByTestId('legend-open')).toHaveAttribute('aria-controls', 'how-loom-works');
 	await page.keyboard.press('Escape');
 	await expect(page.getByTestId('legend')).toHaveCount(0);
 });
