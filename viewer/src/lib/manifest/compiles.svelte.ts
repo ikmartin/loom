@@ -68,3 +68,14 @@ export function compileError(c: Compile | undefined): string {
 	if (!l || l.result === 'ok') return '';
 	return docs.compileError(docs.texError(l.error ?? ''), stoppedAt(c));
 }
+
+/**
+ * Whether a document is being typeset for the first time, its page not come yet: its text is not TeX's (`fromTex`), and its first compile this server runs is under way, or a compile has just ended well and the manifest that carries its page is still to come (`generated`, the manifest's time, before the run ended).
+ *
+ * A document TeX gives no page, as a beamer talk, keeps its text as its source between compiles, since a later compile under way has a `last` and one long published has ended by `generated`.
+ */
+export function typesettingFirst(c: Compile | undefined, generated: string, fromTex: boolean): boolean {
+	if (fromTex || !c) return false;
+	if (c.state !== 'idle') return !c.last;
+	return !!c.last && c.last.result !== 'failed' && c.last.ended > generated;
+}
