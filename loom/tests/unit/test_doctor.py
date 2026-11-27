@@ -399,6 +399,8 @@ def test_no_quilt_section_outside_a_quilt(box: Box) -> None:
 
 @pytest.mark.tree
 def test_the_demo_is_ok_in_every_quilt_item(box: Box) -> None:
+    from loom.app import registry
+
     q = quilt(box)
     data = doctor(box, cwd=q / "drafting", code=0)
     assert data["quilt"] == str(q.resolve())
@@ -415,7 +417,7 @@ def test_the_demo_is_ok_in_every_quilt_item(box: Box) -> None:
         "library": ("ok", "every node file passes the store's checks"),
         ".gitignore": ("ok", "has loom's lines"),
         "config": ("ok", "config.toml read cleanly"),
-        "server": ("ok", "not running"),
+        "server": ("ok", f"not running; it keeps http://127.0.0.1:{registry.port_of(q)}/"),
         "lean": ("ok", "formalization is off here"),
         "writes": ("ok", "nothing loom wrote is left unsettled"),
     }
@@ -445,6 +447,7 @@ def test_doctor_says_whether_the_home_page_and_the_quilts_server_run_and_where(b
             pass
 
     q = quilt(box)
+    registry.forget(registry.remember(q).id)  # `loom init` put it on the list
     data = doctor(box, cwd=q / "drafting", code=0)
     assert item(data, "app")["detail"] == "not running" and item(data, "server")["detail"] == "not running"
     kept = registry.remember(q).port
