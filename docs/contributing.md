@@ -14,7 +14,7 @@ One repository: loom, and its viewer in a codebase of its own, each with its own
 | `demos/` | the committed example quilts, rebuilt by `demos/build.py` |
 | `scripts/` | `verify`, `regen`, and the documentation checks `verify` runs (`scripts/checks/`) |
 
-To set up: `uv tool install -e ./loom` puts this checkout's `loom` on your PATH; `uv sync` in `loom/` makes `loom/.venv`, which the viewer's write and reading suites serve with; `npm ci` and `npx playwright install chromium` in `viewer/`. A session in a worktree of its own does the `uv sync` and the `npm ci` there, so that what it tests is its own tree and not the main checkout's.
+To set up: `uv tool install -e ./loom` puts this checkout's `loom` on your PATH; `uv sync` in `loom/` makes `loom/.venv`, which the viewer's write and reading suites serve with; `npm ci` and `npx playwright install chromium` in `viewer/`. A session in a worktree of its own does the `uv sync` and the `npm ci` there, so that what it tests is its own tree and not the main checkout's. Where `loom` is still not found, `uv tool update-shell` and a new terminal mend it. `loom serve` in `demos/showcase` shows a quilt in the viewer.
 
 The workspace's documents and loom are GPL-3.0-or-later; the viewer AGPL-3.0-or-later; `loom.sty` and the demo quilt MIT (`loom/src/loom/assets/LICENSE`), so they can travel with a paper.
 
