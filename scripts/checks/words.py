@@ -99,7 +99,6 @@ LEGACY = (
     "viewer/src/lib/workspace/CompareControls.svelte",
     "viewer/src/lib/workspace/ItemToolbar.svelte",
     "viewer/src/lib/workspace/Pane.svelte",
-    "viewer/src/lib/workspace/PaneHead.svelte",
     "viewer/src/lib/workspace/PaneViews.svelte",
     "viewer/src/lib/workspace/VersionControls.svelte",
     "viewer/src/lib/workspace/Workspace.svelte",

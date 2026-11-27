@@ -238,18 +238,34 @@ test.describe('the arrangement', () => {
 		await expect(pane(page, 0)).toHaveClass(/focused/);
 	});
 
-	test('⇄ moves a tab and focus follows it', async ({ page }) => {
+	test('⇄ splits a tab off into a second pane, named for it, and focus follows it', async ({ page }) => {
 		await page.goto('/master/drafting/main');
 		await page.getByTestId('docs-tree').getByRole('link', { name: 'talk.tex' }).click();
 		await expect(tabs(page, 0)).toHaveCount(2);
-		await tabs(page, 0).nth(1).getByTestId('tab-move').click();
+		const split = tabs(page, 0).nth(1).getByTestId('tab-move');
+		await expect(split).toHaveAttribute('title', 'Split: open in a second pane beside');
+		await expect(split).toHaveAccessibleName('Split: open talk.tex in a second pane beside');
+		await split.click();
 		await expect(tabs(page, 0)).toHaveCount(1);
 		await expect(tabs(page, 1)).toHaveText([/talk\.tex/]);
 		await expect(pane(page, 1)).toHaveClass(/focused/);
-		// moving the last tab of a pane closes it, and the other takes the width
+	});
+
+	test('⇄ with two panes swaps them, never folding them into tabs, named for what it does', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/master/drafting/main' + beside('/master/drafting/talk'));
+		await expect(tabs(page, 1)).toHaveText([/talk\.tex/]);
+		const swap = tabs(page, 0).first().getByTestId('tab-move');
+		await expect(swap).toHaveAttribute('title', 'Swap with the other pane');
+		await expect(swap).toHaveAccessibleName('Swap main.tex with talk.tex, in the other pane');
+		await swap.click();
+		await expect(tabs(page, 0)).toHaveText([/talk\.tex/]);
+		await expect(tabs(page, 1)).toHaveText([/main\.tex/]);
+		await expect(pane(page, 1)).toHaveClass(/focused/);
+		// and back again from the other side
 		await tabs(page, 1).first().getByTestId('tab-move').click();
-		await expect(pane(page, 1)).toHaveCount(0);
-		await expect(tabs(page, 0)).toHaveCount(2);
+		await expect(tabs(page, 0)).toHaveText([/main\.tex/]);
+		await expect(tabs(page, 1)).toHaveText([/talk\.tex/]);
 	});
 
 	test('at 1440 with two panes, each pane keeps its margin marks inside it and inside the window', async ({ page }) => {

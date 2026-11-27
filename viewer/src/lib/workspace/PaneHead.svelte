@@ -8,11 +8,15 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { kinds, tabOf } from './registry';
 	import { workspace } from './store.svelte';
+	import { frame } from '$lib/words/frame';
 
 	let { index }: { index: number } = $props();
 
 	const pane = $derived(workspace.panes[index]);
 	const lone = $derived(workspace.panes.length === 1 && (pane?.items.length ?? 0) === 1);
+	/** The other pane's front tab, which a tab's ⇄ swaps places with; null with one pane, where ⇄ splits. */
+	const other = $derived(workspace.panes.length === 2 ? workspace.active(1 - index) : null);
+	const otherName = $derived(other && store.manifest ? tabOf(other, store.manifest) : (other?.id ?? ''));
 
 	let row = $state<HTMLElement | null>(null);
 	let rowWidth = $state(0);
@@ -57,7 +61,7 @@
 
 {#if pane}
 	<div class="head" data-testid="pane-head-{index}">
-		<div class="tabs" class:narrow role="tablist" aria-label="open in this pane" bind:this={row}>
+		<div class="tabs" class:narrow role="tablist" aria-label={frame.tabs.row} bind:this={row}>
 			{#each pane.items as item (itemKey(item))}
 				{@const key = itemKey(item)}
 				{@const name = store.manifest ? tabOf(item, store.manifest) : item.id}
@@ -73,12 +77,12 @@
 							<button
 								type="button"
 								class="move"
-								title="Move to the other pane"
-								aria-label="Move {name} to the other pane"
+								title={other ? frame.tabs.swap : frame.tabs.split}
+								aria-label={other ? frame.tabs.swapLabel(name, otherName) : frame.tabs.splitLabel(name)}
 								data-testid="tab-move"
 								onclick={() => workspace.move(index, key)}>⇄</button
 							>
-							<button type="button" title="Close" aria-label="Close {name}" data-testid="tab-close" onclick={() => workspace.close(index, key)}>×</button>
+							<button type="button" title={frame.tabs.close} aria-label={frame.tabs.closeLabel(name)} data-testid="tab-close" onclick={() => workspace.close(index, key)}>×</button>
 						</span>
 					{/if}
 				</div>
@@ -145,7 +149,7 @@
 	.tab:has(.acts).on .label,
 	.tab:has(.acts):hover .label,
 	.tab:has(.acts):focus-within .label {
-		padding-right: 40px;
+		padding-right: 44px;
 	}
 	.marker {
 		display: inline-flex;
@@ -171,7 +175,7 @@
 	}
 	.acts button {
 		font: inherit;
-		font-size: 11px;
+		font-size: 13px;
 		line-height: 1;
 		color: var(--ink-faint);
 		background: none;
@@ -191,10 +195,10 @@
 		padding-right: 6px;
 	}
 	.narrow .tab:has(.acts):hover .label {
-		padding-right: 20px;
+		padding-right: 22px;
 	}
 	.narrow .tab:has(.acts):has(:focus-visible) .label {
-		padding-right: 36px;
+		padding-right: 40px;
 	}
 	.narrow .acts {
 		padding-left: 2px;
