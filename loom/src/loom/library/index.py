@@ -1,6 +1,6 @@
 """The index loom derives from the library's nodes and the tag log (docs/design/library.md, "Scale"): SQLite at `.loom/cache/library/nodes.sqlite3`, with an FTS5 table for the words of statements and proofs.
 
-Nothing makes it before it is asked for: `NodeIndex.open` makes it on first use and brings it up to date on each, reading again only the files whose size or modification time changed, and a file changed within `RACY` of the last update, whose time may not have moved. The tag log is replayed whole when it changed. An index of another version, or one SQLite cannot read, is made again; `rebuild` makes it again at will. A file that cannot be read as a node is left out of it; `checks` reports it.
+Nothing makes it before it is asked for: `NodeIndex.open` makes it on first use and brings it up to date on each, reading again only the files whose size or times changed, and a file changed within `RACY` of the last update, whose time may not have moved; while a server runs, only the files its listener heard change (`library.listen`), looking at no other. The tag log is replayed whole when it changed. An index of another version, or one SQLite cannot read, is made again; `rebuild` makes it again at will. A file that cannot be read as a node is left out of it; `checks` reports it.
 
 A work's order is kept with records not built yet: `position` waits for them, and until then a work's statements stand in their numbers' order, read naturally, then by first page.
 """
@@ -15,7 +15,7 @@ import shutil
 import sqlite3
 import time
 import unicodedata
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -103,6 +103,48 @@ class Row:
     parent: str | None
     empty: bool
     hash: str
+
+
+class Rows(Mapping[str, Row]):
+    """Nodes as a list shows them, by id in the order given, each made a `Row` only when one is looked up: a list of thousands asks most of them for their work, their hash and whether they are empty, which `source`, `hash` and `empty` answer without one."""
+
+    def __init__(self, raw: dict[str, tuple[Any, ...]]) -> None:
+        self._raw = raw
+
+    def __getitem__(self, node_id: str) -> Row:
+        return _row(self._raw[node_id])
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._raw)
+
+    def __len__(self) -> int:
+        return len(self._raw)
+
+    def __contains__(self, node_id: object) -> bool:
+        return node_id in self._raw
+
+    def source(self, node_id: str) -> str | None:
+        return self._raw[node_id][5]  # type: ignore[no-any-return]
+
+    def empty(self, node_id: str) -> bool:
+        return bool(self._raw[node_id][8])
+
+    def hash(self, node_id: str) -> str:
+        return self._raw[node_id][9]  # type: ignore[no-any-return]
+
+    def ordered(self, key: Callable[[tuple[Any, ...]], Any]) -> Rows:
+        """These rows sorted by `key` of each raw row, `_ROW`'s columns in order."""
+        return Rows(dict(sorted(self._raw.items(), key=lambda kv: key(kv[1]))))
+
+    @classmethod
+    def of(cls, rows: Iterable[Row]) -> Rows:
+        """Rows made from `Row`s, as a reader of the files makes them."""
+        return cls(
+            {
+                r.id: (r.id, r.kind, r.taxon, r.number, r.title, r.source, r.pages, r.parent, int(r.empty), r.hash)
+                for r in rows
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -265,8 +307,7 @@ class NodeIndex:
         self._works: dict[str, str] = {}
         #: The file this connection holds, by inode: one removed or replaced under it (a sweep of the cache, a person) is made again at the next `refresh`.
         self._inode = _inode(root / NODE_INDEX)
-        #: Temporary files of writers the last look at the folder found, which a writer holding the library's lock removes.
-        self.leftovers: list[str] = []
+        self._leftovers: list[str] | None = None
 
     # ---- making and keeping ------------------------------------------------------------------------------------------
 
@@ -386,13 +427,15 @@ class NodeIndex:
     def refresh(self) -> Refreshed:
         """Bring the index up to date with the files and the tag log.
 
-        The folder is looked at once, without the write lock; only when something differs is the lock taken, and what was seen is read under it. The time of the update is taken before the look, so a file that changes while it is read is read again at the next. An index whose file was removed under it (a sweep of the cache) is made again first.
+        The folder is looked at once, without the write lock; only when something differs is the lock taken, and what was seen is read under it. The time of the update is taken before the look, so a file that changes while it is read is read again at the next. An index whose file was removed under it (a sweep of the cache) is made again first. Where this process listens to the folder (`library.listen`), the files heard changing are read again and no other is looked at, unless the listener cannot vouch for them: its first update, a gap, a watch stopped, an index last scanned elsewhere or made again, the tag log changed, or the folder's own times moved (a file made, removed or renamed, as every write of loom's is, whose notice may not have arrived yet), each of which looks at every file.
 
         Returns
         -------
         Refreshed
             What was read and changed.
         """
+        from loom.library.listen import listening
+
         path = self.root / NODE_INDEX
         if _inode(path) != self._inode:
             # the file this connection holds is gone, and SQLite would answer every write "readonly database"
@@ -400,11 +443,48 @@ class NodeIndex:
             path.parent.mkdir(parents=True, exist_ok=True)
             self.db = self._connect(path)
             self._inode = _inode(path)
+        listener = listening(self.root)
+        if listener is None:
+            return self._scan_all()
+        with listener.lock:
+            try:
+                heard = listener.drain()
+                # the folder's own times move at once with every file made, removed or renamed in it, as loom's own writes always do, before their notice arrives
+                folder = _folder_stamp(self.root / LIBRARY_NODES)
+                # only an index this listener last scanned whole, its tags as they were, is brought up to date by what it heard
+                if (
+                    heard is not None
+                    and folder == listener.stamp
+                    and listener.scanned == self._scanned()
+                    and self._tags_due(int(self._meta("refreshed") or 0)) is None
+                ):
+                    self._leftovers = None
+                    return self.take(heard) if heard else Refreshed(0, 0, 0, False, self.generation())
+                done = self._scan_all()
+                listener.scanned, listener.stamp = self._scanned(), folder
+                return done
+            except BaseException:
+                listener.lost()
+                raise
+
+    def _scan_all(self) -> Refreshed:
+        """Look at every node file's size and times, and read again those that differ (`refresh`)."""
         started = time.time_ns()
-        present, self.leftovers = _scan(self.root / LIBRARY_NODES)
+        present, self._leftovers = _scan(self.root / LIBRARY_NODES)
         if self._unchanged(present):
             return Refreshed(0, 0, 0, False, self.generation())
         return self._update(present, started, None)
+
+    def _scanned(self) -> tuple[int | None, str | None]:
+        """Which index this is and when it was last scanned whole: what a listener holds of the last scan it made, so that an index made again, or scanned by another process, is scanned again here before what was heard is trusted."""
+        return self._inode, self._meta("refreshed")
+
+    @property
+    def leftovers(self) -> list[str]:
+        """Temporary files of writers in the folder, which a writer holding the library's lock removes: as the last scan found them, or looked for now where the update scanned nothing."""
+        if self._leftovers is None:
+            self._leftovers = _scan(self.root / LIBRARY_NODES)[1]
+        return self._leftovers
 
     def take(self, names: Iterable[str]) -> Refreshed:
         """Bring the index up to date for the files `names` alone, which a writer has just written or removed; the rest waits for the next update, which reads them again since they were written after the last.
@@ -710,6 +790,22 @@ class NodeIndex:
         """The node `node_id` as a list shows it, with its hash, or None."""
         found = self.db.execute(f"SELECT {_ROW} FROM nodes WHERE id = ?", (node_id,)).fetchone()
         return _row(found) if found else None
+
+    def every(self, kind: str) -> Rows:
+        """Every node of a kind, as a list shows it, with its hash, by id.
+
+        Parameters
+        ----------
+        kind : str
+            `statement`, `proof`, `reference` or `macros`.
+
+        Returns
+        -------
+        Rows
+            No body; `node` gives one.
+        """
+        found = self.db.execute(f"SELECT {_ROW} FROM nodes WHERE kind = ?", (kind,)).fetchall()
+        return Rows({r[0]: r for r in sorted(found)})
 
     def hashed(self, digest: str) -> str | None:
         """The node whose file has the hash `digest`, the first by id where two files are the same bytes, or None."""
@@ -1042,6 +1138,15 @@ def _inode(path: Path) -> int | None:
 
 #: The name a writer gives a node's file before it renames it into place, `.<id>.node.<pid>.tmp`; nothing else in the folder is a writer's.
 _LEFTOVER = re.compile(r"\.(.+)\.node\.\d+\.tmp")
+
+
+def _folder_stamp(folder: Path) -> tuple[int, int, int] | None:
+    """The nodes folder's own inode and times, None where there is none."""
+    try:
+        st = folder.stat()
+    except OSError:
+        return None
+    return st.st_ino, st.st_mtime_ns, st.st_ctime_ns
 
 
 def _scan(folder: Path) -> tuple[dict[str, os.stat_result], list[str]]:

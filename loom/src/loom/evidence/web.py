@@ -18,6 +18,9 @@ from loom.paths import LOOM
 from loom.scan.macros import LOOM_MACROS
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from loom.library.index import Row, Rows
     from loom.library.node import Node
     from loom.scan.model import Macro
     from loom.scan.nodes import NodeRec
@@ -78,14 +81,23 @@ class Web(Protocol):
         """Every hash what `key` names has now, in any document: a label's, each block bearing it; a node's, its one text."""
 
 
-class LibraryWeb:
-    """The library's texts now, read from the node store's files: a statement's or a proof's text by its id and the hash of its whole file, what its statement uses, and whether it is a stub.
+#: A work's short name and title by the hash of its reference's file, for every `LibraryWeb` that reads the index: a list made afresh names every work.
+_ENTRIES: dict[str, tuple[str | None, str | None]] = {}
 
-    It reads each file once and keeps what it read for its life, so one is made for each read; a quilt with no library answers nothing. A node's notation is what its work's macros node defines and its text uses (`definitions_of`); a work with none defines nothing.
+
+class Moved(RuntimeError):
+    """A node's text changed after a web read its hash, so what it reads of the node now is of another text: the read is made again."""
+
+
+class LibraryWeb:
+    """The library's texts now: a statement's or a proof's text by its id and the hash of its whole file, what its statement uses, and whether it is a stub.
+
+    It reads the node store's files, each once, and keeps what it read for its life, so one is made for each read; a quilt with no library answers nothing. With `index`, it takes the hashes and the light columns of every statement and proof from the index, opened once and so brought up to date first (`NodeIndex.open`: by the server's listener, else by a look at every file's size and times), and a node's body only when asked, checked against the hash it took then: a text that moved meanwhile is `Moved`, never shown beside a hash it is not, and a body the index no longer holds is read from its file. Where the index cannot be opened it reads the files. A node's notation is what its work's macros node defines and its text uses (`definitions_of`); a work with none defines nothing.
     """
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, index: bool = False) -> None:
         self.root = root
+        self.index = index
         self._read: dict[str, tuple[str, Node] | None] = {}
         self._defs: dict[str, dict[str, tuple[str, str]]] = {}
         self._entries: dict[str, tuple[str | None, str | None]] = {}
@@ -102,29 +114,154 @@ class LibraryWeb:
         except OSError:
             return frozenset()
 
+    @cached_property
+    def _indexed(self) -> _Indexed | None:
+        """What the index held of the library when this web first asked, brought up to date as it was opened; None where the web reads the files, asked to or because the index cannot be opened."""
+        import sqlite3
+
+        from loom.library.index import IndexUnavailable, NodeIndex
+
+        if not self.index:
+            return None
+        try:
+            with NodeIndex.open(self.root) as ix:
+                statements = ix.every("statement")
+                works = {r[0]: r[1] for r in ix.db.execute("SELECT id, hash FROM nodes WHERE kind = 'reference'")}
+        except (IndexUnavailable, sqlite3.Error, OSError):
+            return None
+        return _Indexed(self.root, statements, dict(sorted(works.items())))
+
+    def rows(self, kind: str = "statement") -> Rows:
+        """Every statement, or every proof, the library holds that reads, by id in order: its light columns and hash, no body.
+
+        Parameters
+        ----------
+        kind : str, default 'statement'
+            `statement` or `proof`.
+
+        Returns
+        -------
+        Rows
+            From the index where this web reads it, else from every file of that kind.
+        """
+        held = self._indexed
+        if held is not None:
+            return held.statements if kind == "statement" else held.proofs
+        from loom.library.index import Rows
+        from loom.library.store import node_ids
+
+        found = [self.row(i) for i in node_ids(self.root) if is_node(i, kind)]
+        return Rows.of(r for r in found if r is not None)
+
+    def row(self, name: str) -> Row | None:
+        """A statement's or a proof's light columns and hash, by its id; None for any other node, one absent, or one that does not read."""
+        held = self._indexed
+        if held is not None:
+            if name in held.statements:
+                return held.statements[name]
+            return held.proofs[name] if is_node(name, "proof") and name in held.proofs else None
+        got = self.file(name)
+        if got is None:
+            return None
+        from loom.library.index import Row
+
+        n = got[1]
+        return Row(name, n.kind, n.taxon, n.number, n.title, n.source, n.pages, n.parent, n.empty, got[0])
+
+    def works(self) -> list[str]:
+        """Every work of the library, by its reference's id, in order: the index's readable references, or every reference's file."""
+        held = self._indexed
+        if held is not None:
+            return list(held.works)
+        from loom.library.store import node_ids
+
+        return [i for i in node_ids(self.root) if is_node(i, "reference")]
+
+    def _hash(self, name: str) -> str | None:
+        """The hash this web holds for a statement or a proof: what it read of it, or what the index held when it was opened."""
+        held = self._indexed
+        if held is not None:
+            return held.hash(name)
+        got = self.file(name)
+        return got[0] if got is not None else None
+
     def file(self, name: str) -> tuple[str, Node] | None:
-        """A statement's or a proof's file, by its id: its hash and the node it holds; None for any other node, one absent, or one that does not read."""
+        """A statement's or a proof's file, by its id: its hash and the node it holds; None for any other node, one absent, or one that does not read.
+
+        Raises
+        ------
+        Moved
+            Where this web reads the index and the node's text is no longer the one whose hash it holds.
+        """
+        if name not in self._read:
+            held = self._indexed
+            self._read[name] = self._from_index(name, held) if held is not None else self._from_file(name)
+        return self._read[name]
+
+    def prefetch(self, names: Iterable[str]) -> None:
+        """Read several nodes' texts at once, as `file` reads each, for a read that asks of many: search, and what uses each result."""
+        held = self._indexed
+        want = {n for n in names if n not in self._read}
+        if held is None or not want:
+            return
+        import json
+        import sqlite3
+
+        from loom.library.index import NodeIndex
+        from loom.library.node import Node
+
+        try:
+            with NodeIndex.open(self.root, refresh=False) as ix:
+                found = ix.db.execute(
+                    "SELECT id, hash, header, body FROM nodes WHERE kind IN ('statement', 'proof')"
+                ).fetchall()
+        except sqlite3.Error:
+            found = []
+        for node_id, digest, header, body in found:
+            if node_id in want and held.hash(node_id) == digest:
+                self._read[node_id] = (digest, Node.from_header(json.loads(header), body))
+
+    def _from_index(self, name: str, held: _Indexed) -> tuple[str, Node] | None:
+        """A node the index held when this web opened it, its text read now from the index and else from its file, either only where its hash is the one held."""
+        import json
+        import sqlite3
+
+        from loom.library.index import NodeIndex
+        from loom.library.node import Node
+
+        digest = held.hash(name)
+        if digest is None:
+            return None
+        try:
+            with NodeIndex.open(self.root, refresh=False) as ix:
+                found = ix.db.execute("SELECT hash, header, body FROM nodes WHERE id = ?", (name,)).fetchone()
+        except sqlite3.Error:
+            found = None
+        if found is not None and found[0] == digest:
+            return digest, Node.from_header(json.loads(found[1]), found[2])
+        got = self._from_file(name)
+        if got is None or got[0] != digest:
+            raise Moved(f"{name} changed after the library's hashes were read")
+        return got
+
+    def _from_file(self, name: str) -> tuple[str, Node] | None:
         from loom.library.node import NodeUnreadable, node_hash, read_node
         from loom.library.store import folder
 
-        if name not in self._read:
-            found = None
-            if is_node(name, "statement", "proof") and f"{name}.node" in self._names:
-                try:
-                    data = (folder(self.root) / f"{name}.node").read_bytes()
-                    found = (node_hash(data), read_node(data, f"{name}.node"))
-                except (OSError, NodeUnreadable):
-                    found = None
-            self._read[name] = found
-        return self._read[name]
+        if not (is_node(name, "statement", "proof") and f"{name}.node" in self._names):
+            return None
+        try:
+            data = (folder(self.root) / f"{name}.node").read_bytes()
+            return node_hash(data), read_node(data, f"{name}.node")
+        except (OSError, NodeUnreadable):
+            return None
 
     def subject(self, here: Here) -> Subject | None:
-        got = self.file(here.name) if here.kind == "node" else None
-        return Subject("node", here.name, got[0]) if got else None
+        digest = self._hash(here.name) if here.kind == "node" else None
+        return Subject("node", here.name, digest) if digest else None
 
     def resolve(self, key: tuple[str, str], near: Here) -> str | None:
-        got = self.file(key[1]) if key[0] == "node" else None
-        return got[0] if got else None
+        return self._hash(key[1]) if key[0] == "node" else None
 
     def _uses(self, name: str) -> list[str]:
         """The statements a node's text says it uses, stubs included, in the order its header gives them."""
@@ -176,21 +313,45 @@ class LibraryWeb:
         return self._entry(ref)[1]
 
     def _entry(self, ref: str | None) -> tuple[str | None, str | None]:
-        """A work's short name and title, read once for this web's life."""
-        from loom.library.entries import read_entry, short
-        from loom.library.store import read
-
+        """A work's short name and title, read once for this web's life; where this web reads the index, once for the process for each text of the reference (`_ENTRIES`)."""
         if not ref:
             return None, None
         if ref not in self._entries:
-            node = read(self.root, ref)
-            entry = read_entry(node.body) if node is not None else None
-            self._entries[ref] = (
-                (short(entry.fields, entry.key), entry.fields.get("title") or None)
-                if entry is not None
-                else ((ref, None) if node is not None else (None, None))
-            )
+            held = self._indexed
+            digest = held.works.get(ref) if held is not None else None
+            if digest is not None and digest in _ENTRIES:
+                self._entries[ref] = _ENTRIES[digest]
+            else:
+                self._entries[ref] = self._read_entry(ref, digest)
+                if digest is not None:
+                    if len(_ENTRIES) > 4096:
+                        _ENTRIES.clear()
+                    _ENTRIES[digest] = self._entries[ref]
         return self._entries[ref]
+
+    def _read_entry(self, ref: str, digest: str | None) -> tuple[str | None, str | None]:
+        """A work's short name and title, from the index's copy of its reference of the hash `digest`, else from its file."""
+        import sqlite3
+
+        from loom.library.entries import read_entry, short
+        from loom.library.index import NodeIndex
+        from loom.library.node import Node
+        from loom.library.store import read
+
+        node: Node | None = None
+        if digest is not None:
+            try:
+                with NodeIndex.open(self.root, refresh=False) as ix:
+                    found = ix.db.execute("SELECT body FROM nodes WHERE id = ? AND hash = ?", (ref, digest)).fetchone()
+            except sqlite3.Error:
+                found = None
+            node = Node(id=ref, taxon="reference", body=found[0]) if found is not None else None
+        if node is None:
+            node = read(self.root, ref)
+        entry = read_entry(node.body) if node is not None else None
+        if entry is not None:
+            return short(entry.fields, entry.key), entry.fields.get("title") or None
+        return (ref, None) if node is not None else (None, None)
 
     def macros(self, ref: str | None) -> dict[str, str] | None:
         """A work's macros node as a body draws it beside a node's text, `{node, hash, body}`; None for a work with none, or a node naming no work."""
@@ -219,8 +380,14 @@ class LibraryWeb:
         return None
 
     def stub(self, here: Here) -> bool | None:
-        got = self.file(here.name) if here.kind == "node" else None
-        return got[1].empty if got else None
+        held = self._indexed
+        if held is not None and here.kind == "node":
+            if here.name in held.statements:
+                return held.statements.empty(here.name)
+            row = self.row(here.name)
+            return row.empty if row else None
+        row = self.row(here.name) if here.kind == "node" else None
+        return row.empty if row else None
 
     def holds(self, ref: str, want: str) -> bool | None:
         """Whether the work `ref` holds its `pdf` or its `tex`, by its reference; None for no such work."""
@@ -236,8 +403,36 @@ class LibraryWeb:
         return None
 
     def texts(self, key: tuple[str, str]) -> set[str]:
-        got = self.file(key[1]) if key[0] == "node" else None
-        return {got[0]} if got else set()
+        digest = self._hash(key[1]) if key[0] == "node" else None
+        return {digest} if digest else set()
+
+
+class _Indexed:
+    """What a `LibraryWeb` took from the index: each statement's light columns and hash, and each work's reference by its id with its hash, as the index was opened; each proof's when first asked, the index opened again, since a list asks of none."""
+
+    def __init__(self, root: Path, statements: Rows, works: dict[str, str]) -> None:
+        self.root = root
+        self.statements = statements
+        self.works = works
+
+    @cached_property
+    def proofs(self) -> Rows:
+        import sqlite3
+
+        from loom.library.index import IndexUnavailable, NodeIndex, Rows
+
+        try:
+            with NodeIndex.open(self.root) as ix:
+                return ix.every("proof")
+        except (IndexUnavailable, sqlite3.Error, OSError):
+            return Rows({})
+
+    def hash(self, name: str) -> str | None:
+        if name in self.statements:
+            return self.statements.hash(name)
+        if is_node(name, "proof") and name in self.proofs:
+            return self.proofs.hash(name)
+        return None
 
 
 class Joined:

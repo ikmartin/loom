@@ -10,10 +10,10 @@ from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain
 
 
 def _drafts(root: Path) -> Any:
-    """The drafts' results for a read: the publisher's scan, its last manifest ({} before a first build) and the evidence, kept from the last read while that scan is the same object and no file read is changed (`memo.kept`)."""
+    """The drafts' results for a read: the publisher's scan, its last manifest ({} before a first build) and the evidence, kept from the last read while that scan is the same object, no file read is changed and the library's index is at the same generation (`memo.kept`, `memo.library_mark`)."""
     import json
 
-    from loom.evidence.memo import kept, read_files
+    from loom.evidence.memo import kept, library_mark, read_files
     from loom.evidence.webview import drafts
 
     scan = _scan(root)
@@ -23,7 +23,7 @@ def _drafts(root: Path) -> Any:
         manifest = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         return drafts(scan, manifest, root)
 
-    return kept(root, "web", scan, lambda: read_files(root), make)
+    return kept(root, "web", scan, lambda: read_files(root, nodes=False), make, also=lambda: library_mark(root))
 
 
 def _scope(body: dict[str, Any]) -> tuple[str, str | None]:
@@ -31,12 +31,24 @@ def _scope(body: dict[str, Any]) -> tuple[str, str | None]:
 
 
 def _answer(root: Path, read: Any) -> dict[str, Any]:
-    """Run a read, with the library's generation it answers at (`library-views.md` §2), its refusals as the write API answers them: a scope it does not know or one wanting a draft is `bad-field`, a result it does not hold `no-such-result`."""
+    """Run a read over the drafts as they are now (`_drafts`), with the library's generation it answers at (`library-views.md` §2), its refusals as the write API answers them: a scope it does not know or one wanting a draft is `bad-field`, a result it does not hold `no-such-result`.
+
+    A library node whose text moved after the read took its hash (`Moved`) makes the drafts again and runs the read once more, so no body is sent beside a hash it is not; a second such move is `moved`, asked again.
+    """
+    from loom.evidence.memo import forget
+    from loom.evidence.web import Moved
     from loom.evidence.webview import ScopeError
     from loom.library.generation import generation
 
     try:
-        return {"ok": True, **read(), "gen": generation(_scan(root))}
+        for attempt in (1, 2):
+            try:
+                return {"ok": True, **read(_drafts(root)), "gen": generation(_scan(root))}
+            except Moved:
+                forget(root, "web")
+                if attempt == 2:
+                    raise ApiError("moved", "the library changed while it was read; ask again", status=409) from None
+        raise AssertionError("unreachable")
     except ScopeError as exc:
         raise ApiError("bad-field", str(exc)) from exc
     except KeyError as exc:
@@ -54,8 +66,7 @@ def _web_list(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     offset = body.get("offset", 0)
     if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
         raise ApiError("bad-field", "offset is a number of rows")
-    d = _drafts(root)
-    return _answer(root, lambda: listing(d, scope, doc, sort=sort, opened=opened, offset=offset))
+    return _answer(root, lambda d: listing(d, scope, doc, sort=sort, opened=opened, offset=offset))
 
 
 def _web_group(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -63,8 +74,7 @@ def _web_group(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
     scope, doc = _scope(body)
     home = _str(body, "group", required=True) or ""
-    d = _drafts(root)
-    return _answer(root, lambda: group(d, scope, doc, home))
+    return _answer(root, lambda d: group(d, scope, doc, home))
 
 
 def _web_search(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -74,8 +84,7 @@ def _web_search(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     limit = body.get("limit", 50)
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
         raise ApiError("bad-field", "limit is a number of hits from 1 to 200")
-    d = _drafts(root)
-    return _answer(root, lambda: search(d, scope, doc, _str(body, "q") or "", limit=limit))
+    return _answer(root, lambda d: search(d, scope, doc, _str(body, "q") or "", limit=limit))
 
 
 def _web_focus(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -83,8 +92,7 @@ def _web_focus(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
     scope, doc = _scope(body)
     key = _str(body, "result", required=True) or ""
-    d = _drafts(root)
-    return _answer(root, lambda: focus(d, scope, doc, key, more=bool(body.get("more"))))
+    return _answer(root, lambda d: focus(d, scope, doc, key, more=bool(body.get("more"))))
 
 
 def _web_graph(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -92,8 +100,7 @@ def _web_graph(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
     scope, doc = _scope(body)
     key = _str(body, "result", required=True) or ""
-    d = _drafts(root)
-    return _answer(root, lambda: graph(d, scope, doc, key))
+    return _answer(root, lambda d: graph(d, scope, doc, key))
 
 
 HANDLERS: dict[str, Handler] = {

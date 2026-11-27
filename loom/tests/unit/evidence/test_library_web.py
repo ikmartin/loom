@@ -233,3 +233,25 @@ def test_the_asks_default_web_is_the_library_so_a_read_closes_when_its_stub_gain
 def test_a_kept_read_rests_on_every_node_file(root: Path) -> None:
     files = read_files(root)
     assert folder(root) in files and _file(root, "tq-00K3") in files
+
+
+def test_a_hand_edit_in_place_read_through_the_index_is_seen_and_a_check_on_the_old_text_is_never_read_for_the_new(
+    root: Path,
+) -> None:
+    """The library's web reading the index (`index`), opened cold: the index looks at every file's size and times, and a file's change time moves with any write, whatever its size and modification time say."""
+    import os
+
+    def reading() -> Any:
+        return status(replay(root), LibraryWeb(root, index=True), Here("node", "tq-00A4"), lean_now=lambda r: True)
+
+    on = LibraryWeb(root, index=True).subject(Here("node", "tq-00A4"))
+    assert on == LibraryWeb(root).subject(Here("node", "tq-00A4"))
+    write(root, "compared", PERSON, on=on, **{"with": {"ref": "tq-00A1-ref", "pdf": h("4"), "pages": "4"}})
+    assert reading().reading == "matches"
+    path = _file(root, "tq-00A4")
+    st = path.stat()
+    path.write_text(path.read_text(encoding="utf-8").replace("compact", "bounded"), encoding="utf-8")
+    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+    assert path.stat().st_size == st.st_size
+    found = reading()
+    assert found.reading == "unchecked" and found.compared_before
