@@ -1,4 +1,4 @@
-"""The blocks a save changed, as source, for the stream's `drafted` event (a demonstration): the viewer draws each at once with its own mathematics and swaps in TeX's block when the save's build publishes it (`docs/specs/write-api.md` §1).
+"""The blocks a save changed, as source, for the stream's `drafted` event: the viewer draws each at once with its own mathematics and swaps in TeX's block when the save's build publishes it (`docs/specs/write-api.md` §1).
 
 Read only: the published scan's text against the file as saved, nothing written. A block is a statement's or a proof's body when every change in it lies inside that body, else the paragraph round the change when that paragraph holds no environment but a formula's and no heading; anything else is left to TeX.
 """

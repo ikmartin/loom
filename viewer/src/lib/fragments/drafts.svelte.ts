@@ -1,4 +1,4 @@
-// A save's changed blocks drawn from their source until TeX's arrive (a demonstration; `docs/specs/write-api.md` §1, the stream's `drafted` event). The publisher says the blocks as source before the save's build runs TeX; each is drawn in place by the viewer's own converter and MathJax, marked as being typeset, and dropped once the manifest of the build that publishes it has been fetched, so TeX's block takes its place in the same draw. A build that fails drops them too, and the page shows the publication it has.
+// A save's changed blocks drawn from their source until TeX's arrive (`docs/specs/write-api.md` §1, the stream's `drafted` event). The publisher says the blocks as source before the save's build runs TeX; each is drawn in place by the viewer's own converter and MathJax, marked as being typeset, and dropped once the manifest of the build that publishes it has been fetched, so TeX's block takes its place in the same draw. A build that fails drops them too, and the page shows the publication it has.
 
 import { SvelteMap } from 'svelte/reactivity';
 import { store } from '$lib/manifest/client.svelte';

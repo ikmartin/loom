@@ -124,7 +124,7 @@ class Publications:
         self.connected_state = b"[]"
         self.library = 0
         self.library_state = b""
-        #: The blocks the last save changed, as source, and the build that will publish them (`render.quick`), a demonstration.
+        #: The blocks the last save changed, as source, and the build that will publish them (`render.quick`).
         self.drafts = 0
         self.drafts_state = b""
         self._closed = False
@@ -178,7 +178,7 @@ class Publications:
                 self._cond.notify_all()
 
     def drafted(self, state: bytes) -> None:
-        """A save's changed blocks, as one line of JSON, said before the build that publishes them runs TeX (a demonstration)."""
+        """A save's changed blocks, as one line of JSON, said before the build that publishes them runs TeX."""
         with self._cond:
             self.drafts += 1
             self.drafts_state = state
@@ -1066,7 +1066,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
         self._json(HTTPStatus.OK, reading_place(self.quilt_root))
 
     def _stream(self) -> None:
-        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, `connected`, carrying the agent servers alive, and `built`, carrying how the builds ended (`Publications.built_state`), each on opening and each time it changes; `library`, carrying `{"gen": N}`, each time the library's generation moves (`library-views.md` §2, "Freshness"); and `drafted`, carrying a save's changed blocks as source before its build runs TeX (`render.quick`, a demonstration), said before a `built` that comes with it.
+        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, `connected`, carrying the agent servers alive, and `built`, carrying how the builds ended (`Publications.built_state`), each on opening and each time it changes; `library`, carrying `{"gen": N}`, each time the library's generation moves (`library-views.md` §2, "Freshness"); and `drafted`, carrying a save's changed blocks as source before its build runs TeX (`render.quick`), said before a `built` that comes with it.
 
         The viewer fetches the manifest as it would on a poll and learns nothing of what changed. Held open on its own thread; a comment every `HEARTBEAT` seconds keeps an idle one alive, and the server's stop ends it.
         """
@@ -1386,7 +1386,7 @@ class ServeSession:
         self._settle()
 
     def _draft(self, changed: list[Path], n: int) -> None:
-        """Say the blocks a save changed, as source, before build `n` publishes them (`render.quick`, a demonstration); a failure here says so and builds all the same."""
+        """Say the blocks a save changed, as source, before build `n` publishes them (`render.quick`); a failure here says so and builds all the same."""
         last = self.last_report
         if last is None:
             return
