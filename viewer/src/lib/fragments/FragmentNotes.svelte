@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Annotating on the corpus's own text, a node's or a document's: what the toolbar's tools do here.
 	//
-	// **Annotate** on, selected words, widened to whole words where a drag stops partway through one, are marked at once in the look in hand, and Add comment stands at their end until the next selection: typing there starts the comment, so a letter meant for it never reaches a shortcut. A type that stays open until resolved asks something, so its words open the popup to say it first, since loom takes such an annotation only with words; that draft is not saved until its button is pressed, and leaving it with words in it asks first. **Comment** on, a click leaves a comment at the place clicked, on the result it is in, and turns the tool off. With neither on, a selection offers its actions (`SelectionMenu`): **Quote**, which copies the words and where they came from and writes nothing, **Annotate**, which marks them as the tool would, and **New note**; after Annotate, the tool's or the menu's, Add comment stands at the words with the actions beside it, Annotate left out. Alt-drag draws a box round what a selection cannot hold: a labelled equation is noted as itself, anything else as the words of the block under the box.
+	// **Annotate** on, selected words, widened to whole words where a drag stops partway through one, are marked at once in the look in hand, and Add comment stands at their end until the next selection: typing there starts the comment, so a letter meant for it never reaches a shortcut. A type that stays open until resolved asks something, so its words open the popup to say it first, since loom takes such an annotation only with words; that draft is not saved until its button is pressed, and leaving it with words in it asks first. **Comment** on, a click leaves a comment at the place clicked, on the result it is in, and words selected open the comment box on exactly them; either turns the tool off. With neither on, a selection offers its actions (`SelectionMenu`): **Quote**, which copies the words and where they came from and writes nothing, **Annotate**, which opens the comment box on them, and **New note**; after the tool's Annotate, Add comment stands at the words with the actions beside it, Annotate left out. Alt-drag draws a box round what a selection cannot hold: a labelled equation is noted as itself, anything else as the words of the block under the box.
 	//
 	// A quote is what was selected with each formula it touches given as its TeX, the form loom finds in the source, so a selection across `$c$` anchors where the words on screen alone would not.
 	import { refusalOf } from '$lib/library/said';
@@ -200,8 +200,8 @@
 		if ([range.startContainer, range.endContainer, range.commonAncestorContainer].some(notText)) return;
 		marked = null;
 		drop();
-		// Annotate marks whole words: a drag that stops partway through one takes the rest of it, and the selection shows what is marked
-		if (notes.tool === 'annotate' && allowed && snapToWords(range)) {
+		// Annotate and Comment take whole words: a drag that stops partway through one takes the rest of it, and the selection shows what is taken
+		if (notes.tool && allowed && snapToWords(range)) {
 			sel.removeAllRanges();
 			sel.addRange(range);
 		}
@@ -209,8 +209,27 @@
 		if (!words) return;
 		const target = keyOf(range.commonAncestorContainer, fallback);
 		if (notes.tool === 'annotate' && allowed) return void annotate(target, words, range);
-		if (notes.tool === 'comment') return;
+		if (notes.tool === 'comment') {
+			if (allowed) {
+				notes.tool = null;
+				// the click this press ends in lands on the words' block, and must not leave a comment there too
+				swallow = true;
+				setTimeout(() => (swallow = false));
+				commentOn(target, words, range);
+			}
+			return;
+		}
 		offered = { words, target, at: rectOfRange(range), range: range.cloneRange() };
+	}
+
+	/** Set once a selection's press has opened the comment box, for the click that ends the same press. */
+	let swallow = false;
+
+	/** Open the comment box on exactly the words selected: the draft holds them as its quote, and they stay lit while it is written. */
+	function commentOn(target: string, quote: string, range: Range): void {
+		showPending(range);
+		window.getSelection()?.removeAllRanges();
+		openDraft({ target, quote, ...(inDoc ? { in: inDoc } : {}), name: nameFor(target) }, rectOfRange(range));
 	}
 
 	/** Mark the selected words in the look in hand; a type that asks something opens the popup for its words first. */
@@ -268,13 +287,13 @@
 		if (commentSeed.id === id) commentSeed.id = '';
 	}
 
-	/** Annotate, from the actions at a bare selection: its words widened to whole words and marked as the tool marks them. */
+	/** Annotate, from the actions at a bare selection: its words widened to whole words, and the comment box opened on them. */
 	function annotateOffered(): void {
 		const o = offered;
 		if (!o) return;
 		offered = null;
 		snapToWords(o.range);
-		void annotate(o.target, quoteOf(o.range) || o.words, o.range);
+		commentOn(o.target, quoteOf(o.range) || o.words, o.range);
 	}
 
 	function openDraft(draft: Draft, at: Box): void {
@@ -291,6 +310,12 @@
 
 	/** A click while Comment is on leaves a comment there: caught before a mark under it opens its popup. */
 	function clicked(e: MouseEvent): void {
+		if (swallow) {
+			swallow = false;
+			e.preventDefault();
+			e.stopPropagation();
+			return;
+		}
 		if (notes.tool !== 'comment' || !allowed || !root || e.button !== 0) return;
 		const on = e.target as Element;
 		if (notText(on) || on.closest('a, button, input, textarea, select')) return;

@@ -218,12 +218,18 @@ test('words selected in a Markdown file are annotated on the file, marked there,
 	await selectAll(words);
 	await page.getByTestId('selection-actions').click();
 	await page.getByTestId('selection-annotate').click();
+	// the comment box opens on the words, which its Annotate writes with nothing said
+	await page.getByTestId('popup-save').click();
 	// on the file by its path, its quote the file's own words, links and all
 	await expect.poll(() => served.log().filter((e) => e.event === 'created' && e.target === 'notes/intro.md').length).toBe(1);
 	const entry = served.log().find((e) => e.event === 'created' && e.target === 'notes/intro.md')!;
 	expect((entry.anchor as { exact: string }).exact).toContain('A widget is fixed by its locus, and by nothing else. The [page on gadgets](page.html#second)');
 	const mark = file.locator(`mark.annotation[data-annotation="${entry.id}"]`);
 	await expect(mark).toContainText('A widget is fixed by its locus');
+	// written from the comment box, its popup opens on it; Escape puts it away
+	await expect(page.getByTestId('ann-popup').first()).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByTestId('ann-popup')).toHaveCount(0);
 	// the person writes a paragraph above it: the page is drawn again with the mark on the same words
 	const text = onDisk(served.root, 'notes/intro.md');
 	writeFileSync(join(served.root, 'notes/intro.md'), text.replace('## Setup\n', '## Setup\n\nA paragraph put in above.\n'));

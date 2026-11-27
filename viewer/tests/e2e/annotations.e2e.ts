@@ -33,6 +33,30 @@ async function drawn(mark: import('@playwright/test').Locator): Promise<{ line: 
 	};
 }
 
+/** Drag across some words of an element's text as a browser ends a drag: the words selected, then a mouseup, then a click on the element that holds both ends. */
+async function dragAcross(at: import('@playwright/test').Locator, words: string): Promise<void> {
+	await at.scrollIntoViewIfNeeded();
+	await at.evaluate((node, w) => {
+		const walk = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+		for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+			const i = (n.textContent ?? '').indexOf(w);
+			if (i < 0) continue;
+			const range = document.createRange();
+			range.setStart(n, i);
+			range.setEnd(n, i + w.length);
+			const sel = window.getSelection();
+			sel?.removeAllRanges();
+			sel?.addRange(range);
+			const r = range.getBoundingClientRect();
+			const at = { bubbles: true, cancelable: true, clientX: r.right, clientY: r.top + r.height / 2 };
+			n.parentElement?.dispatchEvent(new MouseEvent('mouseup', at));
+			n.parentElement?.dispatchEvent(new MouseEvent('click', at));
+			return;
+		}
+		throw new Error(`no "${w}" in the element`);
+	}, words);
+}
+
 /** Select an element's words as a reader would, and let go. */
 async function selectWithin(at: import('@playwright/test').Locator): Promise<void> {
 	await at.evaluate((node) => {
@@ -450,6 +474,20 @@ test.describe('the toolbar', () => {
 		await expect.poll(() => sent.annotate).toBeTruthy();
 		expect(sent.annotate).toMatchObject({ target: 'sy-0003', message: 'Say where parity is used.', in: 'drafting/main.tex' });
 		expect(sent.annotate).not.toHaveProperty('quote');
+	});
+
+	test('Comment on, words selected with a drag open the comment box on exactly them, not on their block, and the tool goes off', async ({ page }) => {
+		const sent = await writes(page);
+		await page.goto('/master/drafting/main');
+		await page.getByTestId('tool-comment').click();
+		await dragAcross(pane(page, 0).locator('.fragment .env[data-id="sy-000B"] p[data-src]').first(), 'has a fixed point');
+		await expect(page.getByTestId('tool-comment')).toHaveAttribute('aria-pressed', 'false');
+		const draft = popup(page);
+		await expect(draft).toBeVisible();
+		await draft.getByTestId('popup-comment-field').fill('Say which point.');
+		await draft.getByTestId('popup-comment-field').press('Enter');
+		await expect.poll(() => sent.annotate).toBeTruthy();
+		expect(sent.annotate).toMatchObject({ target: 'sy-000B', quote: 'has a fixed point', message: 'Say which point.', in: 'drafting/main.tex' });
 	});
 
 	test('a comment refused for want of a name asks for the name over the page, and once it is saved is written', async ({ page }) => {
@@ -1226,18 +1264,20 @@ test.describe('the actions at a selection', () => {
 		await expect(opener).toBeVisible();
 	});
 
-	test('Annotate marks the words in the look in hand, and Add comment then stands with the other actions', async ({ page }) => {
+	test('Annotate opens the comment box on exactly the words selected, and writes them as its quote with what is said', async ({ page }) => {
 		const sent = await writes(page, ['annotate', 'new-note']);
 		await page.goto('/master/drafting/main');
 		await markOf(page, 'a-2026-09-16-ecnav2').scrollIntoViewIfNeeded();
 		await selectWithin(markOf(page, 'a-2026-09-16-ecnav2'));
 		await page.getByTestId('selection-actions').click();
 		await page.getByTestId('selection-annotate').click();
+		const draft = popup(page);
+		await expect(draft).toBeVisible();
+		expect(sent.annotate).toBeUndefined();
+		await draft.getByTestId('popup-comment-field').fill('Is finite needed?');
+		await draft.getByTestId('popup-comment-field').press('Enter');
 		await expect.poll(() => sent.annotate).toBeTruthy();
-		expect(sent.annotate).toMatchObject({ target: 'sy-0003', quote: 'finite widget' });
-		await expect(page.getByTestId('add-comment')).toBeVisible();
-		await page.getByTestId('selection-actions').click();
-		await expect(page.getByTestId('selection-menu').getByRole('menuitem')).toHaveText(['Quote', 'Ask your agent', 'New note']);
+		expect(sent.annotate).toMatchObject({ target: 'sy-0003', quote: 'finite widget', message: 'Is finite needed?' });
 	});
 
 	test('Ask your agent opens the box with a request naming the place by its link and quoting the words, and sends nothing', async ({ page }) => {
