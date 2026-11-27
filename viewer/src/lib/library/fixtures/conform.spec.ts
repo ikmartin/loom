@@ -339,7 +339,6 @@ const AWAITING_SAMPLES: Record<string, string> = {
 	'review-list .groups[attested-changed].rows[attested-changed].resting': 'a changed definition that results rest on',
 	'review-list .groups[check]': 'digested results to check',
 	'review-list .groups[cited]': 'cited results to digest',
-	'review-list .groups[edits].rows[edits].broke': 'an edit made in place that broke its compile',
 	'review-list .groups[questions].rows[questions].under.ref': 'a question asked while digesting a work',
 	'review-row .row.under.ref': 'a question asked while digesting a work',
 	'web-focus .more.proofs': 'a result in focus with a proof',

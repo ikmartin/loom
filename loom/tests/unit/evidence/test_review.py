@@ -311,6 +311,8 @@ def test_an_agents_suggested_edit_is_a_proposed_edit(root: Path) -> None:
     ok("suggest", key, "--with", "Every balanced weighting", "--quote", "Every", "--as", "Probe Agent", cwd=root)
     [row] = _rows(_gather(root), "edits")
     assert row["type"] == "suggested" and row["key"] == key and row["by"] == "Probe Agent"
+    # no field the viewer would draw and loom never fills: whether the edit stopped its document compiling is said on the document
+    assert "broke" not in row
 
 
 def test_the_proposed_edits_are_the_changes_a_publication_lists_and_differ_only_until_the_next(root: Path) -> None:

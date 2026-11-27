@@ -354,7 +354,6 @@ export interface EditRow extends RowBase {
 	/** Who suggested it; null for an edit made in place. */
 	by: string | null;
 	state: string;
-	broke: { line: number; error: string } | null;
 }
 
 export type ReviewRow = AcceptedChangedRow | QuestionRow | AttestedChangedRow | CitedRow | CheckRow | AttestRow | FetchRow | EditRow;

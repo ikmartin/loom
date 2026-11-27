@@ -81,7 +81,7 @@ export function quiet(r: ReviewRow): string {
 			// results resting under it are counted; else what changed, its own text or what it uses
 			return r.resting.length ? words.attested.used(r.resting.length) : r.changed === 'statement' ? words.attested.statement(words.day(r.attested_at)) : words.attested.uses;
 		case 'edits':
-			return r.broke ? words.edits.broke(r.doc, r.broke.line) : r.by ? words.edits.by(r.by) : '';
+			return r.by ? words.edits.by(r.by) : '';
 		default:
 			return '';
 	}

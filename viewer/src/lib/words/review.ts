@@ -331,12 +331,6 @@ export const review = {
 	edits: {
 		/** A proposed edit's quiet line. */
 		by: (by: string) => `proposed by ${by}`,
-		/** A proposed edit's quiet line when its document has not compiled since an agent made it in place. */
-		broke: (doc: string, line: number) => `${file(doc)} has not compiled since this edit (line ${line})`,
-		/** Under an edit made in place that stopped its document compiling: who made it, and TeX's reason in words. */
-		inPlace: (by: string | null, doc: string, why: string, line: number) => `${by ? `${by} made this edit in place` : 'This edit was made in place'}. ${file(doc)} has not compiled since: ${why} (line ${line}).`,
-		/** TeX's reasons, as that line says them; one not here is shown as TeX gives it. */
-		errors: { 'Undefined control sequence': 'the command it adds is not defined' } as Record<string, string>,
 		/** Keeps a proposed edit. */
 		keep: 'keep',
 		/** Discards a suggested edit. */
