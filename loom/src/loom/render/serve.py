@@ -1393,12 +1393,12 @@ class ServeSession:
         from loom.render.quick import drafted
 
         try:
-            blocks = drafted(last.result, self.quilt.root, changed)
+            said = drafted(last.result, self.quilt.root, changed)
         except Exception as exc:  # noqa: BLE001
             print(f"loom serve: no draft of the save: {failure(exc)}", file=sys.stderr)
             return
-        if blocks:
-            self.publications.drafted(json.dumps({"server": os.getpid(), "build": n, "blocks": blocks}).encode())
+        if said["blocks"]:
+            self.publications.drafted(json.dumps({"server": os.getpid(), "build": n, **said}).encode())
 
     def upcoming(self) -> int:
         """The number the next build will have, which a write answered under the publication's hold says it waits on: every build counts once it begins, published or failed."""

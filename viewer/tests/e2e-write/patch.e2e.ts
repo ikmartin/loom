@@ -87,6 +87,28 @@ test('an edit keeps the blocks after it in its file, and moves their offsets', a
 	expect(Number(b) - Number(a), 'its offset moved by what the edit added').toBe(', never more'.length);
 });
 
+test('a save drawn from its source moves the offsets of the blocks after it at once, as TeX’s publication will', async ({ page, served }) => {
+	await page.goto('/master/drafting/main');
+	await allTypeset(page);
+	const last = await page.locator('[data-pane="0"] .fragment [data-src^="drafting/nodes/sy-0002.tex:"]').last().getAttribute('data-src');
+	// what the page records the first time it draws the save from source, before TeX's publication can replace the drawing
+	await page.evaluate((last) => {
+		const w = window as unknown as { kept: Element; seen?: { kept: boolean; src: string | null } };
+		w.kept = document.querySelector(`[data-pane="0"] .fragment [data-src="${last}"]`)!;
+		const pane = document.querySelector('[data-pane="0"]')!;
+		const look = () => {
+			if (w.seen || !pane.querySelector('.fragment .draft')) return;
+			w.seen = { kept: w.kept.isConnected, src: w.kept.getAttribute('data-src') };
+		};
+		new MutationObserver(look).observe(pane, { subtree: true, childList: true, attributes: true });
+	}, last);
+	const file = join(served.root, 'drafting', 'nodes', 'sy-0002.tex');
+	writeFileSync(file, readFileSync(file, 'utf8').replace('one or two points', 'one or two points, never more'));
+	const seen = (await (await page.waitForFunction(() => (window as unknown as { seen?: { kept: boolean; src: string } }).seen)).jsonValue())!;
+	expect(seen.kept, 'the last block of the edited file is the same element under the drawing').toBe(true);
+	expect(Number(seen.src.split(':')[1]) - Number(last!.split(':')[1]), 'its offset moved by what the save added').toBe(', never more'.length);
+});
+
 test('an annotation filed far above the reader leaves the text they are reading where it was', async ({ page, served }) => {
 	// a short window, so the document runs to several screens and what is far above the reader is skipped while off screen; this wide, the paragraph annotated runs to four lines, a height a three-line placeholder is not
 	await page.setViewportSize({ width: 900, height: 360 });

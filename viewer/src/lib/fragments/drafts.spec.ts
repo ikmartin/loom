@@ -47,6 +47,15 @@ describe('a block drawn from source', () => {
 		expect(m.drafts.shown.size).toBe(2);
 	});
 
+	it('carries how the save moved its file’s offsets, which moves an offset at or past each change by it', () => {
+		m.drafts.take(JSON.stringify({ server: 7, build: 5, blocks: [{ src: SRC, kind: 'env', body: 'x' }], moves: { 'drafting/nodes/sh-0009.tex': [[120, 12], [200, -3]], 'drafting/nodes/sh-0007.tex': [[0, 4]] } }));
+		const moves = m.drafts.shown.get(SRC)!.moves;
+		expect(moves).toEqual([[120, 12], [200, -3]]);
+		expect([0, 119, 120, 199, 200, 500].map((at) => m.moved(at, moves))).toEqual([0, 119, 132, 211, 209, 509]);
+		m.drafts.take(event(6, 'y'));
+		expect(m.drafts.shown.get(SRC)!.moves).toEqual([]);
+	});
+
 	it('is drawn with the page’s numbers, `??` for a label TeX has not numbered, and an unknown command as its source', () => {
 		const html = m.drawDraft('\\label{sh-0009}\\uses{sh-0007}\nBy Proposition~\\ref{sh-0007} and \\ref{sh-0999}, $x \\in \\Zcyc$ is \\fancy{new}.', { 'sh-0007': { number: '2.6' } });
 		expect(html).toContain('2.6');

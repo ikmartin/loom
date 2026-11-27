@@ -12,7 +12,7 @@ from tests.unit.render._serve import get
 
 
 def test_a_save_s_changed_statement_is_said_as_source_before_its_build_publishes(session) -> None:  # type: ignore[no-untyped-def]
-    """A word saved in a lemma comes over the stream as the lemma's new body, keyed by the `data-src` the published page gives the lemma, naming the build that then publishes it; the proof beside it, unchanged, is not said, and the file is only read."""
+    """A word saved in a lemma comes over the stream as the lemma's new body, keyed by the `data-src` the published page gives the lemma, naming the build that then publishes it, with how far the word moves every offset past it; the proof beside it, unchanged, is not said, and the file is only read."""
     s, d = session
     node = d / "drafting" / "nodes" / "dm-0002.tex"
     old = node.read_text(encoding="utf-8")
@@ -47,5 +47,8 @@ def test_a_save_s_changed_statement_is_said_as_source_before_its_build_publishes
             "body": "\\label{dm-0002}\\label{lem:orbits}\nEvery orbit of a widget has one or two marked points, and $\\Fix(\\sigma)$ is the union of the one-point orbits.\n",
         }
     ]
+    assert draft["moves"] == {
+        "drafting/nodes/dm-0002.tex": [[old.index("one or two ") + len("one or two "), len("marked ")]]
+    }
     assert f'data-src="{draft["blocks"][0]["src"]}"' in published
     assert node.read_text(encoding="utf-8") == saved

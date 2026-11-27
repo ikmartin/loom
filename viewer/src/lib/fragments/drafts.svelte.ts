@@ -13,18 +13,23 @@ export interface DraftBlock {
 	body: string;
 }
 
-/** The stream's `drafted` event: the server, the build that publishes TeX's blocks, and the blocks. */
+/** How a save moved a file's offsets: each `[at, by]` moves an offset at or past `at` in the published text `by` further on, summed. */
+export type Moves = [number, number][];
+
+/** The stream's `drafted` event: the server, the build that publishes TeX's blocks, the blocks, and how the save moved the offsets of each file it names. */
 export interface Drafted {
 	server: number;
 	build: number;
 	blocks: DraftBlock[];
+	moves?: Record<string, Moves>;
 }
 
-/** A block drawn from source, with the build whose publication replaces it. */
+/** A block drawn from source, with the build whose publication replaces it and how the save moved its file's offsets. */
 export interface Draft {
 	block: DraftBlock;
 	server: number;
 	build: number;
+	moves: Moves;
 }
 
 const fileOf = (src: string): string => src.replace(/:\d+:\d+$/, '');
@@ -44,7 +49,11 @@ class Drafts {
 		if (typeof d?.build !== 'number' || typeof d.server !== 'number' || !Array.isArray(d.blocks)) return;
 		const files = new Set(d.blocks.map((b) => fileOf(b.src)));
 		for (const [src, was] of this.shown) if (files.has(fileOf(src)) || was.server !== d.server) this.shown.delete(src);
-		for (const block of d.blocks) if (typeof block?.src === 'string' && typeof block.body === 'string') this.shown.set(block.src, { block, server: d.server, build: d.build });
+		for (const block of d.blocks) {
+			if (typeof block?.src !== 'string' || typeof block.body !== 'string') continue;
+			const moves = d.moves?.[fileOf(block.src)];
+			this.shown.set(block.src, { block, server: d.server, build: d.build, moves: Array.isArray(moves) ? moves : [] });
+		}
 	}
 
 	/** The stream's `built` event: a draft whose build published goes once that manifest is fetched; one whose build failed, or of another server, goes at once. */
@@ -109,6 +118,21 @@ const range = (src: string): { file: string; start: number; end: number } | null
 	return m ? { file: m[1], start: Number(m[2]), end: Number(m[3]) } : null;
 };
 
+/** Where offset `at` of the published text lies in the text as saved. */
+export const moved = (at: number, moves: Moves): number => moves.reduce((p, [from, by]) => (from <= at ? p + by : p), at);
+
+/** Move every offset of `file` in `root` as the save moved them: each block's `data-src` and its own references' `data-at`, so the page records the places of the blocks after a draft as the saved file has them, as TeX's publication will. */
+function move(root: ParentNode, file: string, moves: Moves): void {
+	if (!moves.length) return;
+	for (const el of root.querySelectorAll<HTMLElement>(`[data-src^="${CSS.escape(file + ':')}"]`)) {
+		const r = range(el.dataset.src ?? '');
+		if (r?.file === file) el.dataset.src = `${file}:${moved(r.start, moves)}:${moved(r.end, moves)}`;
+	}
+	for (const el of root.querySelectorAll<HTMLElement>('[data-at]')) {
+		if (/^\d+$/.test(el.dataset.at ?? '') && range(el.closest<HTMLElement>('[data-src]')?.dataset.src ?? '')?.file === file) el.dataset.at = String(moved(Number(el.dataset.at), moves));
+	}
+}
+
 /** The leaves of a paragraph's window: the elements with a `data-src` in it and none inside them, outside every statement and proof, side by side under one parent; none where they are not. */
 function leavesIn(root: ParentNode, src: string): HTMLElement[] {
 	const want = range(src);
@@ -123,7 +147,7 @@ function leavesIn(root: ParentNode, src: string): HTMLElement[] {
 }
 
 /**
- * Draw each draft in place in `t`, the published markup about to be drawn: a statement's or proof's element keeps itself and its label and holds the drawing; a paragraph's leaves give way to one element holding it, which keeps the first's `data-src`. Each is marked `.draft` with the note `note`. A draft whose block the markup does not hold, or whose paragraph is not one run of leaves, is not drawn, and TeX's block will be.
+ * Draw each draft in place in `t`, the published markup about to be drawn: a statement's or proof's element keeps itself and its label and holds the drawing; a paragraph's leaves give way to one element holding it, which keeps the first's `data-src`. Each is marked `.draft` with the note `note`. A draft whose block the markup does not hold, or whose paragraph is not one run of leaves, is not drawn, and TeX's block will be. Every offset of a file with a draft drawn is then moved as the save moved it (`Draft.moves`), so the blocks after an edit carry the places TeX's publication gives them and patching to it keeps them.
  *
  * Parameters
  * ----------
@@ -153,7 +177,8 @@ export function drawDrafts(t: HTMLTemplateElement, shown: Iterable<Draft>, numbe
 		return n;
 	};
 	let drawn = 0;
-	for (const { block } of shown) {
+	const files = new Map<string, Moves>();
+	for (const { block, moves } of shown) {
 		if (block.kind === 'env') {
 			const at = t.content.querySelector<HTMLElement>(`.env[data-src="${CSS.escape(block.src)}"]`);
 			if (!at) continue;
@@ -175,7 +200,9 @@ export function drawDrafts(t: HTMLTemplateElement, shown: Iterable<Draft>, numbe
 			leaves[0].replaceWith(at);
 			for (const el of leaves.slice(1)) el.remove();
 		}
+		files.set(fileOf(block.src), moves);
 		drawn++;
 	}
+	for (const [file, moves] of files) move(t.content, file, moves);
 	return drawn;
 }

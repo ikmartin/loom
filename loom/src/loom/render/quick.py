@@ -85,12 +85,13 @@ def _paragraph(text: str, a: int, b: int) -> tuple[int, int]:
     return s, (after.start() if after else len(text))
 
 
-def drafted(result: ScanResult, root: Path, changed: Iterable[Path]) -> list[dict[str, Any]]:
-    """The blocks a save changed, each as the viewer is to draw it until TeX's arrives.
+def drafted(result: ScanResult, root: Path, changed: Iterable[Path]) -> dict[str, Any]:
+    """The blocks a save changed, each as the viewer is to draw it until TeX's arrives, and how the save moved each file's offsets.
 
-    Each is `{"src", "kind", "body"}`: `src` is `FILE:START:END` in the published text, as the page's `data-src` names it; `kind` is `env`, a statement's or proof's element whose `src` is exactly that, its `body` the text between its head and its `\\end`, or `text`, a paragraph whose `src` is the blank lines round it, its `body` the paragraph now. Comments are blanked. A file the last publication did not read, or a change that crosses a block's edge, gives nothing.
+    `blocks` holds `{"src", "kind", "body"}` each: `src` is `FILE:START:END` in the published text, as the page's `data-src` names it; `kind` is `env`, a statement's or proof's element whose `src` is exactly that, its `body` the text between its head and its `\\end`, or `text`, a paragraph whose `src` is the blank lines round it, its `body` the paragraph now. Comments are blanked. A file the last publication did not read, or a change that crosses a block's edge, gives nothing. `moves` holds, for each file with a block, `[AT, BY]` per change that altered its length, in order: an offset at or past `AT` in the published text lies `BY` further on in the saved one, summed over its changes.
     """
     out: list[dict[str, Any]] = []
+    moves: dict[str, list[list[int]]] = {}
     for path in changed:
         if path.suffix != ".tex":
             continue
@@ -117,6 +118,7 @@ def drafted(result: ScanResult, root: Path, changed: Iterable[Path]) -> list[dic
                     del windows[(ws, we)]
                     s, e = min(s, ws), max(e, we)
             windows[(s, e)] = "text"
+        drawn = len(out)
         for (s, e), kind in sorted(windows.items()):
             if kind == "env":
                 env = next(x for x in all_envs if (x.start, x.end) == (s, e))
@@ -135,4 +137,6 @@ def drafted(result: ScanResult, root: Path, changed: Iterable[Path]) -> list[dic
                     continue
                 body = body.strip()
             out.append({"src": f"{rel}:{s}:{e}", "kind": kind, "body": body})
-    return out
+        if len(out) > drawn:
+            moves[rel] = [[b, (d - c) - (b - a)] for a, b, c, d in changes if (d - c) != (b - a)]
+    return {"blocks": out, "moves": moves}
