@@ -145,10 +145,24 @@ _shapes: Memo[tuple[bytes, str, tuple[tuple[str, bytes], ...], str], tuple[dict[
 
 
 def _baseline(result: ScanResult, copy: str) -> dict[str, Any]:
+    """What the copy and its document are compared from: the last adoption's or refresh's base, else the copy as made.
+
+    An adoption whose kept version (`kept_as`, its stamp's step) was restored since is undone, so its base is passed over and the changes it took wait again.
+    """
+    from loom.history.acts import RESTORE
+
     history = _history(result)
+    restored: set[int] = set()
     for entry in reversed(history.entries):
+        if entry.action == RESTORE:
+            put = entry.get("from")
+            if isinstance(put, dict) and isinstance(put.get("step"), int):
+                restored.add(put["step"])
+            continue
         path = str(entry.get("to" if entry.action == "copy" else "copy", ""))
         if history.current_document(path, result.masters) != copy:
+            continue
+        if entry.action == "adopt" and entry.get("kept_as") in restored:
             continue
         if entry.action in ("adopt", "refresh") and entry.get("adoption_base"):
             return dict(entry.get("adoption_base"))
@@ -832,6 +846,8 @@ def _incorporate(result: ScanResult, w: Any, copy: str, token: str, saved: dict[
             "preview": token,
             "proposal_fingerprint": data["fingerprint"],
             "proposal": {"path": "proposal.tex", "hash": text_hash(flatten(root, data["copy"]).text)},
+            # the step of the version keeping the document as it was: restoring it undoes this adoption (`_baseline`)
+            "kept_as": stamped.step if (stamped := history.landmark(landmark)) is not None else None,
         }
         from loom.reshape.copy import derived_key
 

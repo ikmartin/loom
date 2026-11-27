@@ -879,3 +879,28 @@ def test_a_saved_choice_survives_a_save_elsewhere_and_falls_with_any_of_its_inpu
     drops(cfg, lambda: cfg.write_text(cfg.read_text().replace('prefix="zk"', 'prefix="zz"')))
     ledger = quilt.history_dir / "ledger.jsonl"
     drops(ledger, lambda: append_entry(quilt.history_dir, "adopt", {"copy": COPY, "note": "taken in once"}, "Tester"))
+
+
+def test_restoring_the_version_an_adoption_kept_undoes_it(quilt):
+    """The undo where a copy was applied (`history-restore` of the version the adoption kept): the document's bytes come back, the change it took waits in the copy again, and only the person undoes it, only in the quilt it was applied in."""
+    from loom.machine import quilt_id
+    from loom.render.api import ApiError, handle
+
+    def taken() -> dict:
+        return next(r for r in comparison(scan(quilt), COPY)["changes"] if r["key"] == "zk-0001")
+
+    edit(quilt, "First statement.", "Improved statement.")
+    done = incorporate(scan(quilt), COPY, prepare(scan(quilt), COPY, ["zk-0001"])["token"], "Tester")
+    assert not taken()["offered"]
+    asked = {"document": DOC, "version": done["landmark"], "quilt": quilt_id(quilt.root)}
+    for code, body in (
+        ("author-only", {**asked, "author": "Smith Agent"}),
+        ("other-quilt", {**asked, "quilt": "0" * 16}),
+    ):
+        with pytest.raises(ApiError) as refused:
+            handle(quilt.root, "history-restore", body)
+        assert refused.value.code == code
+        assert "Improved statement." in (quilt.root / DOC).read_text()
+    handle(quilt.root, "history-restore", asked)
+    assert (quilt.root / DOC).read_bytes() == TEXT.encode()
+    assert taken()["offered"] and taken()["class"] == "proposal-only"
