@@ -467,7 +467,50 @@ test('an agent copy is taken back in one pass: Take it, then one Apply writes it
 	await expect.poll(() => readFileSync(join(served.root, document), 'utf8')).toContain('Proposed statement.');
 	await expect(page.locator('main')).toContainText('Took 1 change into adoption-test: 0 accepted, 1 wait to be accepted. adoption-test as it was is kept as a version.');
 	await page.goto('/review');
-	await expect(acceptRow(page, 'sy-0900').getByTestId('review-row-why')).toHaveText('Taken in from the copy “adoption-proposal”');
+	// what it took in is one row, opening to the block
+	const adoption = page.locator('[data-testid="review-row"][data-adoption=".loom/agents/copies/adoption-proposal.tex"]');
+	await expect(adoption.getByTestId('review-row-why')).toHaveText('taken in 1 result from the copy');
+	await openRow(adoption);
+	await expect(acceptRow(page, 'sy-0900')).toBeVisible();
+});
+
+test("accept all on an adoption's row in Review accepts exactly the blocks it took in that can be accepted, and none it cannot", async ({ page, served }) => {
+	const document = 'drafting/adopt-all.tex';
+	const lemma = (key: string, words: string) => `\\begin{lemma}\\label{${key}}\n${words}\n\\end{lemma}\n\\begin{proof}\nClear.\n\\end{proof}\n`;
+	writeFileSync(join(served.root, document), `\\documentclass{article}\n\\usepackage{amsthm}\n\\usepackage{loom}\n\\newtheorem{lemma}{Lemma}\n\\begin{document}\n${lemma('sy-0920', 'First.')}${lemma('sy-0921', 'Second.')}${lemma('sy-0922', 'Third.')}\\end{document}\n`);
+	served.loom(['draft', document, '--ai', 'adopt-all']);
+	const copy = '.loom/agents/copies/adopt-all.tex';
+	const drafted = readFileSync(join(served.root, copy), 'utf8');
+	// the second is marked incomplete, so it cannot be accepted
+	writeFileSync(join(served.root, copy), drafted.replace('First.', 'First, improved.').replace('Second.', 'Second, improved. \\incomplete{Say why it holds.}').replace('Third.', 'Third, improved.'));
+	const { token } = JSON.parse(served.loom(['adopt', copy, '--json'])) as { token: string };
+	served.loom(['adopt', copy, '--incorporate', token]);
+	mkdirSync(compileFolder(served.root, document), { recursive: true });
+	writeFileSync(join(compileFolder(served.root, document), 'adopt-all.pdf'), '%PDF-1.4\n');
+	type Waiting = { key: string; cause: string; contribution?: string; refusal: string };
+	const taken = (): Waiting[] => (JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8')).unresolved ?? []).filter((u: Waiting) => u.cause === 'adopted' && u.contribution === copy);
+	await expect.poll(() => taken().length, { timeout: 60_000 }).toBeGreaterThan(2);
+	const can = taken().filter((u) => !u.refusal).map((u) => u.key);
+	const cannot = taken().filter((u) => u.refusal).map((u) => u.key);
+	expect(can.length).toBeGreaterThan(1);
+	expect(cannot).toContain('sy-0921');
+	const ledger = acceptedKeys(served);
+	const posted: unknown[] = [];
+	page.on('request', (r) => {
+		if (r.url().endsWith('/_api/review-accept')) posted.push(r.postDataJSON());
+	});
+	await page.goto('/review');
+	const row = page.locator(`[data-testid="review-row"][data-adoption="${copy}"]`);
+	await expect(row).toBeVisible({ timeout: 60_000 });
+	await openRow(row);
+	await expect(row.locator('[data-testid="review-row"][data-key]')).toHaveCount(can.length + cannot.length);
+	await expect(row.getByTestId('adoption-accept-all')).toHaveText(`accept all ${can.length}`);
+	await row.getByTestId('adoption-accept-all').click();
+	await expect.poll(() => acceptedKeys(served), { timeout: 60_000 }).toEqual([...ledger, ...can]);
+	expect(posted).toEqual([{ reviewer: 'The synthetic quilt', keys: can }]);
+	// what it could not accept still waits, in the adoption's row, saying why
+	await expect.poll(() => taken().map((u) => u.key), { timeout: 60_000 }).toEqual(cannot);
+	await expect(row.locator('[data-testid="review-row"][data-key="sy-0921"] [data-testid="review-row-why"]')).toHaveText("can't be accepted yet: marked incomplete");
 });
 
 test('a change marked as checked is accepted as it is taken in; one left stays out', async ({ page, served }) => {

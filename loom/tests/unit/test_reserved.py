@@ -64,6 +64,7 @@ def test_a_part_of_the_manifest_that_is_not_built_adds_nothing() -> None:
         "library",
         "agents",
         "formal",
+        "history",
     ]
 
 

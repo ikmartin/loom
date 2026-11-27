@@ -654,7 +654,7 @@
    "read_only_hint": true
   },
   "command": "loom formal",
-  "description": "Say whether formalization is on for this quilt on this machine, and whether loom can check its Lean here.\n\nThe person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom \"LABEL\"]`, and asks loom to check it (`loom formal check`). What Lean said is loom's own record, never an agent's.",
+  "description": "Say whether formalization is on for this quilt on this machine, and whether loom can check its Lean here.\n\nThe person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom \"LABEL\"]`, and asks loom to check it (`loom formal check`); a second agent, which did not write it, reads it in ordinary mathematics for the person (`loom formal read`). What Lean said is loom's own record, never an agent's.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
@@ -687,6 +687,69 @@
    "type": "object"
   },
   "name": "loom_formal_check"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom formal read",
+  "description": "Read a result's Lean in ordinary mathematics, for the person to read beside it before attesting. RESULT is a draft's label or a node's id.\n\nWithout a reading, list the Lean to read: the latest record of loom's check stating the result, and each declaration the person reads there, as Lean printed it. With one, record your reading as yours, part by part, each part naming one of those declarations. Nothing checks a reading against the Lean, and it is stale once loom records a newer Lean for the result. Write it only for Lean you did not write.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "declaration": {
+     "description": "The declaration a part reads, one of those the command lists without a reading; once for each part, in order.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "difference": {
+     "description": "Where the Lean and the statement differ; leave it out if you found nothing.",
+     "type": "string"
+    },
+    "draft": {
+     "description": "What the statement says in each part, as LaTeX, in the same order; '' where nothing in it answers.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "part": {
+     "description": "Each part's name, as (i) or a notion's word, in the same order; needed where there are several parts.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "reading": {
+     "description": "Your reading of that declaration in ordinary mathematics, as LaTeX; once for each part, in the order of --declaration.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "record": {
+     "description": "The Lean record you read, as listed; refused once a newer one states the result.",
+     "type": "string"
+    },
+    "result": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "result"
+   ],
+   "type": "object"
+  },
+  "name": "loom_formal_read"
  },
  {
   "annotations": {

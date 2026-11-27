@@ -210,21 +210,77 @@ test('a version compared with now keeps its toolbar on one line, older and newer
 	expect(controls.y + controls.height).toBeLessThanOrEqual(box.y + box.height);
 });
 
-test('the history menu records a version from Review › History', async ({ page }) => {
+test('the history menu records a version in place, in Docs, and says what it did in the column’s message', async ({ page }) => {
 	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: ['history-record', 'history-restore'], token: 't' } }));
-	let posted: Record<string, unknown> | null = null;
+	const posted: Record<string, unknown>[] = [];
 	await page.route('**/_api/history-record', async (route) => {
-		posted = route.request().postDataJSON();
-		await route.fulfill({ json: { ok: true, result: 'kept this version of main.tex as “Before referee”' } });
+		posted.push(route.request().postDataJSON());
+		if (posted.length === 1) await route.fulfill({ json: { ok: true, result: 'kept this version of main.tex as “Before referee”' } });
+		else await route.fulfill({ status: 409, json: { ok: false, error: { code: 'name-in-use', message: 'a version named Before referee is kept already' } } });
 	});
 	await page.goto('/master/drafting/main');
 	await history(page);
 	await page.getByTestId('history-record').click();
-	await expect(page).toHaveURL(/\/review\/record\?document=drafting%2Fmain\.tex&record=1/);
+	// the field opens in the menu, which stays open, and nothing in the menu is a link
+	await expect(page.getByTestId('history-menu')).toBeVisible();
+	await expect(page.getByTestId('history-record-name')).toBeFocused();
+	await expect(page.getByTestId('history-menu').locator('a')).toHaveCount(0);
+	await expect(page.getByTestId('history-record-go')).toHaveAttribute('aria-disabled', 'true');
+	await page.getByTestId('history-record-name').fill('Before referee');
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('history-menu')).toHaveCount(0);
+	await expect(page.getByTestId('column-message')).toContainText('Recorded this version of main.tex as “Before referee”.');
+	expect(posted[0]).toMatchObject({ document: 'drafting/main.tex', name: 'Before referee' });
+	await expect(page).toHaveURL(/\/master\/drafting\/main$/);
+	// a name in use is refused in the viewer's words, never loom's
+	await history(page);
+	await page.getByTestId('history-record').click();
 	await page.getByTestId('history-record-name').fill('Before referee');
 	await page.getByTestId('history-record-go').click();
-	await expect(page.getByTestId('history-bar-said')).toHaveText('Kept this version of main.tex as “Before referee”.');
-	expect(posted).toMatchObject({ document: 'drafting/main.tex', name: 'Before referee' });
+	await expect(page.getByTestId('column-message')).toContainText('A version of that name is kept already.');
+	await expect(page.getByTestId('column-message')).not.toContainText('a version named');
+	await expect(page).toHaveURL(/\/master\/drafting\/main$/);
+});
+
+test('past the newest twelve, the menu lists the older versions in itself, and none of its lines leaves Docs', async ({ page }) => {
+	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: ['history-record'], token: 't' } }));
+	await serve(page, (m) => {
+		const base = m.canon[0];
+		for (let i = 0; i < 13; i++) {
+			const step = String(10 + i).padStart(4, '0');
+			m.canon.push({ ...structuredClone(base), path: `.loom/records/history/${step}-kept-${i}/kept-${i}.tex`, stem: `kept-${i}`, name: `kept-${i}`, message: `kept-${i}`, step, when: `2026-10-${String(1 + i).padStart(2, '0')}T${'09'}:00:00Z` });
+		}
+	});
+	await page.goto('/master/drafting/main');
+	await history(page);
+	const menu = page.getByTestId('history-menu');
+	const versions = menu.locator('[role="menuitemradio"]');
+	// the live text and the newest twelve of sixteen, then a line for the four older
+	await expect(versions).toHaveCount(13);
+	await expect(page.getByTestId('history-older')).toHaveText('4 older');
+	await expect(page.getByTestId('history-older')).toHaveAttribute('aria-expanded', 'false');
+	await page.getByTestId('history-older').click();
+	// listed in the menu, which stays open where it is
+	await expect(menu).toBeVisible();
+	await expect(versions).toHaveCount(17);
+	await expect(page.getByTestId('history-version-widgets-v1')).toBeVisible();
+	await expect(page.getByTestId('history-older')).toHaveAttribute('aria-expanded', 'true');
+	await expect(page).toHaveURL(/\/master\/drafting\/main$/);
+	// no line of the menu is a link, and none of its controls takes the reader out of Docs
+	await expect(menu.locator('a')).toHaveCount(0);
+	const ids = await menu.locator('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('data-testid')!));
+	for (const id of ids.filter((x) => x !== 'history-record-go')) {
+		if (!(await menu.isVisible())) await history(page);
+		await page.getByTestId(id).first().click({ timeout: 1000 }).catch(() => {});
+		expect(new URL(page.url()).pathname).not.toMatch(/\/review|\/library|\/web/);
+		await page.keyboard.press('Escape');
+	}
+	// the oldest version, shown in the draft's tab, is one choice from there
+	await page.goto('/master/drafting/main');
+	await history(page);
+	await page.getByTestId('history-older').click();
+	await page.getByTestId('history-version-widgets-v1').click();
+	await expect(page).toHaveURL(/\/canon\/widgets-v1/);
 });
 
 test('an undo’s set-aside text is put back from everything recorded, after asking', async ({ page }) => {

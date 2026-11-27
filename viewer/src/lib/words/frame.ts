@@ -105,6 +105,7 @@ export const frame = {
 		'author-only': 'Only a person can do this; loom does not take it from an agent.',
 		'bad-entry': 'That is not a BibTeX entry loom can keep for this work.',
 		busy: 'Loom is already installing or checking Lean for this quilt. Try again when it is done.',
+		'cannot-record': 'This document defines one of its labels twice, so loom cannot keep a version of it until one definition remains.',
 		changed: 'It has changed since, so loom left it as it is.',
 		closed: 'That has been answered already.',
 		'compile-failed': 'The document did not compile, so nothing was changed.',
@@ -112,6 +113,7 @@ export const frame = {
 		'format-unknown': 'Loom does not know this kind of file.',
 		'has-results': 'Results have been read from this document, so it stays with its work. Delete the work instead.',
 		'key-taken': 'Another work in the library already has that key.',
+		'name-in-use': 'A version of that name is kept already. Give this one another name.',
 		'network-unasked': 'Loom has not been told whether it may look papers up online.',
 		'no-document': 'This work holds no document.',
 		'no-identifier': 'Its entry gives no DOI, arXiv number or zbMATH number to look it up by.',
@@ -142,6 +144,7 @@ export const frame = {
 		offline: 'This quilt keeps loom offline, so nothing was looked up.',
 		reading: 'Loom is still reading this work. Try again when it is done.',
 		'review-unavailable': 'Review could not be read just now.',
+		'state-refused': 'Loom will not write a research state that holds a link that names nothing or a character that is not text. Mend it, then try again.',
 		stub: 'Loom has no text of this result yet, so there is nothing to compare or correct.',
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
 		unreachable: 'The service that looks papers up could not be reached. Try again later.'

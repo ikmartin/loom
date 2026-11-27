@@ -234,8 +234,7 @@
 					<div class="page-panel rail-scroll">{@render panel()}</div>
 				{:else if primary === 'docs'}
 					<div class="part docs-part rail-scroll" data-testid="docs-part" style:flex={outline ? `0 0 ${share * 100}%` : '1 1 auto'}>
-						<FilesShelf {masters} {own} {copiesOf} {section} />
-						<DocumentList {own} {unplaced} {closed} {copiesOf} {section} {filename} {onDocument} {currentDoc} />
+						<!-- Library and Notes head the column, above the project's files -->
 						{#if docsState.served || store.manifest?.backlinks?.length}
 							<div class="colbtns">
 								{#if docsState.served}<button type="button" class="colbtn" class:on={docsState.picker} aria-expanded={docsState.picker} data-testid="docs-library" onclick={() => (docsState.picker = !docsState.picker)}>{docs.picker.open}</button>{/if}
@@ -243,6 +242,8 @@
 								{#if store.manifest?.backlinks?.length}<button type="button" class="colbtn" class:on={workspace.current?.kind === 'notes'} data-testid="docs-notes" onclick={() => ((docsState.picker = false), workspace.here({ kind: 'notes', id: 'all' }))}>{docs.notes.open}</button>{/if}
 							</div>
 						{/if}
+						<FilesShelf {masters} {own} {copiesOf} {section} />
+						<DocumentList {own} {unplaced} {closed} {copiesOf} {section} {filename} {onDocument} {currentDoc} />
 					</div>
 					{#if outline}
 						<!-- A separator that takes focus is a widget in ARIA's own terms, with the arrow keys and aria-valuenow this one has. -->
@@ -317,7 +318,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		margin: 8px 0 var(--gap-tight);
+		margin: 0 0 var(--gap-tight);
 	}
 	.colbtn {
 		display: flex;

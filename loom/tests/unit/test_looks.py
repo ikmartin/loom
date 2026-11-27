@@ -46,6 +46,26 @@ def test_a_look_holds_every_open_text_file_and_nothing_else(q: Path) -> None:
     assert changes(q) == {}
 
 
+def test_an_svg_is_drawn_as_a_picture_and_never_listed(q: Path) -> None:
+    """An SVG is text, but the viewer draws it as a picture: one changed, made or removed since the look is no change, nor one an older look held."""
+    from loom.looks import Look, _write, read_look
+
+    svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>\n'
+    (q / "notes" / "fig.svg").write_text(svg, encoding="utf-8")
+    (q / "notes" / "gone.svg").write_text(svg, encoding="utf-8")
+    ok("changes", "--keep-all", cwd=q)
+    look = read_look(q, "Tester")
+    assert look is not None and not [p for p in look.files if p.endswith(".svg")]
+    (q / "notes" / "fig.svg").write_text(svg.replace('r="1"', 'r="2"'), encoding="utf-8")
+    (q / "notes" / "new.svg").write_text(svg, encoding="utf-8")
+    (q / "notes" / "gone.svg").unlink()
+    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
+    assert changes(q) == {"notes/a.md": "second"}
+    # a look that holds a picture, as one taken by an earlier loom does, lists no change to it either
+    _write(q, Look(look.who, look.when, {**look.files, "notes/gone.svg": look.files["notes/a.md"]}, deny=look.deny))
+    assert changes(q) == {"notes/a.md": "second"}
+
+
 def test_changes_since_the_look_are_in_changed_new_and_gone_files_each_with_its_patch(q: Path) -> None:
     ok("changes", "--keep-all", cwd=q)
     (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")

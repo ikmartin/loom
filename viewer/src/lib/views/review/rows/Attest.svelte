@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A Lean statement to attest, open (6): the whole statement as the draft has it beside the Lean that states it, as loom's check had Lean print it; each definition the Lean's statement names, its Lean beside the result it stands for or said to be the Lean's alone; part by part what was written and the agent's reading; folded, what it uses that the person attested already and the declarations that serve only the proof; the agent's note of a difference; then "Does the Lean say what you wrote?" and what the yes covers. The Lean drawn is loom's, never an agent's.
+	// A Lean statement to attest, open (6): the whole statement as the draft has it beside the Lean that states it, as loom's check had Lean print it; each definition the Lean's statement names, its Lean beside the result it stands for or said to be the Lean's alone; the latest agent's reading, part by part, what was written beside the declaration the part reads and the reading, drawn as that agent's and said to be of an earlier Lean once loom checked it again; folded, what it uses that the person attested already and the declarations that serve only the proof; the agent's note of a difference; then "Does the Lean say what you wrote?" and what the yes covers. The Lean drawn is loom's, never an agent's.
 	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
@@ -14,12 +14,17 @@
 	import Statement from '$lib/views/Statement.svelte';
 	import Restate from './Restate.svelte';
 
-	type Part = { part: string; draft?: string; reading: string; by?: string; from?: 'statement' | 'macros' };
+	/** A part of the agent's reading: what the statement says there, the declaration of loom's record it reads, and the reading. */
+	type Part = { part: string; draft: string; declaration: string; reading: string };
+	/** The latest agent's reading of the Lean; `stale` once loom recorded a newer Lean for the result. */
+	type Account = { by: string; at: string; observation: string; stale: boolean; parts: Part[]; difference: string | null };
+	/** A row of notation a person defined that the statement uses. */
+	type Notation = { part: string; from: 'preamble' | 'macros'; attested: boolean };
 	/** A declaration of the Lean record, as loom's check had Lean print it; `shown` null where the printer failed. */
 	type Decl = { name: string; kind: string; shown: string | null };
 	/** The result a definition's marker names: its statement, and when the person attested its own Lean. */
 	type Stands = { result: string | null; name: string; statement: { fragment?: string | null; body?: string } | null; attested: string | null };
-	type Body = ReviewBody & { body: RowBody & { observation?: string; lean?: Decl[]; definitions?: (Decl & { stands_for: Stands | null })[]; parts?: Part[] | null; notation?: Part[] | null; uses_attested?: { result: string; name: string; title?: string; at: string }[]; supporting?: string[]; difference?: { by: string; text: string } | null } };
+	type Body = ReviewBody & { body: RowBody & { observation?: string; lean?: Decl[]; definitions?: (Decl & { stands_for: Stands | null })[]; notation?: Notation[] | null; uses_attested?: { result: string; name: string; title?: string; at: string }[]; supporting?: string[]; account?: Account | null } };
 
 	let { row }: { row: AttestRow } = $props();
 	const body = new Read<Body>();
@@ -36,11 +41,12 @@
 	const b = $derived(body.value?.body);
 	/** The result's statement: a draft's fragment, or a library node's body. */
 	const stmt = $derived(b?.statement as { fragment?: string; body?: string } | undefined);
-	const by = $derived(b?.parts?.[0]?.by ?? '');
+	const account = $derived(b?.account ?? null);
+	const by = $derived(account?.by ?? '');
 	const where = $derived('doc' in row.source ? words.file(row.source.doc) : row.source.short);
 	/** A result of a work, which the person did not write: its words are the paper's. */
 	const library = $derived('ref' in row.source);
-	const named = $derived((b?.parts ?? []).filter((p) => p.part));
+	const named = $derived((account?.parts ?? []).filter((p) => p.part));
 	/** The Lean's own definitions, standing for no result, which the person's word on this result covers. */
 	const alone = $derived((b?.definitions ?? []).filter((d) => !d.stands_for).map((d) => d.name));
 
@@ -86,19 +92,26 @@
 			</tbody>
 		</table>
 	{/if}
-	{#if b.parts?.length}
+	{#if account?.parts.length}
 		<div class="crop-cap gap">{library ? words.attest.partByPaper(by) : words.attest.partByPart(by)}</div>
-		<table class="att">
-			<thead><tr><th></th><th>{library ? words.attest.paper : words.attest.draft}</th><th class="ag">{words.attest.reading(by)}</th></tr></thead>
+		<p class="note agent-reading" data-testid="attest-reading">{account.stale ? words.attest.readingStale(by, words.day(account.at)) : words.attest.readingBy(by, words.day(account.at))}</p>
+		<table class="att" data-testid="attest-parts">
+			<thead><tr><th></th><th>{library ? words.attest.paper : words.attest.draft}</th><th>{words.attest.reads}</th><th class="ag">{words.attest.reading(by)}</th></tr></thead>
 			<tbody>
-				{#each [...b.parts, ...(b.notation ?? [])] as p (p.part)}
-					<tr>
+				{#each account.parts as p (p.part)}
+					<tr data-lean={p.declaration}>
 						<td class="k">{p.part}</td>
-						<td class="pp">
-							{#if p.from === 'statement'}<span class="lbl">{words.attest.inStatement}</span>{:else if p.from === 'macros'}<span class="lbl">{words.attest.fromMacros}</span>{/if}
-							{#if p.draft}<NodeBody body={p.draft} italic={!p.from} />{/if}
-						</td>
-						<td class="ag"><NodeBody body={p.reading} /></td>
+						<td class="pp">{#if p.draft}<NodeBody body={p.draft} italic />{/if}</td>
+						<td class="dn"><code>{p.declaration}</code></td>
+						<td class="ag" class:stale={account.stale}><NodeBody body={p.reading} /></td>
+					</tr>
+				{/each}
+				{#each b.notation ?? [] as n (n.part)}
+					<tr>
+						<td class="k">{n.part}</td>
+						<td class="pp"><span class="lbl">{words.attest.fromMacros}</span></td>
+						<td class="dn"></td>
+						<td class="ag"></td>
 					</tr>
 				{/each}
 			</tbody>
@@ -113,8 +126,8 @@
 		<button type="button" class="foldline" aria-expanded={auxOpen} onclick={() => (auxOpen = !auxOpen)}><Icon name={auxOpen ? 'caret' : 'right'} size={14} />{words.attest.supporting(b.supporting.length)}</button>
 		{#if auxOpen}<div class="fold-b"><Lean code={b.supporting.join('\n')} /></div>{/if}
 	{/if}
-	{#if b.difference}
-		<div class="diverge"><span class="w">{words.attest.found(b.difference.by)}</span><div>{b.difference.text}</div></div>
+	{#if account?.difference}
+		<div class="diverge"><span class="w">{words.attest.found(by)}</span><div>{account.difference}</div></div>
 	{/if}
 	<p class="ask">{library ? words.attest.askPaper : words.attest.ask}</p>
 	<div class="answers">

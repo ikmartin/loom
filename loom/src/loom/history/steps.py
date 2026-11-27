@@ -119,6 +119,22 @@ def document_files(result: ScanResult, doc: str) -> list[str]:
     return [doc, *(f for f in reached if f != doc and f in result.files)]
 
 
+def document_loads(result: ScanResult, doc: str) -> list[str]:
+    """The local files `doc` loads beside its text, in the order it loads them: its preamble's packages, class and inputs, then the bibliographies it names; never the document itself.
+
+    The manifest's `loads`, by which the viewer folds a change to one of them into the document's own row in Review. A file the distribution supplies, or a bibliography named and not found, is not listed.
+    """
+    from loom.library.gather import named_bibs
+
+    closure = result.closures.get(doc)
+    out = [f for f in (closure.files if closure is not None else []) if f != doc]
+    expansion = result.expansions.get(doc)
+    if expansion is not None:
+        root = result.quilt.root
+        out += [b.relative_to(root).as_posix() for b in named_bibs(root, expansion.text, result.base_of(doc))[0]]
+    return list(dict.fromkeys(out))
+
+
 def step_dirname(n: int, stem: str) -> str:
     return f"{n:04d}-{stem}"
 

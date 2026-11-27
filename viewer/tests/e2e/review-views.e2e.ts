@@ -13,7 +13,7 @@ async function open(page: Page): Promise<void> {
 const count = (page: Page, testid: string) => page.getByTestId(testid).locator('.n');
 // every row Review draws, loom's and the two kinds drawn from the manifest alike
 const rows = (page: Page) => page.locator('[data-testid="review-row"][data-kind]');
-/** The rows of a kind drawn from the manifest: Results to accept's blocks, Proposed edits' changes and copies. */
+/** The rows of a kind drawn from the manifest: Results to accept's blocks, Proposed edits' files, suggested edits and copies. */
 const kindRows = (page: Page, kind: 'accepted-changed' | 'edits') => page.locator(`[data-testid="review-row"][data-kind="${kind}"]`);
 /** Opens a row that is closed, by the button that opens it. */
 async function openRow(row: ReturnType<Page['locator']>): Promise<void> {
@@ -28,6 +28,8 @@ test('Everything lists what waits by who is waiting, a row for each thing counte
 	// Results to accept and Proposed edits count their rows drawn from the manifest, not the fixture's rows; Lean statements to attest counts the attested results that changed too
 	expect(kinds).toEqual(['all 28', 'questions 2', 'cited 4', 'attest 4', 'fetch 3', 'edits 5', 'accepted-changed 5', 'check 5', 'agents 6']);
 	await expect(page.getByTestId('review-column').locator('[data-testid^="review-kind-"] .t')).toHaveText(['Everything', 'Agent questions', "Cited results loom can't read", 'Lean statements to attest', 'Papers to add', 'Proposed edits', 'Results to accept', 'Results to check', 'Agents still working']);
+	// Problems stands among the kinds by its name
+	await expect(page.getByTestId('review-column').locator('nav').first().locator('.t')).toHaveText(['Everything', 'Agent questions', "Cited results loom can't read", 'Lean statements to attest', 'Papers to add', 'Problems', 'Proposed edits', 'Results to accept', 'Results to check']);
 	// the tasks agents are still working on need nothing of the person, so they stand below the drafts, not under Waiting for you
 	expect(await page.getByTestId('review-kind-agents').evaluate((a) => !!(document.querySelector('[data-testid="review-draft"]')!.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
 	await expect(page.getByTestId('review-record')).toHaveText('History');
@@ -80,14 +82,14 @@ test("an agent's question is answered by a choice or in the person's words, and 
 	await expect(count(page, 'review-kind-questions')).toHaveText('0');
 });
 
-test('under Proposed edits each change is a row that opens to its words out and in, an edit made in place said so, Keep and Discard on each', async ({ page }) => {
+test('under Proposed edits each file edited in place and each suggested edit is a row that opens to its words out and in, an edit made in place said so, Keep and Discard on each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const edit = page.locator('[data-testid="review-row"][data-change="c-0f621ccf"]');
+	const edit = page.locator('[data-testid="review-row"][data-file="drafting/main.tex"]');
 	await expect(edit.locator('.meta')).toHaveText('edited since your look');
 	await expect(page.locator('[data-testid="review-row"][data-change="e-2026-09-16-r2hw0m"] .meta')).toHaveText('proposed by agent');
 	await expect(page.getByTestId('change-card')).toHaveCount(0);
-	for (const row of await page.locator('[data-testid="review-row"][data-change]').all()) {
+	for (const row of await page.locator('[data-testid="review-row"]:is([data-change], [data-file])').all()) {
 		await openRow(row);
 		await expect(row.getByTestId('card-keep')).toBeVisible();
 		await expect(row.getByTestId('card-discard')).toBeVisible();
@@ -240,15 +242,18 @@ test("a Lean statement to attest shows the statement beside loom's Lean, each de
 	await expect(balanced).toContainText('You attested its Lean on 12 Nov.');
 	await expect(defs.locator(`tr[data-lean="Quiver'.cycleSign"]`)).toContainText('Defined in the Lean only, standing for no result, so your yes covers it.');
 	await expect(defs.locator(`tr[data-lean="Quiver'.sameWay"] pre.lean`)).toHaveText("def Quiver'.sameWay");
-	// the agent's reading, part by part, carries no Lean of its own
-	const parts = lemma.locator('table.att:not(.defs)');
+	// the agent's reading, part by part, drawn as that agent's: each part names the declaration of loom's record it reads and carries no Lean of its own
+	await expect(lemma.getByTestId('attest-reading')).toHaveText('Claude Code Agent read the Lean on 21 Nov. Nothing checks a reading against the Lean: your yes is to the Lean above.');
+	const parts = lemma.getByTestId('attest-parts');
+	await expect(parts.locator('th')).toHaveText(['', 'your draft', 'the Lean it reads', 'Claude Code Agent’s reading']);
 	await expect(parts.locator('tbody tr')).toHaveCount(4);
+	await expect(parts.locator('tr[data-lean="Weighting.IsBalanced.eq_cycleSign_mul"]')).toContainText('(ii)');
 	await expect(parts).toContainText('notation from your macros, defined by no result');
 	await expect(parts.locator('pre.lean')).toHaveCount(0);
 	await lemma.getByRole('button', { name: /It uses Definitions 2.1 and 2.3, which you attested on 12 Nov./ }).click();
 	await expect(lemma).toContainText('Definition 2.3, Balanced');
-	await expect(lemma).toContainText('Claude Code found');
-	await expect(lemma).toContainText("Yes covers parts (i) and (ii), ε and supp. Lemma 3.3 then reads formalized. It covers Quiver'.cycleSign and Quiver'.sameWay too, which the Lean defines alone.");
+	await expect(lemma).toContainText('Claude Code Agent found');
+	await expect(lemma).toContainText("Yes covers parts (i), (ii) and ε, supp. Lemma 3.3 then reads formalized. It covers Quiver'.cycleSign and Quiver'.sameWay too, which the Lean defines alone.");
 	await lemma.getByRole('button', { name: 'no, it differs…' }).click();
 	await lemma.getByPlaceholder('what the Lean gets wrong').fill('(ii) should fix a₀ first');
 	await lemma.getByRole('button', { name: 'ask an agent to restate' }).click();
@@ -308,7 +313,7 @@ test('see it lays the document over Review, read only, lands at the place, and c
 test("a proposed edit's see it lays its draft over Review and lands at the result, and a change in no draft's text offers none", async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const nowhere = page.locator('[data-testid="review-row"][data-change="c-5a59b9ba"]');
+	const nowhere = page.locator('[data-testid="review-row"][data-file="notes/intro.md"]');
 	await openRow(nowhere);
 	await expect(nowhere.getByTestId('see-it')).toHaveCount(0);
 	const suggested = page.locator('[data-testid="review-row"][data-change="e-2026-09-16-r2hw0m"]');
@@ -335,6 +340,30 @@ test('the tasks waiting for an agent say what was asked, who works on one, and d
 	await expect(page.getByTestId('column-message')).toContainText('Task deleted.');
 	await expect(tasks).toHaveCount(5);
 	await expect(count(page, 'review-kind-agents')).toHaveText('5');
+});
+
+test("Problems has its own entry in Review's column, with its count, and opens Review's Problems page inside Review", async ({ page }) => {
+	// a document of the person's that did not compile, so that something is counted
+	await serve(page, (m) => void m.diagnostics.push({ severity: 'error', code: 'loom:compile-failed', class: 'latex', message: 'drafting/main.tex did not compile', locations: [{ file: 'drafting/main.tex', line: 31 }], keys: ['drafting/main.tex'], owner: 'person' } as never));
+	await open(page);
+	const entry = page.getByTestId('review-problems');
+	await expect(entry.locator('.t')).toHaveText('Problems');
+	await expect(count(page, 'review-problems')).toHaveText(/^[1-9]\d*$/);
+	const n = (await count(page, 'review-problems').textContent())!;
+	await entry.click();
+	await expect(page).toHaveURL(/\/review\/problems/);
+	// still Review, its column standing, the entry marked as the page shown, and its count the page's
+	await expect(page.getByTestId('review-column')).toBeVisible();
+	await expect(entry).toHaveAttribute('aria-current', 'page');
+	await expect(page.getByTestId('problems-yours-count')).toHaveText(n);
+	// under a draft, it counts nothing, as the kinds do
+	await page.getByTestId('review-draft').first().click();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
+	await expect(count(page, 'review-problems')).toHaveText('');
+	// every link in the column keeps the person in Review
+	const links = await page.getByTestId('review-column').locator('a').evaluateAll((as) => as.map((a) => new URL((a as HTMLAnchorElement).href).pathname));
+	expect(links.length).toBeGreaterThan(1);
+	for (const l of links) expect(l).toMatch(/^\/review(\/|$)/);
 });
 
 test('no control in Review changes view, and no id is drawn', async ({ page }) => {
@@ -384,7 +413,9 @@ test("the review's round: locate washes the words found at reading size, a page 
 	const prop = page.getByTestId('review-row').filter({ hasText: 'Smith 2024 · Proposition 3.4' });
 	await prop.getByRole('button', { expanded: false }).first().click();
 	await expect(prop).toContainText('Smith 2024, as the paper has it');
-	await expect(prop.locator('table.att:not(.defs) th').nth(1)).toHaveText('the paper');
+	await expect(prop.getByTestId('attest-parts').locator('th').nth(1)).toHaveText('the paper');
+	// a reading of an earlier Lean says so
+	await expect(prop.getByTestId('attest-reading')).toHaveText('Claude Code Agent read an earlier Lean, on 20 Nov; loom has checked the Lean again since, so this reading may not say what the Lean above says.');
 	await expect(prop.getByTestId('attest-definitions').locator('th').nth(1)).toHaveText('in the paper');
 	await expect(prop).toContainText('Does the Lean say what the paper says?');
 	await expect(prop).not.toContainText('as you wrote it');
@@ -449,7 +480,7 @@ test('nothing in Results to accept or Proposed edits leaves Review, and see it o
 	expect(await leaving()).toEqual([]);
 	await page.getByTestId('review-kind-edits').click();
 	await page.getByTestId('your-todo').click();
-	for (const row of await page.locator('[data-testid="review-row"][data-change]').all()) await openRow(row);
+	for (const row of await page.locator('[data-testid="review-row"]:is([data-change], [data-file])').all()) await openRow(row);
 	await expect(page.getByTestId('todo-row').first()).toBeVisible();
 	expect(await leaving()).toEqual([]);
 	// a To do item lays its draft over Review
@@ -571,11 +602,143 @@ test('Results to accept and Proposed edits draw a row for each thing they count,
 	await page.getByTestId('review-kind-edits').click();
 	await expect(kindRows(page, 'edits')).toHaveCount(0);
 	await page.getByTestId('review-draft').filter({ hasText: 'main.tex' }).click();
-	// the changes in main.tex's text, and the agent's copy into it: four rows, as the column counts
-	await expect(page.locator('[data-testid="review-row"][data-change]')).toHaveCount(3);
+	// the suggested edits in main.tex's text, the file edited in place, and the agent's copy into it: four rows, as the column counts
+	await expect(page.locator('[data-testid="review-row"][data-change]')).toHaveCount(2);
+	await expect(page.locator('[data-testid="review-row"][data-file]')).toHaveCount(1);
 	await expect(page.locator('[data-testid="review-row"][data-copy]')).toHaveCount(1);
-	// widened again, the change in no document's text is listed too
+	// widened again, the file in no document's text is listed too
 	await page.getByTestId('review-kind-all').click();
-	await expect(page.locator('[data-testid="review-row"][data-change]')).toHaveCount(4);
+	await expect(page.locator('[data-testid="review-row"][data-file]')).toHaveCount(2);
 	await expect(count(page, 'review-kind-edits')).toHaveText('5');
+});
+
+test("edits made in place are one row a file, opening to each with Keep and Discard and the file's own keep all and discard all, and the column counts the rows drawn", async ({ page }) => {
+	await serve(page, (m) => {
+		const at = (id: string) => m.changes.find((c: { id: string }) => c.id === id);
+		// two more edits in main.tex, one in the block already edited and one outside any, and one more in notes/intro.md
+		m.changes.push({ ...at('c-0f621ccf'), id: 'c-00000001', old: 'one', new: 'two' }, { ...at('c-0f621ccf'), id: 'c-00000002', key: null, block: null, old: 'left', new: 'right' }, { ...at('c-5a59b9ba'), id: 'c-00000003', old: 'up', new: 'down' });
+	});
+	const sent: Record<string, unknown>[] = [];
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['change-keep', 'change-discard'], token: 't', quilt: 'q-test' } }));
+	await page.route('**/_api/change-*', (r) => {
+		const body = r.request().postDataJSON();
+		sent.push(body);
+		return r.fulfill({ json: { ok: true, result: 'done', done: body.changes, refused: [] } });
+	});
+	await open(page);
+	// seven changes and a copy, drawn as five rows: two files, two suggested edits and the copy
+	await expect(count(page, 'review-kind-edits')).toHaveText('5');
+	await expect(count(page, 'review-kind-all')).toHaveText('28');
+	await page.getByTestId('review-kind-edits').click();
+	await expect(kindRows(page, 'edits')).toHaveCount(5);
+	const main = page.locator('[data-testid="review-row"][data-file="drafting/main.tex"]');
+	await expect(main.locator('.tx')).toHaveText('main.tex');
+	await expect(main.locator('.meta')).toHaveText('3 edits since your look');
+	await openRow(main);
+	await expect(main.getByTestId('change-card')).toHaveCount(3);
+	await expect(main.getByTestId('card-keep')).toHaveCount(3);
+	await expect(main.getByTestId('card-discard')).toHaveCount(3);
+	// over them the file's own acts, which keep exactly its changes
+	await expect(main.getByTestId('file-keep-all')).toHaveText('keep all 3');
+	await expect(main.getByTestId('file-discard-all')).toHaveText('discard all 3');
+	await main.getByTestId('file-keep-all').click();
+	await expect.poll(() => sent).toEqual([{ changes: ['c-0f621ccf', 'c-00000001', 'c-00000002'] }]);
+	await expect(page.getByTestId('column-message')).toHaveText('Kept 3 changes.');
+	await expect(main).toHaveCount(0);
+	await expect(count(page, 'review-kind-edits')).toHaveText('4');
+	// the other file still holds both its edits
+	const intro = page.locator('[data-testid="review-row"][data-file="notes/intro.md"]');
+	await expect(intro.locator('.meta')).toHaveText('2 edits since your look');
+});
+
+test("an adoption is one row of Results to accept, opening to the blocks it took in, each with Accept, and accept all for those that can be, the others saying why; the column counts the rows drawn", async ({ page }) => {
+	const COPY = '.loom/agents/copies/aidoc.tex';
+	await serve(page, (m) => {
+		const from: Record<string, object> = {
+			'sy-0002': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”' },
+			'sy-0004': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”', refusal: 'It is marked incomplete.', refusal_code: 'incomplete' },
+			'sy-0005': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”' }
+		};
+		for (const r of m.unresolved) Object.assign(r, from[r.key] ?? {});
+	});
+	const sent: Record<string, unknown>[] = [];
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['review-accept'], token: 't', quilt: 'q-test' } }));
+	await page.route('**/_api/review-accept', (r) => {
+		const body = r.request().postDataJSON();
+		sent.push(body);
+		return r.fulfill({ json: { ok: true, result: 'done', accepted: body.keys, refused: [] } });
+	});
+	await open(page);
+	// five blocks waiting, three of them one adoption: three rows
+	await expect(count(page, 'review-kind-accepted-changed')).toHaveText('3');
+	await expect(count(page, 'review-kind-all')).toHaveText('26');
+	await page.getByTestId('review-kind-accepted-changed').click();
+	await expect(kindRows(page, 'accepted-changed')).toHaveCount(3);
+	const adoption = page.locator(`[data-testid="review-row"][data-adoption="${COPY}"]`);
+	await expect(adoption.locator('.tx').first()).toHaveText('main.tex · aidoc');
+	await expect(adoption.getByTestId('review-row-why')).toHaveText("taken in 3 results from the copy · 1 can't be accepted yet");
+	// the blocks not from an adoption stay rows of their own
+	await expect(page.locator('[data-testid="review-row"][data-key="sy-0001"]')).toBeVisible();
+	await expect(page.locator('[data-testid="review-row"][data-key="sy-0002/proof"]')).toBeVisible();
+	await openRow(adoption);
+	const blocks = adoption.locator('[data-testid="review-row"][data-key]');
+	await expect(blocks).toHaveCount(3);
+	expect(await blocks.evaluateAll((rs) => rs.map((r) => r.getAttribute('data-key')))).toEqual(['sy-0002', 'sy-0004', 'sy-0005']);
+	// the one that cannot be accepted says why, in the viewer's words, and offers no Accept
+	const incomplete = adoption.locator('[data-testid="review-row"][data-key="sy-0004"]');
+	await expect(incomplete.getByTestId('review-row-why')).toHaveText("can't be accepted yet: marked incomplete");
+	await openRow(incomplete);
+	await expect(incomplete.getByTestId('review-refusal')).toHaveText("Can't be accepted yet: it is marked incomplete.");
+	await expect(incomplete.getByTestId('review-accept')).toHaveCount(0);
+	const orbits = adoption.locator('[data-testid="review-row"][data-key="sy-0002"]');
+	await openRow(orbits);
+	await expect(orbits.getByTestId('review-accept')).toBeVisible();
+	// accept all accepts exactly those that can be
+	await expect(adoption.getByTestId('adoption-accept-all')).toHaveText('accept all 2');
+	await adoption.getByTestId('adoption-accept-all').click();
+	await expect.poll(() => sent).toEqual([{ reviewer: expect.any(String), keys: ['sy-0002', 'sy-0005'] }]);
+	await expect(page.getByTestId('column-message')).toHaveText('Accepted 2 results.');
+});
+
+test("a link to a block an adoption took in opens the adoption's row and the block, in view", async ({ page }) => {
+	await serve(page, (m) => {
+		for (const r of m.unresolved) if (['sy-0002', 'sy-0005'].includes(r.key)) Object.assign(r, { cause: 'adopted', contribution: '.loom/agents/copies/aidoc.tex' });
+	});
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/review?fixture=round6#review-sy-0005');
+	const row = page.locator('#review-sy-0005');
+	await expect(row).toBeInViewport();
+	await expect(row.locator('.rr-h')).toHaveAttribute('aria-expanded', 'true');
+	await expect(page.locator('[data-testid="review-row"][data-adoption] > .rr-h')).toHaveAttribute('aria-expanded', 'true');
+});
+
+test("the files a document loads beside its text are folded into its row of Proposed edits, kept or discarded with it, and the column counts the rows drawn", async ({ page }) => {
+	await serve(page, (m) => {
+		const main = m.changes.find((c: { id: string }) => c.id === 'c-0f621ccf');
+		m.masters.find((d: { path: string }) => d.path === 'drafting/main.tex').loads = ['drafting/macros.sty', 'drafting/loom.sty', 'drafting/refs.bib'];
+		m.changes.push({ ...main, id: 'c-00000011', path: 'drafting/macros.sty', documents: [], key: null, block: null, old: '', new: '\\newcommand{\\Fix}{F}' }, { ...main, id: 'c-00000012', path: 'drafting/refs.bib', documents: [], key: null, block: null, old: '', new: '@book{Har77}' });
+	});
+	const sent: Record<string, unknown>[] = [];
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['change-keep', 'change-discard'], token: 't', quilt: 'q-test' } }));
+	await page.route('**/_api/change-*', (r) => {
+		const body = r.request().postDataJSON();
+		sent.push(body);
+		return r.fulfill({ json: { ok: true, result: 'done', done: body.changes, refused: [] } });
+	});
+	await open(page);
+	// two more files edited, both loaded by main.tex: still five rows
+	await expect(count(page, 'review-kind-edits')).toHaveText('5');
+	await page.getByTestId('review-kind-edits').click();
+	await expect(kindRows(page, 'edits')).toHaveCount(5);
+	await expect(page.locator('[data-testid="review-row"][data-file="drafting/macros.sty"]')).toHaveCount(0);
+	const main = page.locator('[data-testid="review-row"][data-file="drafting/main.tex"]');
+	await expect(main.locator('.tx')).toHaveText('main.tex');
+	await expect(main.locator('.meta')).toHaveText('3 edits since your look · with 2 files it loads');
+	await openRow(main);
+	await expect(main.getByTestId('change-card')).toHaveCount(3);
+	await expect(main.getByTestId('file-change').locator('> .note')).toHaveText(['Definition 1.1', 'macros.sty', 'refs.bib']);
+	await main.getByTestId('file-keep-all').click();
+	await expect.poll(() => sent).toEqual([{ changes: ['c-0f621ccf', 'c-00000011', 'c-00000012'] }]);
+	await expect(main).toHaveCount(0);
+	await expect(count(page, 'review-kind-edits')).toHaveText('4');
 });

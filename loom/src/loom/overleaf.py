@@ -660,7 +660,7 @@ def update(quilt: Quilt, actor: str | None = None) -> dict[str, Any]:
     Returns
     -------
     dict
-        `state`: `up-to-date` when Overleaf holds nothing new, else `updated`, with `files`, how many were written; `by`, the names of the others whose changes Review lists; `own`, how many changed blocks and places are left out of Review because only the person's own commits touched them; `places`, each change outside a block, `{file, place, by}`, `place` one of `sync.PLACES`; `here`, the blocks whose change was one made here and written over; and `overwritten`, the files here that held a change made here and were written over.
+        `state`: `up-to-date` when Overleaf holds nothing new, else `updated`, with `files`, how many were written; `by`, the names of the others whose changes Review lists; `own`, how many changed blocks and places are left out of Review because only the person's own commits touched them; `places`, each change outside a block, `{file, place, by}`, `place` one of `sync.PLACES`; `here`, the blocks whose change was one made here and written over; and `overwritten`, the files here that held a change made here and were written over, each kept as a version (`sync.incorporate`).
 
     Raises
     ------

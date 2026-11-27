@@ -653,3 +653,23 @@ def test_a_section_shows_what_an_included_file_holds_after_its_node(tmp_path: Pa
         node.write_text(node.read_text(encoding="utf-8") + f"\nA saved sentence, {word}.\n", encoding="utf-8")
         build(load_quilt(root), tex=False)
         assert word in section.read_text(encoding="utf-8")
+
+
+def test_a_document_in_the_manifest_lists_the_local_files_it_loads_beside_its_text(tmp_path: Path) -> None:
+    """`loads`: a document's local packages, its preamble's inputs and the bibliographies it names, in that order; never a package the distribution supplies, a body input, or the document itself."""
+    q = demo(tmp_path)
+    project = q / "project"
+    (project / "sections").mkdir(parents=True)
+    (project / "style.sty").write_text("\\newcommand{\\Fix}{\\mathrm{Fix}}\n", encoding="utf-8")
+    (project / "preamble.tex").write_text("\\usepackage{amsthm}\n\\newtheorem{lemma}{Lemma}\n", encoding="utf-8")
+    (project / "refs.bib").write_text("@book{Har77, title={Algebraic Geometry}}\n", encoding="utf-8")
+    (project / "sections" / "one.tex").write_text(
+        "\\begin{lemma}\\label{lem:one}\nOne.\n\\end{lemma}\n", encoding="utf-8"
+    )
+    (project / "paper.tex").write_text(
+        "\\documentclass{article}\n\\usepackage{amsmath,style}\n\\input{preamble}\n\\begin{document}\n\\input{sections/one}\n\\bibliographystyle{plain}\n\\bibliography{refs,absent}\n\\end{document}\n",
+        encoding="utf-8",
+    )
+    ok("build", "--no-compile", cwd=q)
+    masters = {x["path"]: x for x in json.loads((q / ".loom/cache/site/manifest.json").read_text())["masters"]}
+    assert masters["project/paper.tex"]["loads"] == ["project/style.sty", "project/preamble.tex", "project/refs.bib"]

@@ -100,6 +100,7 @@ Loom is still how anything durable is recorded. A fault you find while answering
   - `loom evidence`
   - `loom formal`
   - `loom formal check`
+  - `loom formal read`
   - `loom here`
   - `loom history`
   - `loom history show`

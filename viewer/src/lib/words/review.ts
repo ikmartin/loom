@@ -1,4 +1,4 @@
-// Review's words: its column (the kinds, their counts' hover cards, the drafts, the History line), the list and its groups, each kind's row and body, the tasks waiting for an agent, and what the column's message says after an act. An entry is named for the place it shows, with a comment saying where, on one line.
+// Review's words: its column (the kinds, their counts' hover cards, Problems, the drafts, the History line), the list and its groups, each kind's row and body, the tasks waiting for an agent, and what the column's message says after an act. An entry is named for the place it shows, with a comment saying where, on one line.
 
 import type { ReviewKind } from '$lib/library/types';
 
@@ -23,6 +23,10 @@ export const review = {
 		drafts: 'Drafts',
 		/** Hover card on Drafts. */
 		draftsHover: 'Show only what concerns one draft.',
+		/** The column's entry for Review's Problems page, among the kinds by its name, with the count of what is wrong in the person's own files. */
+		problems: 'Problems',
+		/** Hover card on Problems. */
+		problemsHover: "What is wrong in your own files: a document that did not compile, an error in its LaTeX, a link to something that is not there. Each opens at its place.",
 		/** The quiet line at the column's foot that opens History inside Review. */
 		record: 'History',
 		/** Hover card on History. */
@@ -32,7 +36,7 @@ export const review = {
 	},
 	/** The kinds' names, in the column and over their groups in the list, and the hover card on each in the column. */
 	kinds: {
-		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or from Overleaf. Read each, and accept it or not; those never accepted are folded beneath.' },
+		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or from Overleaf, what one copy brought in as one row. Read each, and accept it or not; those never accepted are folded beneath.' },
 		questions: { name: 'Agent questions', hover: 'Questions an agent asked while working. Answer with one of its choices or in your own words.' },
 		cited: { name: "Cited results loom can't read", hover: 'Results your drafts cite that loom could not read by itself. Have an agent read them, or locate one yourself.' },
 		check: { name: 'Results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
@@ -227,8 +231,12 @@ export const review = {
 		paper: 'the paper',
 		lean: 'Lean, as Lean prints it',
 		reading: (by: string) => `${by}’s reading`,
-		/** Over a part of notation the statement defines. */
-		inStatement: 'defined in the statement:',
+		/** The parts table's head over the declaration of loom's record each part reads. */
+		reads: 'the Lean it reads',
+		/** Under the parts table's title: whose reading it is, and that nothing checks it. */
+		readingBy: (by: string, date: string) => `${by} read the Lean on ${date}. Nothing checks a reading against the Lean: your yes is to the Lean above.`,
+		/** Under the parts table's title, once loom checked the Lean again after the agent read it. */
+		readingStale: (by: string, date: string) => `${by} read an earlier Lean, on ${date}; loom has checked the Lean again since, so this reading may not say what the Lean above says.`,
 		/** For notation from the person's macros. */
 		fromMacros: 'notation from your macros, defined by no result',
 		/** A fold: the results the statement uses that the person attested already. */
@@ -339,8 +347,16 @@ export const review = {
 		kept: 'Kept.',
 		/** The column's message after discarding or undoing one. */
 		discarded: 'Discarded.',
-		/** An edit made in the person's file's quiet line: when it was made. */
-		sinceLook: 'edited since your look',
+		/** The quiet line of a file with edits made in place since the person's look: how many. */
+		sinceLook: (n: number) => (n === 1 ? 'edited since your look' : `${n} edits since your look`),
+		/** After it, on a document's row: how many of the files it loads beside its text (a style file, a bibliography, a preamble) its row holds too. */
+		loads: (n: number) => (n === 1 ? 'with a file it loads' : `with ${n} files it loads`),
+		/** Hover text on that line: which files. */
+		loadsHover: (names: string[]) => `Edits to ${listed(names)}, which this document loads, are kept or discarded here with it`,
+		/** Hover text on a file's own keep all and discard all, in its open row. */
+		fileHover: { keep: 'Keeps every change in this file', discard: 'Discards every change in this file, writing your old words back over its edits' },
+		/** The same on a document's row that holds the files it loads too. */
+		loadsFileHover: { keep: 'Keeps every change in this document and the files it loads', discard: 'Discards every change in this document and the files it loads, writing your old words back over its edits' },
 		/** Over Proposed edits: keeps every change listed that can be kept. */
 		keepAll: (n: number) => `keep all ${n}`,
 		/** Over Proposed edits: discards every change listed that can be. */
@@ -409,6 +425,23 @@ export const review = {
 		acceptPicked: (n: number) => `accept ${n}`,
 		/** Unchooses them. */
 		clear: 'clear',
+		/** An adoption's quiet line in Results to accept: how many results the person took in from an agent's copy. */
+		adoption: (n: number) => `taken in ${n} ${n === 1 ? 'result' : 'results'} from the copy`,
+		/** After it, how many of them cannot be accepted yet. */
+		cannotCount: (n: number) => `${n} can't be accepted yet`,
+		/** In an open adoption: accepts every result it took in that can be accepted. */
+		acceptAll: (n: number) => `accept all ${n}`,
+		/** Hover text on it. */
+		acceptAllHover: 'Accepts every result taken in from this copy that can be accepted; those that cannot yet say why',
+		/** A block's quiet line within its adoption where it cannot be accepted yet, by the queue's `refusal_code`. */
+		cannotRow: (code?: string) =>
+			({
+				'not-yours': "can't be accepted: not in your documents",
+				incomplete: "can't be accepted yet: marked incomplete",
+				'open-claim': "can't be accepted: a conjecture or a question",
+				unclassified: "can't be accepted yet: not said whether proved, cited or assumed",
+				unidentified: "can't be accepted yet: rests on something unidentified"
+			})[code ?? ''] ?? "can't be accepted yet",
 		/** The two folds beneath the results waiting, which count nothing. */
 		never: 'Never accepted',
 		done: 'Accepted',
@@ -542,6 +575,44 @@ export const review = {
 		restate: (name: string, doc: string) => `Restate the Lean of ${name} of ${file(doc)}`,
 		whichResult: (short: string, where: string) => `Say which result of ${short} ${/^proof /.test(where) ? `the ${where}` : where} cites`,
 		formalize: (name: string, doc: string) => `Formalize ${name} of ${file(doc)}`
+	},
+	/** Review › History › Versions, under a document's versions: each version of a file no document's version holds. */
+	fileVersions: {
+		/** The section's heading. */
+		heading: 'Other files',
+		/** Under it. */
+		lead: 'Files an update from Overleaf wrote over while they held changes made here, and files a restore replaced, each kept as it was.',
+		/** A row's button that shows the version's bytes below it. */
+		open: 'Open',
+		/** A row's button that shows how the version differs from the file now. */
+		compare: 'Compare with now',
+		/** In place of Compare when the file holds these bytes now. */
+		same: 'Same as now',
+		/** A row's button that asks before restoring. */
+		restore: 'Restore…',
+		/** The question it asks. */
+		ask: (name: string, when: string) => `Put ${name} back as it was${when ? ` on ${when}` : ''}? Its bytes now are kept as a version.`,
+		/** The button that restores. */
+		go: 'Restore',
+		/** While it restores. */
+		going: 'Restoring…',
+		/** The button that cancels the question. */
+		cancel: 'Cancel',
+		/** A file that is neither text nor an image, opened: where its bytes are. */
+		download: (name: string) => `Download ${name} as kept`,
+		/** Compare on a file that is neither text nor an image. */
+		differs: 'The kept bytes differ from the file now; download them to compare.',
+		/** Over the version, beside the file now, when two images are compared. */
+		then: 'Kept',
+		now: 'Now',
+		/** When the file is gone now. */
+		gone: 'The file is not there now.',
+		/** When the version's bytes could not be read. */
+		unread: 'Its bytes could not be read.',
+		/** Everything recorded's words for a file's version, by why it was kept. */
+		kept: (name: string, message: string) => `Kept a version of ${name}${message ? `: ${message}` : ''}`,
+		/** Everything recorded's words for a file's version put back. */
+		restored: (name: string) => `Put ${name} back as a version`
 	},
 	/** Names joined as a sentence lists them. */
 	listed

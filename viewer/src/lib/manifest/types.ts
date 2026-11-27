@@ -131,6 +131,29 @@ export interface CanonDoc {
 	cannot_restore?: string;
 }
 
+/** A version of one file no document's version holds (a bibliography, a figure, a file no document reads), kept when an update from Overleaf wrote over it or a restore replaced it; oldest first in `history.files`. */
+export interface HistoryFile {
+	path: string;
+	/** Its bytes by hash, which `history-restore` takes as `version`. */
+	version: string;
+	when: string;
+	actor?: string;
+	/** The act it was kept at: `sync` (before an update from Overleaf) or `restore` (the bytes a restore replaced). */
+	kept_for?: string;
+	message?: string;
+	/** `text` (UTF-8), `image`, or `other`. */
+	kind: 'text' | 'image' | 'other';
+	bytes?: number;
+	/** Its bytes, published under the build directory; absent when the history lacks them. */
+	kept?: string;
+	/** Whether the file holds these bytes now. */
+	same?: boolean;
+	/** A text's unified diff from the version to the file now, under the build directory. */
+	diff?: string;
+	/** Why it cannot be put back, in the person's words; '' when it can. */
+	cannot_restore?: string;
+}
+
 /** One line of the history, as Review › History lists it: what was done, when, by whom, and to what. */
 export interface HistoryAct {
 	action: string;
@@ -186,6 +209,8 @@ export interface Master {
   compiled?: string;
   pdf?: string;
   numbering_known?: boolean;
+  /** The local files it loads beside its text: its preamble's packages, class and inputs, then the bibliographies it names; absent where none. */
+  loads?: string[];
   /** An agent document's source document, where the history's moves have taken it. */
   copy_of?: string;
   scope?: {kind: string; key?: string; title?: string; keys?: string[]};
@@ -689,7 +714,7 @@ export interface Manifest {
   /** Whether the quilt mirrors an Overleaf project, and how it stands; absent from an older publisher. */
   overleaf?: OverleafState;
   unresolved?: UnresolvedReview[];
-  history?: { steps: HistoryStep[]; acts?: HistoryAct[] };
+  history?: { steps: HistoryStep[]; acts?: HistoryAct[]; files?: HistoryFile[] };
   regions: Record<string, Region>;
   relations?: Relation[];
   edges: Edge[];

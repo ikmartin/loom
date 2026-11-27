@@ -1,10 +1,10 @@
-// Pending changes under a running `loom serve` (plan 0.30.3): an edit made in a file since the reviewer's look and a suggested edit, both drawn in the document in Markup and in Final and listed in Review's Proposed edits; Keep and Discard doing the same from either place; an annotation on the words a kept edit replaces carried onto its new words; Keep resolving the annotation a suggestion answers; and Keep all and Discard all.
+// Pending changes under a running `loom serve` (plan 0.30.3): an edit made in a file since the reviewer's look and a suggested edit, both drawn in the document in Markup and in Final and listed in Review's Proposed edits; Keep and Discard doing the same from either place; an annotation on the words a kept edit replaces carried onto its new words; Keep resolving the annotation a suggestion answers; and Keep all and Discard all, for a document, for every change listed, and for one file's row in Review.
 import { expect, test, type Served } from '../served';
 import type { Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pane } from '../workspace';
-import { shown as drawn } from '../review-rows';
+import { openRow, shown as drawn } from '../review-rows';
 
 const MAIN = 'drafting/main.tex';
 const NODE = 'drafting/nodes/sy-0002.tex';
@@ -185,4 +185,34 @@ test("Keep all keeps every ready change of a document from its Changes menu, and
 	await expect.poll(() => pending(served).some((c) => c.path === intro), { timeout: 60_000 }).toBe(false);
 	await expect(page.getByTestId('column-message')).toContainText(/^Discarded \d+ changes?\./);
 	expect(text(served, intro)).not.toBe(before);
+});
+
+test("Keep all on a file's row in Review keeps exactly that file's edits made in place, and no other change", async ({ page, served }) => {
+	writeFileSync(join(served.root, NODE), text(served).replace('one or two points', 'at most two points').replace('because', 'since'));
+	const inNode = () => pending(served).filter((c) => c.kind === 'edit' && c.path === NODE);
+	await expect.poll(() => inNode().length, { timeout: 60_000 }).toBe(2);
+	const edits = inNode().map((c) => c.id);
+	// the suggested edit in the same file and the edit in notes/intro.md are rows of their own
+	const others = pending(served).filter((c) => !edits.includes(c.id));
+	expect(others.map((c) => c.id)).toContain(SUGGESTED);
+	expect(others.some((c) => c.path === 'notes/intro.md')).toBe(true);
+	const sent: unknown[] = [];
+	page.on('request', (r) => {
+		if (r.url().endsWith('/_api/change-keep')) sent.push(r.postDataJSON());
+	});
+	await page.goto('/review');
+	const row = page.locator(`[data-testid="review-row"][data-file="${NODE}"]`);
+	await expect(row).toBeVisible({ timeout: 60_000 });
+	await expect(row.locator('.meta')).toHaveText('2 edits since your look');
+	await openRow(row);
+	await expect(row.getByTestId('change-card')).toHaveCount(2);
+	await row.getByTestId('file-keep-all').click();
+	await expect.poll(() => inNode().length, { timeout: 60_000 }).toBe(0);
+	expect(sent).toEqual([{ changes: expect.arrayContaining(edits) }]);
+	expect((sent[0] as { changes: string[] }).changes).toHaveLength(2);
+	// kept, the edits stay in the file and every other change still waits
+	expect(text(served)).toContain('at most two points');
+	const left = pending(served).map((c) => c.id);
+	for (const c of others) expect(left).toContain(c.id);
+	await expect(row).toHaveCount(0);
 });

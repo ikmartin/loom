@@ -441,6 +441,20 @@
 .rvw .att td.ll {
 	width: 38%;
 }
+.rvw .att td.dn {
+	width: 20%;
+	font-family: var(--font-mono, monospace);
+	font-size: 12px;
+	color: var(--ink-soft);
+	overflow-wrap: anywhere;
+}
+.rvw .att td.ag.stale {
+	color: var(--ink-soft);
+}
+.rvw .note.agent-reading {
+	margin: 0 0 6px;
+	color: var(--agent);
+}
 .rvw .att .lbl {
 	display: block;
 	font-family: system-ui, sans-serif;

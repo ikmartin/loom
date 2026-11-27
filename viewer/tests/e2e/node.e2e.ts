@@ -40,14 +40,27 @@ test('a node can be read as it was written', async ({ page }) => {
 	await expect(page.locator('.fragment .env').first()).toBeVisible();
 });
 
+test('a missing proof on a block waiting to be accepted says in words where it waits, and links nowhere out of Docs', async ({ page }) => {
+	await serve(page, (m) => {
+		m.diagnostics.push({ severity: 'warning', code: 'loom:missing-proof', class: 'model', message: 'No proof attached', locations: [], keys: ['sy-0003'] });
+		m.unresolved.push({ ...structuredClone(m.unresolved.find((r: { key: string }) => r.key === 'sy-0001')), key: 'sy-0003' });
+	});
+	await page.goto('/node/sy-0003');
+	const said = pane(page, 0).getByTestId('missing-proof');
+	await expect(said).toHaveText('No proof is attached. It waits for you in Review, under Results to accept.');
+	await expect(said.locator('a')).toHaveCount(0);
+	await expect(page).toHaveURL(/\/node\/sy-0003$/);
+});
+
 test("a missing proof is said where the proof would be, and not again among the context's diagnostics, which are the LaTeX's", async ({ page }) => {
 	await serve(page, (m) => {
 		m.diagnostics.push({ severity: 'warning', code: 'loom:missing-proof', class: 'model', message: 'No proof attached', locations: [], keys: ['sy-0003'] });
 	});
 	await page.goto('/node/sy-0003' + beside('/context/sy-0003'));
 	const said = pane(page, 0).getByTestId('missing-proof');
-	await expect(said).toContainText('No proof is attached.');
-	await expect(said.getByRole('link', { name: 'See this block in Review' })).toHaveAttribute('href', '/review?document=drafting%2Fmain.tex#review-sy-0003');
+	await expect(said).toHaveText('No proof is attached.');
+	// it links nowhere, so nothing on it leaves Docs
+	await expect(said.locator('a')).toHaveCount(0);
 	// after the statement, not above it: the statement leads
 	const statement = (await pane(page, 0).locator('.fragment .env[data-id="sy-0003"]').boundingBox())!;
 	expect((await said.boundingBox())!.y).toBeGreaterThan(statement.y);
