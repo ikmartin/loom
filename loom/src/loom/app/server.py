@@ -48,16 +48,26 @@ class HomeRunning(Exception):
 
 def choose_folder(prompt: str) -> Path | None:
     """The folder the person picks in the system's folder dialog, on their click; None when they cancel."""
+    return _dialog("folder", prompt)
+
+
+def choose_file(prompt: str) -> Path | None:
+    """The file the person picks in the system's file dialog, on their click; None when they cancel."""
+    return _dialog("file", prompt)
+
+
+def _dialog(what: str, prompt: str) -> Path | None:
+    """The system's dialog for a `folder` or a `file`; ApiError `no-dialog` where there is none."""
     try:
         done = subprocess.run(
-            ["osascript", "-e", f"POSIX path of (choose folder with prompt {json.dumps(prompt)})"],
+            ["osascript", "-e", f"POSIX path of (choose {what} with prompt {json.dumps(prompt)})"],
             capture_output=True,
             text=True,
             timeout=3600,
             check=False,
         )
     except FileNotFoundError as exc:
-        raise ApiError("no-dialog", "this system has no folder dialog loom can show", status=501) from exc
+        raise ApiError("no-dialog", f"this system has no {what} dialog loom can show", status=501) from exc
     return Path(done.stdout.strip()) if done.returncode == 0 and done.stdout.strip() else None
 
 

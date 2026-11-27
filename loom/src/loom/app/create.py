@@ -1,4 +1,4 @@
-"""A new quilt from what the person drops on the home page: the files kept where they wait, an archive opened, the paper's main file found, the quilt made and the paper brought in through the door's one `import` act, then served.
+"""A paper brought into a quilt from what the person drops or chooses: the files kept where they wait, an archive opened, the paper's main file found and brought in through the door's one `import` act, or PDFs taken into the library (`bring`); and a new quilt made on the home page (`make`), then served.
 
 Dropped files wait in `app/incoming/<drop>/files/` in loom's folder for the machine: outside every quilt and never under a cache, so nothing loom sweeps can take them before they are used. A drop goes once its quilt is made, or `KEEP_DAYS` after it was last added to.
 
@@ -238,13 +238,18 @@ def mains(src: Path) -> list[str]:
         rel = p.relative_to(src)
         if any(part.startswith(".") or part == "__MACOSX" for part in rel.parts) or not p.is_file():
             continue
-        try:
-            text = _COMMENT.sub("", p.read_text(encoding="utf-8", errors="replace"))
-        except OSError:
-            continue
-        if "\\documentclass" in text and "\\begin{document}" in text:
+        if begins(p):
             found.append(rel.as_posix())
     return found
+
+
+def begins(p: Path) -> bool:
+    """Whether the file `p` begins a document: a `\\documentclass` and a `\\begin{document}` outside comments."""
+    try:
+        text = _COMMENT.sub("", p.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return False
+    return "\\documentclass" in text and "\\begin{document}" in text
 
 
 def target(name: str, place: str | None) -> Path:
@@ -290,6 +295,113 @@ def paper(drop: str, main: str | None) -> Path | list[str]:
     return src / found[0] if len(found) == 1 else found
 
 
+def bring(root: Path, main: Path | None, read: Sequence[Path] = ()) -> dict[str, Any]:
+    """Bring the paper at `main` into the quilt at `root` through the import's one act, or take the PDFs `read` into its library.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+    main : Path or None
+        The paper's main file; with its folder it is read where it lies and kept as it is.
+    read : sequence of Path, default ()
+        PDFs to read, when there is no paper: each taken into the library as the library's intake takes a dropped file, by the person, with no look-up on the network; a document it cannot place waits there as the library's question.
+
+    Returns
+    -------
+    dict
+        With a paper `{document, typeset, untypeset, differs}`: `differs` when the drafted document does not typeset as the paper did, which is then brought in all the same and nothing reads as checked; with PDFs `{read}`, how many; else `{}`.
+    """
+    from loom.cli.paper import Differs, run_import
+    from loom.errors import ContentError, EnvError
+    from loom.scan.quilt import load_quilt
+
+    if main is not None:
+        try:
+            try:
+                brought = run_import(load_quilt(root), main, True, fix_anchors=True)
+                differs = False
+            except Differs:
+                brought = run_import(load_quilt(root), main, True, check=False, fix_anchors=True)
+                differs = True
+        except (ContentError, EnvError, OSError) as exc:
+            said = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
+            raise ApiError("cannot-import", said, 409) from exc
+        data = brought.data
+        return {
+            "document": data["document"],
+            "typeset": data["typeset"],
+            "untypeset": data["untypeset"],
+            "differs": differs,
+        }
+    if read:
+        from loom.identity import whoever
+        from loom.library.intake import Item, take
+
+        take(root, [Item(path=p) for p in read], by=whoever(root, sniff=False), online=False)
+        return {"read": len(read)}
+    return {}
+
+
+def bring_drop(root: Path, drop: str, main: str | None) -> dict[str, Any]:
+    """Bring what waits in `drop` into the quilt at `root` (`bring`): the PDFs it holds and nothing else to read, else its paper.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+    drop : str
+        The drop, as `receive` named it.
+    main : str or None
+        Which of the drop's files is the paper, where several could be.
+
+    Returns
+    -------
+    dict
+        What `bring` answered; or `{question: {choices}, drop}` when several files could be the paper and `main` does not say which, the drop kept for the answer. Otherwise the drop goes, whether it came in or was refused, but for a `main` that is none of its papers.
+    """
+    read = reading(drop)
+    try:
+        found = paper(drop, main) if not read else None
+    except ApiError as exc:
+        if exc.code != "bad-field":
+            let_go(drop)
+        raise
+    if isinstance(found, list):
+        return {"question": {"choices": found}, "drop": drop}
+    try:
+        return bring(root, found, read)
+    finally:
+        let_go(drop)
+
+
+def bring_chosen(root: Path, chosen: Path) -> dict[str, Any]:
+    """Bring the file the person chose into the quilt at `root`: a `.tex` that begins a document as the paper, read where it lies with its folder; anything else kept as a drop first, as one dropped is (`bring_drop`).
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+    chosen : Path
+        The file chosen in the system's dialog.
+
+    Returns
+    -------
+    dict
+        As `bring_drop` answers.
+    """
+    if chosen.suffix.lower() == ".tex":
+        if not begins(chosen):
+            raise ApiError("no-paper", "that file does not begin a document", status=409)
+        return bring(root, chosen)
+    try:
+        with open(chosen, "rb") as data:
+            drop = receive(None, chosen.name, data, os.fstat(data.fileno()).st_size)["drop"]
+    except OSError as exc:
+        raise ApiError("cannot-read", f"loom cannot read that file: {exc.strerror or exc}", status=409) from exc
+    return bring_drop(root, drop, None)
+
+
 def make(
     where: Path,
     main: Path | None,
@@ -298,7 +410,7 @@ def make(
     makings: Makings | None = None,
     read: Sequence[Path] = (),
 ) -> dict[str, Any]:
-    """Make the quilt at `where`, bring in the paper at `main` when there is one, or take the PDFs `read` into its library, put it on the list as open and serve it.
+    """Make the quilt at `where`, bring in the paper at `main` when there is one, or take the PDFs `read` into its library (`bring`), put it on the list as open and serve it.
 
     The quilt is made beside `where` and moved there in one rename once it is whole; whatever stops the create first leaves nothing in `where`.
 
@@ -315,17 +427,15 @@ def make(
     makings : Makings, optional
         The home's creates, which hold the move back once the home is stopping; default one of its own.
     read : sequence of Path, default ()
-        PDFs to read: each taken into the new quilt's library as the library's intake takes a dropped file, by the person, with no look-up on the network; a document it cannot place waits there as the library's question.
+        PDFs to read, as `bring` takes them.
 
     Returns
     -------
     dict
-        `{quilt, folder, tex, state, url?}`, with PDFs `{read}` (how many), and with a paper `{document, typeset, untypeset, differs}`: `differs` when the drafted document does not typeset as the paper did, which is then brought in all the same and nothing reads as checked.
+        `{quilt, folder, tex, state, url?}`, with what `bring` answered.
     """
-    from loom.cli.paper import Differs, run_import
     from loom.cli.quilt import write_minimal_quilt
     from loom.config_edit import set_values
-    from loom.errors import ContentError, EnvError
     from loom.looks import first
     from loom.scan.quilt import load_quilt
     from loom.tex import private
@@ -348,29 +458,12 @@ def make(
         step("making")
         nest.mkdir(parents=True)
         write_minimal_quilt(staged, "q", readme=False)
+        if main is not None or read:
+            step("importing")
+            done.update(bring(staged, main, read))
         if main is not None:
-            step("importing")
-            try:
-                try:
-                    brought = run_import(load_quilt(staged), main, True, fix_anchors=True)
-                    done["differs"] = False
-                except Differs:
-                    brought = run_import(load_quilt(staged), main, True, check=False, fix_anchors=True)
-                    done["differs"] = True
-            except (ContentError, EnvError, OSError) as exc:
-                said = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
-                raise ApiError("cannot-import", said, 409) from exc
-            document = brought.data["document"]
             # the quilt opens on the paper, not on a page about loom
-            set_values(load_quilt(staged), {"quilt.home": document})
-            done.update(document=document, typeset=brought.data["typeset"], untypeset=brought.data["untypeset"])
-        elif read:
-            from loom.identity import whoever
-            from loom.library.intake import Item, take
-
-            step("importing")
-            take(staged, [Item(path=p) for p in read], by=whoever(staged, sniff=False), online=False)
-            done["read"] = len(read)
+            set_values(load_quilt(staged), {"quilt.home": done["document"]})
         first(load_quilt(staged))
         with makings.lock:
             if makings.closed:
