@@ -46,13 +46,14 @@ def test_an_edit_that_finds_nothing_fails(tmp_path: Path) -> None:
 
 
 def test_isolation_clears_loom_variables_but_not_the_tier_gates() -> None:
-    """The paper, network and client tiers read their gate inside the test, after isolation has run; clearing it would skip them for ever."""
+    """The paper, network, client and Lean tiers read their gate inside the test, after isolation has run; clearing it would skip them for ever."""
     shell = {
         "LOOM_SESSION": "s-1",
         "LOOM_FIXED_TIME": "t",
         "LOOM_PAPER_FIXTURES": "/p",
         "LOOM_NETWORK": "1",
         "LOOM_CLIENT_TESTS": "1",
+        "LOOM_LEAN_MATHLIB": "/m",
         "HOME": "/h",
     }
     assert sorted(leaking(shell)) == ["LOOM_FIXED_TIME", "LOOM_SESSION"]

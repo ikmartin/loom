@@ -153,7 +153,7 @@ class Result:
 
 def env() -> dict[str, str]:
     """The caller's environment without what would leak into the suites: an activated virtualenv, which uv then warns about, and an agent's session. The tier gates pass through."""
-    gates = ("LOOM_PAPER_FIXTURES", "LOOM_NETWORK", "LOOM_CLIENT_TESTS")
+    gates = ("LOOM_PAPER_FIXTURES", "LOOM_NETWORK", "LOOM_CLIENT_TESTS", "LOOM_LEAN_MATHLIB")
     out = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV" and (not k.startswith("LOOM_") or k in gates)}
     out["NO_COLOR"] = "1"
     out.pop("FORCE_COLOR", None)

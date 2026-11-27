@@ -1,6 +1,6 @@
 """What turning formalization on installs: elan where the machine has none, the toolchain the quilt's Lake project names, the project itself where the quilt has none, and Mathlib with its build from Mathlib's own cache.
 
-This is the one part of formalization that uses the network and runs unfenced, and only on the person's act (`formal/switch.py`). So it runs nothing a quilt could have chosen beyond Lean's and Mathlib's own releases: the toolchain must be one of Lean's, the project must have loom's shape (`untrusted`) and require Mathlib at a release tag from its own repository, and the manifest is resolved again from there every time, so a revision a quilt's manifest names is never fetched as it stands.
+This is the one part of formalization that uses the network and runs unfenced, and only on the person's act (`formal/switch.py`). So it runs nothing a quilt could have chosen beyond Lean's and Mathlib's own releases: the toolchain must be one of Lean's, the project must have loom's shape (`untrusted`) and require Mathlib at a release tag from its own repository, and the manifest is resolved again from there every time, so a revision a quilt's manifest names is never fetched as it stands. Its last step lets Lake record its own hashes of Mathlib's build (`_settle`), which compiles and runs nothing.
 """
 
 from __future__ import annotations
@@ -242,12 +242,35 @@ def install(root: Path, say: Callable[[str], None] = lambda _: None) -> Installe
     say("mathlib")
     t = time.monotonic()
     _run([lake, "update"], proj, "fetching Mathlib", name)
-    done.steps.append(("mathlib", time.monotonic() - t))
     problems = untrusted(proj)
     if problems:
         raise Refused("Mathlib pinned what loom does not install: " + "; ".join(problems))
+    if "mathlib" in packages(proj):
+        _settle(proj, lake, name)
+    done.steps.append(("mathlib", time.monotonic() - t))
     write_marker(root)
     return done
+
+
+def packages(proj: Path) -> list[str]:
+    """The packages the project's manifest pins, by name; [] for a manifest that does not read."""
+    try:
+        manifest = json.loads((proj / "lake-manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return (
+        [str(p.get("name")) for p in manifest.get("packages", []) if isinstance(p, dict)]
+        if isinstance(manifest, dict)
+        else []
+    )
+
+
+def _settle(proj: Path, lake: str, toolchain: str) -> None:
+    """Have Lake record its own hashes of Mathlib's build as the cache unpacked it, unfenced, so the check's fenced `lake build --no-build Mathlib` finds it whole.
+
+    Lake rewrites a few `.hash` files under Mathlib's own `.lake/build` the first time it reads a build from the cache, which the fence forbids. Safe unfenced: `--no-build` compiles and runs nothing, the target `Mathlib` reaches no module of the project, and the lakefiles Lake reads are those `lake update` just ran; a build that is not whole is refused here.
+    """
+    _run([lake, "build", "--no-build", "Mathlib"], proj, "checking Mathlib's build from its cache", toolchain)
 
 
 def _install_elan() -> str:

@@ -113,7 +113,7 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
     toolchain = install.toolchain_folder(name)
     if not (toolchain / "bin" / "lake").is_file():
         raise Refused(f"the toolchain {name} is not installed here; turning formalization on again installs it")
-    missing = [p for p in _packages(proj) if not (proj / paths.LAKE_PACKAGES / p).is_dir()]
+    missing = [p for p in install.packages(proj) if not (proj / paths.LAKE_PACKAGES / p).is_dir()]
     if missing:
         raise Refused(
             f"{', '.join(missing)} is not installed in the Lean project here; turning formalization on again fetches it"
@@ -208,7 +208,7 @@ def _check(
             done.steps.append((STEPS[step], time.monotonic() - t))
         return got
 
-    if "mathlib" in _packages(proj):
+    if "mathlib" in install.packages(proj):
         whole = run("mathlib", [lake, "build", "--no-build", "Mathlib"])
         if whole.returncode != 0:
             raise Refused(
@@ -221,7 +221,7 @@ def _check(
     if not ready:
         raise Refused("no module of the Lean project built:\n" + "\n".join(done.errors[:12] or [built.stdout[-2000:]]))
     lib = Path("lib") / "lean"
-    deps = [f"path={(proj / paths.LAKE_PACKAGES / p / paths.LAKE_BUILD / lib).resolve()}" for p in _packages(proj)]
+    deps = [f"path={(proj / paths.LAKE_PACKAGES / p / paths.LAKE_BUILD / lib).resolve()}" for p in install.packages(proj)]
     probed = run(
         "probe",
         [str(toolchain / "bin" / "lean"), "--run", str(probe), f"own={(build / lib).resolve()}", *deps, *ready],
@@ -245,19 +245,6 @@ def _check(
         raise Refused("the Lean changed while loom checked it; check again once it is still")
     _record(root, name, mods, before, found, errors, replayed, done)
     return done
-
-
-def _packages(proj: Path) -> list[str]:
-    """The packages the project's manifest pins, by name."""
-    try:
-        manifest = json.loads((proj / "lake-manifest.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    return (
-        [str(p.get("name")) for p in manifest.get("packages", []) if isinstance(p, dict)]
-        if isinstance(manifest, dict)
-        else []
-    )
 
 
 def _fenced(
