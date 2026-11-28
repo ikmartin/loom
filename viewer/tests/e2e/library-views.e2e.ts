@@ -347,6 +347,28 @@ test("a file dropped on a work's row is asked about before anything is taken in:
 	await expect(rows).toHaveCount(301);
 });
 
+test('on a window narrow enough to fold the column, what a drop on the works list did is said beside the folded column, with its answers', async ({ page }) => {
+	await page.setViewportSize({ width: 760, height: 800 });
+	await page.goto('/library?fixture=round6');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await expect(page.getByTestId('panel-fold')).toHaveAttribute('aria-expanded', 'false');
+	await row(page, 'Widgets and their bounds').evaluate((el) => {
+		const data = new DataTransfer();
+		data.items.add(new File(['%PDF-1.4'], 'mZK_paper.pdf', { type: 'application/pdf' }));
+		el.dispatchEvent(new DragEvent('dragover', { dataTransfer: data, bubbles: true, cancelable: true }));
+		el.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }));
+	});
+	const msg = page.getByTestId('column-message');
+	await expect(msg).toContainText(/^Is mZK_paper\.pdf .+, the work you dropped it on\?/);
+	const box = (await msg.boundingBox())!;
+	expect(box.x).toBeGreaterThanOrEqual(60);
+	expect(box.x + box.width).toBeLessThanOrEqual(760);
+	// its answers are under the pointer, not under the works list
+	await msg.getByTestId('column-message-choice').filter({ hasText: 'no, a work of its own' }).click();
+	await expect(msg).toContainText('Added mZK_paper.pdf');
+	await expect(page.getByTestId('work-row')).toHaveCount(301);
+});
+
 test('a copy of a PDF every work stating its number holds already is asked about as a copy, naming each work so its row can be told apart, kept as a work of its own or let go', async ({ page }) => {
 	await open(page);
 	const msg = page.getByTestId('column-message');

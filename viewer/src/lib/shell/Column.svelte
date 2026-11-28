@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The left column's frame: Your quilts, the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: whether the page is updating after a write, the column's message, How loom works, and the agent's row. Folded, it is a strip of the four names with Your quilts and the fold above them and, at its foot, a dot for a message, one while the page updates, and the agent's.
+	// The left column's frame: Your quilts, the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: whether the page is updating after a write, the column's message, How loom works, and the agent's row. Folded, it is a strip of the four names with Your quilts and the fold above them, the message floating beside its foot, and at its foot a dot while the page updates and the agent's.
 	//
 	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, its kinds and drafts (`ReviewColumn`) where the source serves its reads, else today's sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`) and the documents listed by name (`DocumentList`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs (`LibraryColumn`, `WebColumn`). At the foot, `Updating`, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
 	import Contents from './Contents.svelte';
@@ -178,7 +178,7 @@
 <div class="shell-c" class:folded={!shown} style:--column-width="{width}px">
 	<div class="panel" class:away={!shown} data-testid="column" bind:this={panelBox}>
 		{#if !shown}
-			<!-- folded: Your quilts and the fold, then the four names one above the other with their cards beside the strip, and at its foot a dot for the message and the agent's -->
+			<!-- folded: Your quilts and the fold, then the four names one above the other with their cards beside the strip, the message beside its foot, and at its foot the agent's -->
 			<YourQuilts />
 			<button class="ib fold unfold" title={frame.column.show} aria-label={frame.column.show} aria-expanded="false" data-testid="panel-fold" onclick={fold}><Icon name="fold" size={18} /></button>
 			<nav class="strip" aria-label={frame.views.nav}>
@@ -194,7 +194,8 @@
 					>
 				{/each}
 			</nav>
-			{#if message.said}<button type="button" class="ib said" title={message.said.text} aria-label={message.said.text} data-testid="column-message-dot" onclick={fold}><span class="dot"></span></button>{/if}
+			<!-- the message, with its undo and its answers, floats beside the strip, where it is read and answered as in the open column -->
+			{#if message.said}<div class="said-beside" data-testid="column-message-beside"><Message /></div>{/if}
 			<Updating folded />
 			<AgentStatus folded />
 		{:else}
@@ -436,15 +437,18 @@
 		font-weight: 500;
 		border-left-color: var(--accent);
 	}
-	/* folded, a message is a dot that opens the column on it, a 28px target */
-	.said {
-		margin-top: auto;
+	/* folded, the message floats beside the strip's foot, over the page, as wide as the open column's foot */
+	.said-beside {
+		position: fixed;
+		z-index: 60;
+		left: calc(var(--rail-folded) + 8px);
+		bottom: 12px;
+		width: min(300px, calc(100vw - var(--rail-folded) - 24px));
+		border-radius: 8px;
+		box-shadow: var(--float-shadow);
 	}
-	.said .dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--ink);
+	.said-beside :global(.msg) {
+		margin: 0;
 	}
 	.sr-only {
 		position: absolute;
@@ -456,9 +460,6 @@
 		clip: rect(0 0 0 0);
 		white-space: nowrap;
 		border: 0;
-	}
-	.said + :global(.rail-foot) {
-		margin-top: var(--gap-tight);
 	}
 	/* the four views: one line of four words, the current one underlined */
 	.primary {
