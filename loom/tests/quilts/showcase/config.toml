@@ -1,14 +1,14 @@
 [quilt]
 name = "The loom showcase"
-main = "drafting/main-atomic.tex"    # default master
-prefix = "sh"               # default id prefix for loom new
-engine = "pdflatex"         # default engine; % !TEX program in a master overrides
+main = "drafting/main-atomic.tex"    # the default LaTeX document
+prefix = "sh"               # the start of the ids loom gives new results
+engine = "pdflatex"         # default engine; % !TEX program in a document overrides
 
 [library]
-online = false              # may loom look a paper's identifier up (doi.org, arXiv, zbMATH Open); --online allows one run
+online = false              # may loom look a paper's identifier up (doi.org, arXiv, zbMATH Open)
 
 [lint]
 disable = []                # diagnostic codes to silence, e.g. ["loom:unmatched-postnote"]
 
 [author]
-name = "The loom showcase"  # who this quilt's records name; empty until you write it here or pass --author
+name = "The loom showcase"  # who this quilt's records name; empty until you write it here

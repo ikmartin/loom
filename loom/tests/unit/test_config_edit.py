@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -26,11 +27,27 @@ def _config(root: Path) -> str:
     return (root / "config.toml").read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize(
+    "text",
+    [TEMPLATE, *(Path(__file__).parents[1] / "quilts/sources" / q / "config.toml" for q in ("demo", "showcase"))],
+    ids=["template", "demo", "showcase"],
+)
+def test_the_comments_loom_writes_in_config_toml_name_no_command(text: str | Path) -> None:
+    """The person may open config.toml, so its comments speak in words: no `loom` command and no flag."""
+    if isinstance(text, Path):
+        text = text.read_text(encoding="utf-8")
+    from loom.ai.layout import command_tree
+
+    named = "|".join(sorted({path.split()[0] for path in command_tree()}))
+    comments = [line.split("#", 1)[1] for line in text.splitlines() if "#" in line]
+    assert comments and not [c for c in comments if re.search(rf"(^|\s)--[a-z]|\bloom ({named})\b", c)]
+
+
 def test_a_value_changes_in_place_and_keeps_its_comment(tmp_path: Path) -> None:
     root = _quilt(tmp_path)
     set_values(load_quilt(root), {"quilt.prefix": "ring", "quilt.engine": "xelatex"})
     text = _config(root)
-    assert 'prefix = "ring"               # default id prefix for loom new\n' in text
+    assert 'prefix = "ring"               # the start of the ids loom gives new results\n' in text
     assert 'engine = "xelatex"         # default engine; % !TEX program in a document overrides\n' in text
     # every other line is as the template wrote it
     assert text == TEMPLATE.replace('prefix = "r"', 'prefix = "ring"').replace('"pdflatex"', '"xelatex"')

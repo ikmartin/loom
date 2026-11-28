@@ -1,8 +1,8 @@
 [quilt]
 name = "The loom demo"
-main = "drafting/main.tex"    # default master
-prefix = "dm"               # default id prefix for loom new
-engine = "pdflatex"         # default engine; % !TEX program in a master overrides
+main = "drafting/main.tex"    # the default LaTeX document
+prefix = "dm"               # the start of the ids loom gives new results
+engine = "pdflatex"         # default engine; % !TEX program in a document overrides
 
 [library]
 online = false

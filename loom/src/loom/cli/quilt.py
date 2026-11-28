@@ -24,13 +24,13 @@ ASSETS = resources.files("loom") / "assets"
 
 CONFIG_TEMPLATE = """[quilt]
 name = "{name}"
-prefix = "{prefix}"               # default id prefix for loom new
+prefix = "{prefix}"               # the start of the ids loom gives new results
 engine = "pdflatex"         # default engine; % !TEX program in a document overrides
 # main = "paper/main.tex"   # the default LaTeX document; unset, the only document there is
 # home = "README.md"        # the file the viewer opens on when it remembers no place; unset, README.md
 
 [library]
-# online = true             # may loom look a paper's identifier up (doi.org, arXiv, zbMATH Open); unset, the viewer asks the first time a paper is added; --online allows one run
+# online = true             # may loom look a paper's identifier up (doi.org, arXiv, zbMATH Open); unset, the viewer asks the first time a paper is added
 
 [lint]
 disable = []                # diagnostic codes to silence, e.g. ["loom:uses-unused"]
