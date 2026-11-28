@@ -313,7 +313,7 @@ test('see it lays the document over Review, read only, lands at the place, and c
 test("a proposed edit's see it lays its draft over Review and lands at the result, and a change in no draft's text offers none", async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const nowhere = page.locator('[data-testid="review-row"][data-file="notes/intro.md"]');
+	const nowhere = page.locator('[data-testid="review-row"][data-file="drafting/old.tex"]');
 	await openRow(nowhere);
 	await expect(nowhere.getByTestId('see-it')).toHaveCount(0);
 	const suggested = page.locator('[data-testid="review-row"][data-change="e-2026-09-16-r2hw0m"]');
@@ -548,7 +548,7 @@ test("Proposed edits says once what it watches and what it leaves to the person,
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
 	const watched = page.getByTestId('review-watched');
-	await expect(watched).toHaveText("Here wait agents' suggestions, and every edit made in the places agents may edit since your look of 2026-09-16 11:30. Your own places are not watched, so an edit there is never listed: config.toml, /drafting/. Claude Code is refused an edit there; any other app is only asked not to.");
+	await expect(watched).toHaveText("Here wait agents' suggestions, and every edit made to a LaTeX file in the places agents may edit since your look of 2026-09-16 11:30. Only LaTeX files are watched, so an edit to Markdown, a bibliography or any other file is never listed. Your own places are not watched, so an edit there is never listed: config.toml, /drafting/. Claude Code is refused an edit there; any other app is only asked not to.");
 	await page.getByTestId('review-kind-accepted-changed').click();
 	const name = page.getByTestId('review-name-from-git');
 	await expect(name).toHaveText('You review as Rae Reviewer, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.');
@@ -617,8 +617,8 @@ test('Results to accept and Proposed edits draw a row for each thing they count,
 test("edits made in place are one row a file, opening to each with Keep and Discard and the file's own keep all and discard all, and the column counts the rows drawn", async ({ page }) => {
 	await serve(page, (m) => {
 		const at = (id: string) => m.changes.find((c: { id: string }) => c.id === id);
-		// two more edits in main.tex, one in the block already edited and one outside any, and one more in notes/intro.md
-		m.changes.push({ ...at('c-0f621ccf'), id: 'c-00000001', old: 'one', new: 'two' }, { ...at('c-0f621ccf'), id: 'c-00000002', key: null, block: null, old: 'left', new: 'right' }, { ...at('c-5a59b9ba'), id: 'c-00000003', old: 'up', new: 'down' });
+		// two more edits in main.tex, one in the block already edited and one outside any, and one more in drafting/old.tex
+		m.changes.push({ ...at('c-0f621ccf'), id: 'c-00000001', old: 'one', new: 'two' }, { ...at('c-0f621ccf'), id: 'c-00000002', key: null, block: null, old: 'left', new: 'right' }, { ...at('c-08cf8655'), id: 'c-00000003', old: 'up', new: 'down' });
 	});
 	const sent: Record<string, unknown>[] = [];
 	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['change-keep', 'change-discard'], token: 't', quilt: 'q-test' } }));
@@ -649,8 +649,8 @@ test("edits made in place are one row a file, opening to each with Keep and Disc
 	await expect(main).toHaveCount(0);
 	await expect(count(page, 'review-kind-edits')).toHaveText('4');
 	// the other file still holds both its edits
-	const intro = page.locator('[data-testid="review-row"][data-file="notes/intro.md"]');
-	await expect(intro.locator('.meta')).toHaveText('2 edits since your look');
+	const old = page.locator('[data-testid="review-row"][data-file="drafting/old.tex"]');
+	await expect(old.locator('.meta')).toHaveText('2 edits since your look');
 });
 
 test("an adoption is one row of Results to accept, opening to the blocks it took in, each with Accept, and accept all for those that can be, the others saying why; the column counts the rows drawn", async ({ page }) => {

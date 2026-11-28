@@ -518,7 +518,9 @@ def build_synthetic(dest: Path) -> None:
     # the look last, after every file the story writes, so the one change it shows is the edit after it
     g.look()
     g.at("2026-09-16T11:45:00Z")
+    # a learner's edit to a note, never listed since only LaTeX is watched, and an edit to a LaTeX file no document reads, listed in no document's text
     g.edit("notes/intro.md", "A widget is fixed by its locus.", "A widget is fixed by its locus, and by nothing else.")
+    g.edit("drafting/old.tex", "Old text.", "Old text, and nothing else.")
     # an in-place edit to the paper itself, which waits for the author beside the suggested edit, drawn in its block
     g.edit("drafting/main.tex", "Its fixed locus is", "Its fixed locus, the set of its fixed points, is")
 

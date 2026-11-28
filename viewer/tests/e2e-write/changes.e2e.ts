@@ -177,14 +177,14 @@ test("Keep all keeps every ready change of a document from its Changes menu, and
 	expect(now).toContain('at most two points');
 	expect(now).toContain('the fixed points are those of');
 	// what is left, a file in no document's among it: discarded from Review, its words written back
-	const intro = 'notes/intro.md';
-	expect(pending(served).some((c) => c.path === intro)).toBe(true);
-	const before = text(served, intro);
+	const old = 'drafting/old.tex';
+	expect(pending(served).some((c) => c.path === old)).toBe(true);
+	const before = text(served, old);
 	await page.goto('/review');
 	await page.getByTestId('group-discard-all').click();
-	await expect.poll(() => pending(served).some((c) => c.path === intro), { timeout: 60_000 }).toBe(false);
+	await expect.poll(() => pending(served).some((c) => c.path === old), { timeout: 60_000 }).toBe(false);
 	await expect(page.getByTestId('column-message')).toContainText(/^Discarded \d+ changes?\./);
-	expect(text(served, intro)).not.toBe(before);
+	expect(text(served, old)).not.toBe(before);
 });
 
 test("Keep all on a file's row in Review keeps exactly that file's edits made in place, and no other change", async ({ page, served }) => {
@@ -192,10 +192,10 @@ test("Keep all on a file's row in Review keeps exactly that file's edits made in
 	const inNode = () => pending(served).filter((c) => c.kind === 'edit' && c.path === NODE);
 	await expect.poll(() => inNode().length, { timeout: 60_000 }).toBe(2);
 	const edits = inNode().map((c) => c.id);
-	// the suggested edit in the same file and the edit in notes/intro.md are rows of their own
+	// the suggested edit in the same file and the edit in drafting/old.tex are rows of their own
 	const others = pending(served).filter((c) => !edits.includes(c.id));
 	expect(others.map((c) => c.id)).toContain(SUGGESTED);
-	expect(others.some((c) => c.path === 'notes/intro.md')).toBe(true);
+	expect(others.some((c) => c.path === 'drafting/old.tex')).toBe(true);
 	const sent: unknown[] = [];
 	page.on('request', (r) => {
 		if (r.url().endsWith('/_api/change-keep')) sent.push(r.postDataJSON());

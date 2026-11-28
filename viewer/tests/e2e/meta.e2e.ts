@@ -7,9 +7,11 @@ test('Review leads with the changes waiting, each with its words, and lists what
 	const waiting = (manifest.changes ?? []).filter((c: { id?: unknown }) => typeof c.id === 'string');
 	await expect(page.getByTestId('change-card')).toHaveCount(waiting.length);
 	// a file in no document is listed under its path, its words in and out
-	const intro = page.locator('[data-testid="change-group"][data-path="notes/intro.md"]');
-	await expect(intro).toContainText("in no document's text");
-	await expect(intro.getByTestId('change-words')).toContainText('and by nothing else.');
+	const old = page.locator('[data-testid="change-group"][data-path="drafting/old.tex"]');
+	await expect(old).toContainText("in no document's text");
+	await expect(old.getByTestId('change-words')).toContainText('and nothing else.');
+	// a note's edit is never listed: only LaTeX is watched
+	await expect(page.locator('[data-testid="change-group"][data-path="notes/intro.md"]')).toHaveCount(0);
 	// the bar says how much waits, and stays at the top while the page scrolls
 	const bar = page.getByTestId('review-bar');
 	await expect(bar).toContainText(`${waiting.length} changes waiting`);
