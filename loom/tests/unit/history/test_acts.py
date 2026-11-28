@@ -60,11 +60,12 @@ def test_keep_keeps_a_version_of_each_document_a_kept_file_is_part_of_once(q: Pa
     # nothing waits now, and nothing more is kept
     assert handle(q, "change-keep", {"all": True})["result"] == "kept 0 changes"
     assert len(versions(q)) == first + 1
-    # a file no document is made of keeps only a line
-    (q / "README.md").write_text("changed\n", encoding="utf-8")
-    assert handle(q, "change-keep", {"changes": waiting(q, "README.md")})["result"] == "kept 1 change"
+    # a LaTeX file no document is made of keeps only a line
+    old = "drafting/old.tex"
+    (q / old).write_text((q / old).read_text(encoding="utf-8") + "% changed\n", encoding="utf-8")
+    assert handle(q, "change-keep", {"changes": waiting(q, old)})["result"] == "kept 1 change"
     line = load_history(load_quilt(q).history_dir).entries[-1]
-    assert (line.action, line.get("path")) == ("keep", "README.md")
+    assert (line.action, line.get("path")) == ("keep", old)
 
 
 def test_undo_keeps_the_text_it_sets_aside_as_a_version_before_writing(q: Path) -> None:
