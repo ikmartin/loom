@@ -1,4 +1,4 @@
-// What a reader selected in a fragment, as loom will look for it in the source: the words as they are, each formula as its TeX between `$`s, and each citation or reference as the command it was written as, which is the form loom's quote matching reads (records/selectors.py). `readOf` reads the same words as the reader sees them, a citation or reference as drawn, for what a person hands their agent. The chrome a fragment carries — the gutter's id and state, a comment count, MathJax's hidden copy — is not text of the result and is left out.
+// What a reader selected in a fragment, as loom will look for it in the source: the words as they are, each formula as its TeX between `$`s, and each citation or reference as the command it was written as, which is the form loom's quote matching reads (records/selectors.py). `readOf` reads the same words as the reader sees them, a formula as its symbols and a citation or reference as drawn, for what a person hands their agent, so no raw TeX shows where the request is drawn. The chrome a fragment carries — the gutter's id and state, a comment count, MathJax's hidden copy — is not text of the result and is left out.
 
 const SKIP = '.node-margin, button, .comment-slot, mjx-assistive-mml, .env-label, .qed';
 /** A citation or reference the renderer drew from a command, carrying the command as written. */
@@ -12,6 +12,101 @@ export function texOf(el: HTMLElement): string {
 	if (tex.endsWith('\\)') || tex.endsWith('\\]')) tex = tex.slice(0, -2);
 	tex = tex.trim();
 	return display ? `$$${tex}$$` : `$${tex}$`;
+}
+
+/** An element of MathML, as much of one as `mathText` reads: a node of the formula MathJax keeps beside its drawing for screen readers. */
+export interface MathNode {
+	localName: string;
+	textContent: string | null;
+	children: ArrayLike<MathNode>;
+	getAttribute(name: string): string | null;
+}
+
+/** Operators drawn hard against what they stand beside, and the invisible ones MathJax puts between a function and its argument or two factors. */
+const TIGHT = new Set(['(', ')', '[', ']', '{', '}', '|', '‖', '⟨', '⟩', '⌊', '⌋', '⌈', '⌉', '!', "'", '′', '.', '⁡', '⁢', '⁣', '']);
+
+/**
+ * A formula's MathML as a line of plain text, as it reads on the page: its symbols, `^` and `_` for a superscript and a subscript, a fraction as `a/b`, space round a relation or an operation.
+ *
+ * Parameters
+ * ----------
+ * el : MathNode
+ *     A `math` element, or any element in one.
+ *
+ * Returns
+ * -------
+ * string
+ *     Whitespace collapsed; never the formula's TeX.
+ */
+export function mathText(el: MathNode): string {
+	return read(el)
+		.replace(/[⁡-⁣]/g, '')
+		.replace(/\s+/g, ' ')
+		.replace(/\( /g, '(')
+		.replace(/ \)/g, ')')
+		.replace(/ ,/g, ',')
+		.trim();
+}
+
+function read(el: MathNode): string {
+	const kids = Array.from(el.children);
+	const part = (i: number): string => (kids[i] ? read(kids[i]).trim() : '');
+	// a script of more than one symbol is put in brackets, so `x^(n+1)` is not read as `x^n+1`
+	const script = (i: number): string => {
+		const t = part(i).replace(/[⁡-⁣]/g, '');
+		return [...t].length > 1 && !/^\(.*\)$/.test(t) ? `(${t})` : t;
+	};
+	switch (el.localName) {
+		case 'annotation':
+		case 'annotation-xml':
+			return '';
+		case 'semantics':
+			return part(0);
+		case 'mi':
+		case 'mn':
+		case 'mtext':
+		case 'ms':
+			return el.textContent ?? '';
+		case 'mo': {
+			const t = (el.textContent ?? '').trim();
+			if (TIGHT.has(t)) return t;
+			if (t === ',' || t === ';' || t === ':') return `${t} `;
+			return ` ${t} `;
+		}
+		case 'mspace':
+			return ' ';
+		case 'msup':
+			return `${part(0)}^${script(1)}`;
+		case 'msub':
+			return `${part(0)}_${script(1)}`;
+		case 'msubsup':
+		case 'munderover':
+			return `${part(0)}_${script(1)}^${script(2)}`;
+		case 'munder':
+			return el.getAttribute('accentunder') === 'true' ? part(0) : `${part(0)}_${script(1)}`;
+		case 'mover':
+			return el.getAttribute('accent') === 'true' ? part(0) + part(1) : `${part(0)}^${script(1)}`;
+		case 'mfrac':
+			return `${script(0)}/${script(1)}`;
+		case 'msqrt':
+			return `√(${kids.map(read).join('').trim()})`;
+		case 'mroot':
+			return `${script(1)}√(${part(0)})`;
+		case 'mtable':
+			return kids.map((r) => read(r).trim()).join('; ');
+		case 'mtr':
+		case 'mlabeledtr':
+			return kids.map((c) => read(c).trim()).join(' ');
+		default:
+			return kids.length ? kids.map(read).join('') : (el.textContent ?? '');
+	}
+}
+
+/** A formula as the reader sees it: MathJax's MathML for it as a line of text (`mathText`), or, before it is typeset, its TeX without the delimiters. */
+function readMath(el: HTMLElement): string {
+	const math = el.querySelector('mjx-assistive-mml math');
+	if (math) return mathText(math as unknown as MathNode);
+	return texOf(el).replace(/^\$+|\$+$/g, '');
 }
 
 /**
@@ -32,7 +127,7 @@ export function quoteOf(range: Range): string {
 }
 
 /**
- * The words a range stands for as the reader sees them: its text, every formula it touches whole as its TeX, and each citation or reference as it is drawn (`[1, Proposition 2.1]`, `Lemma 1.2`), never as its command.
+ * The words a range stands for as the reader sees them: its text, every formula it touches whole as its symbols (`mathText`), and each citation or reference as it is drawn (`[1, Proposition 2.1]`, `Lemma 1.2`), never as its command or its TeX.
  *
  * Parameters
  * ----------
@@ -52,14 +147,14 @@ export function readOf(range: Range): string {
 	return walked(range, false);
 }
 
-/** A range's words, formulas as TeX, and with `commands` each citation or reference as its command, else as drawn. */
+/** A range's words: with `commands` each formula as TeX and each citation or reference as its command, else each as drawn. */
 function walked(range: Range, commands: boolean): string {
 	const root = range.commonAncestorContainer;
 	const top = root.nodeType === Node.ELEMENT_NODE ? (root as Element) : root.parentElement;
 	if (!top) return '';
 	// a selection wholly inside one formula is that formula
 	const inMath = top.closest<HTMLElement>('.math');
-	if (inMath) return texOf(inMath);
+	if (inMath) return commands ? texOf(inMath) : readMath(inMath);
 	// and one wholly inside a citation or a reference is the command (study F5)
 	const inCommand = commands ? top.closest<HTMLElement>(COMMAND) : null;
 	if (inCommand) return inCommand.dataset.tex ?? '';
@@ -79,7 +174,7 @@ function walked(range: Range, commands: boolean): string {
 		const el = node as HTMLElement;
 		if (el.matches(SKIP)) return;
 		if (el.matches('.math')) {
-			out.push(texOf(el));
+			out.push(commands ? texOf(el) : readMath(el));
 			return;
 		}
 		if (commands && el.matches(COMMAND)) {

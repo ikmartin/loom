@@ -86,7 +86,7 @@
 	}
 
 	function ask(): void {
-		// the request quotes the words as the reader sees them: math as written, a citation or a reference as drawn
+		// the request quotes the words as the reader sees them: math as its symbols, a citation or a reference as drawn
 		const place = { name, href: withoutQuote(link), words: (range && readOf(range)) || read || text };
 		window.getSelection()?.removeAllRanges();
 		open = false;
