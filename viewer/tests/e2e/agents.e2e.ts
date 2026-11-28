@@ -191,6 +191,25 @@ test("Ask your agent on a document's toolbar offers the words selected first, at
 	await expect(page.getByTestId('ask-request')).toContainText('In loom, look at talk.tex, Lemma 3 (quilt:drafting/talk.tex#sy-0002), at the words “');
 });
 
+test('what Ask your agent copies quotes the words as the reader sees them: math as written, a reference as drawn, never its command', async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	const proof = page.locator('.fragment p[data-src^="drafting/nodes/sy-0003.tex:437:"]').first();
+	await proof.scrollIntoViewIfNeeded();
+	await proof.evaluate((node) => {
+		const range = document.createRange();
+		range.selectNodeContents(node);
+		const sel = window.getSelection();
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+		node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+	});
+	await page.getByTestId('item-controls').first().getByTestId('toolbar-ask').click();
+	await expect(page.getByTestId('ask-about-0')).toBeChecked();
+	const request = page.getByTestId('ask-request');
+	await expect(request).toContainText('the permutation $\\sigma$ directly, using (3) from the proof of Lemma 1.2 and Definition 1.1.');
+	await expect(request).not.toContainText(/\\(ref|eqref|cite)\{/);
+});
+
 test("Ask your agent on a result's own page is about the result", async ({ page }) => {
 	await page.goto('/node/sy-0003');
 	await page.getByTestId('toolbar-ask').click();

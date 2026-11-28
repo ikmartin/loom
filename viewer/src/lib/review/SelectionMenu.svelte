@@ -11,6 +11,7 @@
 	import { say } from './toasts.svelte';
 	import { askAbout } from '$lib/agents/asking.svelte';
 	import { withoutQuote } from '$lib/agents/places';
+	import { readOf } from '$lib/fragments/quote';
 	import { agents as agentsWords } from '$lib/words/agents';
 
 	type Box = { left: number; top: number; width: number; height: number };
@@ -19,6 +20,7 @@
 		at,
 		range,
 		text,
+		read,
 		name,
 		link,
 		annotate,
@@ -30,6 +32,8 @@
 		range?: Range;
 		/** The words selected, as the clipboard takes them. */
 		text: string;
+		/** The words as the reader sees them, for Ask your agent, where no `range` gives them; default `text`. */
+		read?: string;
 		/** Where they are, as a reader names it: a quote's source and a new note's name. */
 		name: string;
 		/** A `quilt:` link to the place, carrying the words (`quoteLink`). */
@@ -82,7 +86,8 @@
 	}
 
 	function ask(): void {
-		const place = { name, href: withoutQuote(link), words: text };
+		// the request quotes the words as the reader sees them: math as written, a citation or a reference as drawn
+		const place = { name, href: withoutQuote(link), words: (range && readOf(range)) || read || text };
 		window.getSelection()?.removeAllRanges();
 		open = false;
 		ondone();

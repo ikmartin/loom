@@ -12,7 +12,8 @@ export function placesFor(m: Manifest | null, item: Item): Place[] {
 	if (!m) return [];
 	const own = linkName(m, `quilt:${item.id}`);
 	const sel = here.selection;
-	const picked = sel && sel.item === itemKey(item) && sel.key && sel.text ? { key: sel.key, text: sel.text } : null;
+	// the words as the reader sees them, a citation as drawn rather than its command
+	const picked = sel && sel.item === itemKey(item) && sel.key && sel.text ? { key: sel.key, text: sel.read || sel.text } : null;
 	if (item.kind !== 'document') {
 		const whole: Place = { name: own, href: `quilt:${item.id}`, label: own };
 		return picked ? [{ ...whole, words: picked.text, label: words.ask.selected(own) }, whole] : [{ name: own, href: `quilt:${item.id}` }];

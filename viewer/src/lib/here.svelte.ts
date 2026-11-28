@@ -7,7 +7,7 @@ import { workspace } from '$lib/workspace/store.svelte';
 import { documentState, fileState, nodeState, workState } from '$lib/workspace/state.svelte';
 import { store } from '$lib/manifest/client.svelte';
 import { can, write } from '$lib/write';
-import { keyOf, quoteOf } from '$lib/fragments/quote';
+import { keyOf, quoteOf, readOf } from '$lib/fragments/quote';
 
 /** The block at the top of a pane: its `data-src` and the key it belongs to. */
 export interface Block {
@@ -22,6 +22,8 @@ export interface Selection {
 	file?: string;
 	page?: number;
 	text?: string;
+	/** The words as the reader sees them, citations and references as drawn, for Ask your agent; never sent to loom, which finds `text`. */
+	read?: string;
 	rects?: number[][];
 }
 
@@ -90,7 +92,7 @@ export function placeOf(i: PlaceInput): Record<string, unknown> {
 	if (i.block) out.block = i.block;
 	const mark = i.selection?.item === key ? i.selection : i.region?.item === key ? i.region : null;
 	if (mark) {
-		const { item: _drop, ...rest } = mark;
+		const { item: _drop, read: _read, ...rest } = mark;
 		out.selection = rest;
 	}
 	if (i.page) out.page = i.page;
@@ -123,7 +125,7 @@ function textSelection(item: string): Selection | null {
 	if (!el?.closest('[data-src]')) return null;
 	const text = quoteOf(range);
 	const key = keyOf(at, '');
-	return text && key ? { item, key, text } : null;
+	return text && key ? { item, key, text, read: readOf(range) } : null;
 }
 
 /**

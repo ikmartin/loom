@@ -1,4 +1,4 @@
-// What a reader selected in a fragment, as loom will look for it in the source: the words as they are, each formula as its TeX between `$`s, and each citation or reference as the command it was written as, which is the form loom's quote matching reads (records/selectors.py). The chrome a fragment carries — the gutter's id and state, a comment count, MathJax's hidden copy — is not text of the result and is left out.
+// What a reader selected in a fragment, as loom will look for it in the source: the words as they are, each formula as its TeX between `$`s, and each citation or reference as the command it was written as, which is the form loom's quote matching reads (records/selectors.py). `readOf` reads the same words as the reader sees them, a citation or reference as drawn, for what a person hands their agent. The chrome a fragment carries — the gutter's id and state, a comment count, MathJax's hidden copy — is not text of the result and is left out.
 
 const SKIP = '.node-margin, button, .comment-slot, mjx-assistive-mml, .env-label, .qed';
 /** A citation or reference the renderer drew from a command, carrying the command as written. */
@@ -28,6 +28,32 @@ export function texOf(el: HTMLElement): string {
  *     Whitespace collapsed; '' when the range holds no text.
  */
 export function quoteOf(range: Range): string {
+	return walked(range, true);
+}
+
+/**
+ * The words a range stands for as the reader sees them: its text, every formula it touches whole as its TeX, and each citation or reference as it is drawn (`[1, Proposition 2.1]`, `Lemma 1.2`), never as its command.
+ *
+ * Parameters
+ * ----------
+ * range : Range
+ *     A selection's range.
+ *
+ * Returns
+ * -------
+ * string
+ *     Whitespace collapsed; '' when the range holds no text.
+ *
+ * See Also
+ * --------
+ * quoteOf : the same words as loom finds them in the source, each citation and reference as its command.
+ */
+export function readOf(range: Range): string {
+	return walked(range, false);
+}
+
+/** A range's words, formulas as TeX, and with `commands` each citation or reference as its command, else as drawn. */
+function walked(range: Range, commands: boolean): string {
 	const root = range.commonAncestorContainer;
 	const top = root.nodeType === Node.ELEMENT_NODE ? (root as Element) : root.parentElement;
 	if (!top) return '';
@@ -35,7 +61,7 @@ export function quoteOf(range: Range): string {
 	const inMath = top.closest<HTMLElement>('.math');
 	if (inMath) return texOf(inMath);
 	// and one wholly inside a citation or a reference is the command (study F5)
-	const inCommand = top.closest<HTMLElement>(COMMAND);
+	const inCommand = commands ? top.closest<HTMLElement>(COMMAND) : null;
 	if (inCommand) return inCommand.dataset.tex ?? '';
 	const out: string[] = [];
 	// a `\cite{a,b}` is drawn as one element per key, and quoted once
@@ -56,7 +82,7 @@ export function quoteOf(range: Range): string {
 			out.push(texOf(el));
 			return;
 		}
-		if (el.matches(COMMAND)) {
+		if (commands && el.matches(COMMAND)) {
 			// one command drawn as several elements carries one offset; one with none is quoted wherever it stands
 			const at = el.dataset.at ?? '';
 			if (!at || !quoted.has(at)) out.push(el.dataset.tex ?? '');

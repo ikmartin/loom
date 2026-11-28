@@ -18,7 +18,7 @@
 	import { commentSeed, hand, handPayload, typeById, type Annotating, type Draft } from '$lib/review/annotating.svelte';
 	import { say } from '$lib/review/toasts.svelte';
 	import { placeAt } from './popup';
-	import { quoteOf, keyOf, texOf } from './quote';
+	import { quoteOf, keyOf, readOf, texOf } from './quote';
 	import { clearPending, showPending } from './pending';
 	import { snapToWords } from './snap';
 
@@ -55,7 +55,7 @@
 	/** The draft's popup, which says whether it may close. */
 	let popup = $state<ReturnType<typeof AnnotationPopup> | undefined>();
 	/** Words just marked by Annotate, with Add comment and the actions at their end until the next selection. */
-	let marked = $state<{ id: string; at: Box; words: string; target: string } | null>(null);
+	let marked = $state<{ id: string; at: Box; words: string; read: string; target: string } | null>(null);
 	/** Keys typed after words were marked and before loom answered the mark, kept for its comment; `live` goes false when the reader moves on first. */
 	let awaiting = $state.raw<{ started: boolean; text: string; live: boolean } | null>(null);
 
@@ -243,6 +243,8 @@
 			return;
 		}
 		const at = endOf(range);
+		// read before the mark is drawn into the words
+		const read = readOf(range);
 		window.getSelection()?.removeAllRanges();
 		const early = { started: false, text: '', live: true };
 		awaiting = early;
@@ -258,7 +260,7 @@
 		}
 		const id = (res.result ?? '').split(/\s+/)[0] ?? '';
 		if (!early.live) return;
-		marked = id ? { id, at, words: quote, target } : null;
+		marked = id ? { id, at, words: quote, read, target } : null;
 		if (id && early.started) {
 			commentSeed.id = id;
 			commentSeed.text = early.text;
@@ -453,7 +455,7 @@
 {/if}
 {#if marked && !drafting}
 	{@const id = marked.id}
-	<SelectionMenu at={marked.at} text={marked.words} name={nameFor(marked.target)} link={linkFor(marked.target, marked.words)} ondone={() => (marked = null)}>
+	<SelectionMenu at={marked.at} text={marked.words} read={marked.read} name={nameFor(marked.target)} link={linkFor(marked.target, marked.words)} ondone={() => (marked = null)}>
 		{#snippet before()}<button type="button" class="chip" data-testid="add-comment" onclick={() => void openWritten(id)}>Add comment</button>{/snippet}
 	</SelectionMenu>
 {/if}

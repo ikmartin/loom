@@ -1298,6 +1298,19 @@ test.describe('the actions at a selection', () => {
 		expect(Object.keys(sent)).toEqual([]);
 	});
 
+	test('Ask your agent at a selection quotes the words as the reader sees them, a reference as drawn and never its command', async ({ page }) => {
+		await writes(page, ['annotate', 'new-note']);
+		await page.goto('/master/drafting/main');
+		const proof = page.locator('.fragment p[data-src^="drafting/nodes/sy-0003.tex:437:"]').first();
+		await proof.scrollIntoViewIfNeeded();
+		await selectWithin(proof);
+		await page.getByTestId('selection-actions').click();
+		await page.getByTestId('selection-ask').click();
+		const request = page.getByTestId('ask-request');
+		await expect(request).toContainText('using (3) from the proof of Lemma 1.2 and Definition 1.1.');
+		await expect(request).not.toContainText(/\\(ref|eqref|cite)\{/);
+	});
+
 	test('New note sends a link carrying the words, with a name for the place, and says it went to the editor', async ({ page }) => {
 		const sent = await writes(page, ['annotate', 'new-note']);
 		await page.goto('/master/drafting/main');
