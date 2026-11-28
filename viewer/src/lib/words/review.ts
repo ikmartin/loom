@@ -42,7 +42,7 @@ export const review = {
 		check: { name: 'Results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
 		attest: { name: 'Lean statements to attest', hover: "Results whose statement, or a definition under it, changed since you attested the Lean come first: say whether the Lean still states each. Then those Lean has accepted that you never attested. To attest is to give your word that the Lean statement says what your result says; only then does the result read 'formalized'." },
 		fetch: { name: 'Papers to add', hover: 'Papers an agent needs and could not download. Open each page, download the paper, and drop the file anywhere in loom.' },
-		edits: { name: 'Proposed edits', hover: "Changes waiting in your text, and agents' copies to take in. Keep or discard each." },
+		edits: { name: 'Proposed edits', hover: "Agents' suggestions, edits to your LaTeX since your look, and agents' copies to take in. Keep or discard each." },
 		agents: { name: 'Agents still working', hover: 'Work you asked of an agent that none has finished. Nothing here needs you.' }
 	} satisfies Record<Exclude<ReviewKind, 'attested-changed'> | 'agents', { name: string; hover: string }>,
 	list: {
@@ -343,7 +343,7 @@ export const review = {
 		discarded: 'Discarded.',
 		/** The quiet line of a file with edits made in place since the person's look: how many. */
 		sinceLook: (n: number) => (n === 1 ? 'edited since your look' : `${n} edits since your look`),
-		/** After it, on a document's row: how many of the files it loads beside its text (a style file, a bibliography, a preamble) its row holds too. */
+		/** After it, on a document's row: how many of the files it loads beside its text (a preamble or another LaTeX file it inputs, the only kind watched for edits) its row holds too. */
 		loads: (n: number) => (n === 1 ? 'with a file it loads' : `with ${n} files it loads`),
 		/** Hover text on that line: which files. */
 		loadsHover: (names: string[]) => `Edits to ${listed(names)}, which this document loads, are kept or discarded here with it`,
@@ -550,10 +550,11 @@ export const review = {
 	once: {
 		/** Its close button. */
 		close: 'Close this note',
-		/** Over Proposed edits: what the list holds, since when, the places it never watches, and how far a deny holds for the apps set up here (`holds`, loom's sentence in the person's words, as Settings › Agents says it). */
+		/** Over Proposed edits: what the list holds, since when, that only LaTeX is watched, the places it never watches, and how far a deny holds for the apps set up here (`holds`, loom's sentence in the person's words, as Settings › Agents says it). */
 		watched: (when: string, carried: string, unwatched: string[], holds: string) =>
 			[
-				`Here wait agents' suggestions, and every edit made in the places agents may edit since your look${when ? ` of ${when}` : ''}${carried ? `, carried over from ${carried}'s` : ''}.`,
+				`Here wait agents' suggestions, and every edit made to a LaTeX file in the places agents may edit since your look${when ? ` of ${when}` : ''}${carried ? `, carried over from ${carried}'s` : ''}.`,
+				'Only LaTeX files are watched, so an edit to Markdown, a bibliography or any other file is never listed.',
 				unwatched.length ? `Your own places are not watched, so an edit there is never listed: ${unwatched.join(', ')}.` : '',
 				holds
 			]
@@ -699,7 +700,7 @@ export const review = {
 	help: {
 		review: {
 			title: 'What the Your Changes page shows',
-			body: "The mathematics first: every statement and proof you have not accepted as it stands, one document at a time, each listed once with every reason it waits. Accepting records your reading of the text against what it rests on; it goes stale when either changes. Blocks taken in from an agent's copy or a pull are grouped by where they came from; what loom cannot accept says why in its row. Then the changes waiting to be kept, by document: suggestions not yet kept or discarded and edits made since your look in the places agents may edit, each a few words out and a few words in. Your own places, the config and each place agents are denied (Settings › Agents), are not watched, so an edit there is never listed. Keep writes a suggestion into its file, or takes an edit into your look; Discard drops a suggestion, or writes your words back over an edit, its text kept as a version first. Neither says whether the mathematics is right, and each acts as it does in the document. To do adds the open annotations from others.",
+			body: "The mathematics first: every statement and proof you have not accepted as it stands, one document at a time, each listed once with every reason it waits. Accepting records your reading of the text against what it rests on; it goes stale when either changes. Blocks taken in from an agent's copy or a pull are grouped by where they came from; what loom cannot accept says why in its row. Then the changes waiting to be kept, by document: suggestions not yet kept or discarded and edits made since your look to the LaTeX files in the places agents may edit, each a few words out and a few words in. Only LaTeX is watched, so an edit to Markdown or any other file is never listed. Your own places, the config and each place agents are denied (Settings › Agents), are not watched, so an edit there is never listed. Keep writes a suggestion into its file, or takes an edit into your look; Discard drops a suggestion, or writes your words back over an edit, its text kept as a version first. Neither says whether the mathematics is right, and each acts as it does in the document. To do adds the open annotations from others.",
 			states: [
 				['changed since you accepted', 'the text, or something it rests on, changed after you accepted it'],
 				['taken in', "it came in from an agent's copy or a pull, and you have not accepted it since"],

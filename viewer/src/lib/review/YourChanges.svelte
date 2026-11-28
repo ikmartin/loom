@@ -295,7 +295,7 @@
 				{/if}
 			</section>
 		{:else}
-			<Empty text="No changes wait in the places agents may edit." testid="changes-empty" />
+			<Empty text="No changes wait in the LaTeX files agents may edit." testid="changes-empty" />
 		{/each}
 		{#if todoOn}
 			{#each todoAlone as t (t.path)}
@@ -312,7 +312,7 @@
 	<main class="page review-page" use:barShown data-testid="your-changes">
 		<ReviewHeading title="Your Changes">{#snippet aside()}<HelpDot label="what the Your Changes page shows" topic="review" />{/snippet}</ReviewHeading>
 		{@render bar()}
-		<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: suggestions not yet kept or discarded, and every edit made since your look{since ? ` of ${since}` : ''} in the places agents may edit.{#if unwatched.length}<span data-testid="unwatched"> Your own places are not watched, so an edit there is never listed: {unwatched.join(', ')}.</span>{/if}{#if m.changes_since?.holds}<span data-testid="deny-holds"> {m.changes_since.holds}</span>{/if} <b>Keep</b> one to take it into your text, or <b>Discard</b> it to put your words back or drop the suggestion; neither says whether the mathematics is right.</p>
+		<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: suggestions not yet kept or discarded, and every edit made since your look{since ? ` of ${since}` : ''} to the LaTeX files in the places agents may edit; an edit to Markdown or any other file is never listed.{#if unwatched.length}<span data-testid="unwatched"> Your own places are not watched, so an edit there is never listed: {unwatched.join(', ')}.</span>{/if}{#if m.changes_since?.holds}<span data-testid="deny-holds"> {m.changes_since.holds}</span>{/if} <b>Keep</b> one to take it into your text, or <b>Discard</b> it to put your words back or drop the suggestion; neither says whether the mathematics is right.</p>
 
 		{#if reviewer && m.reviewer?.source === 'git config user.name'}<p class="muted" data-testid="review-name-from-git">You review as <b>{reviewer}</b>, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.</p>{/if}
 

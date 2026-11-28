@@ -167,7 +167,7 @@ function fileRows(m: Manifest, gone: Record<string, unknown>, doc?: string | nul
 	return out;
 }
 
-/** The rows with each file a document loads beside its text (a style file, a bibliography, a preamble: its `loads`) folded into the row of the document's own file, where it has one, which then holds its edits too; the first such document in the quilt's order takes it, and a file whose document has no row stays a row of its own. */
+/** The rows with each file a document loads beside its text (its `loads`, of which only a LaTeX file such as a preamble is watched for edits) folded into the row of the document's own file, where it has one, which then holds its edits too; the first such document in the quilt's order takes it, and a file whose document has no row stays a row of its own. */
 function folded(m: Manifest, rows: EditRow[]): EditRow[] {
 	type FileRow = Extract<EditRow, { type: 'file' }>;
 	const files = rows.filter((r): r is FileRow => r.type === 'file');
