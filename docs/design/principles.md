@@ -124,7 +124,7 @@ The viewer is how a person reads and decides in loom, built and shipped with it,
 
 ### P12. A document compiles from its own directory, on any TeX, on Overleaf.
 
-Portability is a property of the source, not of the tool. Consequence: a document's paths are relative to its own directory, as LaTeX and Overleaf read them, its local style files, figures and bibliography sit there or below, and there is no `..`, no `TEXINPUTS`, no shell escape and no absolute path. loom's three macros travel inside the document, as a marked block in its preamble, so no file has to sit beside it. A text derived from a document (an agent's copy, a landmark) reads its names from that document's directory. A quilt with no document has nothing to compile; the rule binds documents, not quilts.
+Portability is a property of the source, not of the tool. Consequence: a document's paths are relative to its own directory, as LaTeX and Overleaf read them, its local style files, figures and bibliography sit there or below, and there is no `..`, no `TEXINPUTS`, no shell escape and no absolute path. loom's three macros travel inside the document, as a marked block in its preamble, so no file has to sit beside it. A text derived from a document (an agent document, a landmark) reads its names from that document's directory. A quilt with no document has nothing to compile; the rule binds documents, not quilts.
 
 ### P13. Loom verifies what it can, reports what diverges, repairs nothing, and never blocks work.
 

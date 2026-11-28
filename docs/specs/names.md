@@ -10,7 +10,7 @@ Three rules hold beside the list. No screen shows a command, a flag, an endpoint
 | the four views | Docs, Library, Web, Review | |
 | a statement or proof loom reads | result | node, key |
 | a paper the library holds | work, or paper where it is a PDF to read | |
-| what an agent made of a document, kept beside it | an agent's copy | |
+| a document an agent made, a copy of one of the person's or a new one | agent document | an agent's copy, AI document |
 | a change waiting in the person's text | proposed edit (Review's list: Proposed edits) | pending change, Proposed Changes |
 | a proposed edit an agent wrote beside the text | suggested edit | |
 | a proposed edit written into the file by an agent | edit made in place | |
@@ -30,4 +30,4 @@ Three rules hold beside the list. No screen shows a command, a flag, an endpoint
 | the page an agent keeps on where the work stands | research state | |
 | loom serving a quilt | loom | the publisher |
 
-**Open.** A document an agent made, a copy of one of the person's or a new one, is "an agent's copy" in Review and "agent document" in Docs' column, in a closed draft's page and in loom's own labels; the plan's decision 3 calls it an AI document. One of the three is to be chosen by the author, and loom's agent-facing words follow it.
+**Settled 2026-11-28 by the author.** A document an agent made, a copy of one of the person's or a new one, is an agent document wherever a person reads it: in Review, in Docs, in loom's own labels and in the plan's decision 3. "An agent's copy" and "AI document" are retired; `names.spec.ts` holds the viewer's words to it. Code identifiers, paths (`.loom/agents/copies/`), endpoints and JSON fields keep their names.

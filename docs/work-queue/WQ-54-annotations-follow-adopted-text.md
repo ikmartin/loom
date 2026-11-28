@@ -4,7 +4,7 @@
 
 ## Trigger
 
-An adoption leaves an open annotation on the agent's copy whose node the person took, and the person files it again by hand on the adopted node.
+An adoption leaves an open annotation on the agent document whose node the person took, and the person files it again by hand on the adopted node.
 
 ## Why deferred
 

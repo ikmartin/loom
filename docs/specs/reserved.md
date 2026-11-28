@@ -49,7 +49,7 @@ Loom writes none of these, so `manifest.md`, which says loom writes every top-le
 | `suggested_works` | the works an agent suggested and nobody has added or dismissed | the library |
 | `formal`, and `keys[K].formal` | the formal proposals, and each key's formal state | formalization; Review's list of proposals reads it |
 
-With one owner and no name fixed: the list of what changed and an AI document's state (Review, which may reshape `changes` and `changes_since`); a work's state word and its page text (the library).
+With one owner and no name fixed: the list of what changed and an agent document's state (Review, which may reshape `changes` and `changes_since`); a work's state word and its page text (the library).
 
 ## Commands and modes
 

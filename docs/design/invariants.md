@@ -107,7 +107,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **2026-10-26.** Launch commands are gone with launching (plan 0.20.1); the client tier runs `claude -p` itself, as a person starting an agent in the quilt would.
 
-**2026-11-01.** The boundary test writes an open file, the agent's copies, a directory `[agents] deny` names and one of loom's records, in the mode that accepts edits, since outside the protected paths whether the client asks is the person's setting (plan 0.22.6).
+**2026-11-01.** The boundary test writes an open file, the agent documents, a directory `[agents] deny` names and one of loom's records, in the mode that accepts edits, since outside the protected paths whether the client asks is the person's setting (plan 0.22.6).
 
 **2026-11-04.** The MCP variant allows the agent's commands in a shell beside the tools, since a server that could not start left an agent with no loom at all. The client tier now tries those commands on both variants, and no longer asserts that an agent attached over MCP ran no `loom` in a shell.
 
