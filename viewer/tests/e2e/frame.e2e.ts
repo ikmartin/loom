@@ -166,11 +166,11 @@ test("an undo by keyboard hands the keyboard to the foot's next control, and a m
 	await tasks.first().getByRole('button', { name: 'delete' }).click();
 	await said.hover();
 	await page.setViewportSize({ width: 1100, height: 900 });
-	await expect(page.getByTestId('column-message-dot')).toBeVisible();
+	await expect(page.getByTestId('column-message-beside')).toBeVisible();
 	await tasks.first().hover();
 	await tasks.first().getByRole('button', { name: 'delete' }).click();
 	await page.mouse.move(700, 600);
-	await expect(page.getByTestId('column-message-dot')).toHaveCount(0, { timeout: 9000 });
+	await expect(page.getByTestId('column-message-beside')).toHaveCount(0, { timeout: 9000 });
 });
 
 test("a quilt an earlier loom made: the frame's head, one sentence and one button, said while it runs and when it fails, and the quilt itself once upgraded", async ({ page }) => {

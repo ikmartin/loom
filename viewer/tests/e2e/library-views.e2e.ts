@@ -347,6 +347,28 @@ test("a file dropped on a work's row is asked about before anything is taken in:
 	await expect(rows).toHaveCount(301);
 });
 
+test('on a window narrow enough to fold the column, what a drop on the works list did is said beside the folded column, with its answers', async ({ page }) => {
+	await page.setViewportSize({ width: 760, height: 800 });
+	await page.goto('/library?fixture=round6');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await expect(page.getByTestId('panel-fold')).toHaveAttribute('aria-expanded', 'false');
+	await row(page, 'Widgets and their bounds').evaluate((el) => {
+		const data = new DataTransfer();
+		data.items.add(new File(['%PDF-1.4'], 'mZK_paper.pdf', { type: 'application/pdf' }));
+		el.dispatchEvent(new DragEvent('dragover', { dataTransfer: data, bubbles: true, cancelable: true }));
+		el.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }));
+	});
+	const msg = page.getByTestId('column-message');
+	await expect(msg).toContainText(/^Is mZK_paper\.pdf .+, the work you dropped it on\?/);
+	const box = (await msg.boundingBox())!;
+	expect(box.x).toBeGreaterThanOrEqual(60);
+	expect(box.x + box.width).toBeLessThanOrEqual(760);
+	// its answers are under the pointer, not under the works list
+	await msg.getByTestId('column-message-choice').filter({ hasText: 'no, a work of its own' }).click();
+	await expect(msg).toContainText('Added mZK_paper.pdf');
+	await expect(page.getByTestId('work-row')).toHaveCount(301);
+});
+
 test('a copy of a PDF every work stating its number holds already is asked about as a copy, naming each work so its row can be told apart, kept as a work of its own or let go', async ({ page }) => {
 	await open(page);
 	const msg = page.getByTestId('column-message');
@@ -430,6 +452,44 @@ test('on a quilt that has not said whether loom may use the network, a work adde
 	await added.getByTestId('look-yes').click();
 	await expect(row(page, 'Gadget towers')).toBeVisible();
 	await expect(row(page, 'Gadget towers')).not.toContainText('look it up');
+});
+
+test("at 760, an arXiv number added on a quilt that has not said whether loom may go online says plainly that its title waits, and its row's question is in view whole", async ({ page }) => {
+	await page.setViewportSize({ width: 760, height: 800 });
+	await page.goto('/library?fixture=round6&network=unasked');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('paste-identifier').fill('1709.09864');
+	await page.getByTestId('paste-identifier').press('Enter');
+	const msg = page.getByTestId('column-message');
+	await expect(msg).toContainText('Added arXiv 1709.09864. Its title and authors are not looked up yet');
+	await expect(msg).not.toContainText('found by');
+	const added = row(page, 'arXiv 1709.09864');
+	await added.scrollIntoViewIfNeeded();
+	await expect(added.getByTestId('look-yes')).toBeInViewport({ ratio: 1 });
+	expect((await added.getByTestId('look-yes').boundingBox())!.x + 10).toBeLessThan(760);
+	await added.getByTestId('look-yes').click();
+	await expect(added).toHaveCount(0);
+});
+
+test('in thumbnails, a work added by an identifier and not looked up says so on its page, and its tab says what waits and looks it up on the word', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/library?fixture=round6&network=unasked');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('paste-identifier').fill('1709.09864');
+	await page.getByTestId('paste-identifier').press('Enter');
+	await expect(row(page, 'arXiv 1709.09864')).toBeVisible();
+	await page.getByRole('searchbox').fill('1709');
+	await page.getByTestId('works-thumbs').click();
+	const card = page.getByTestId('work-thumb').filter({ hasText: 'arXiv 1709.09864' });
+	await expect(card).toContainText('not looked up yet');
+	await expect(card).not.toContainText('no document');
+	await card.click();
+	const tab = page.getByTestId('work-no-document');
+	await expect(tab).toContainText('Loom has not looked this work up yet');
+	await tab.getByTestId('work-look-up').click();
+	await expect(tab).toHaveCount(0);
 });
 
 test('with no backend, the list says so in a sentence, with no name of an endpoint', async ({ page }) => {

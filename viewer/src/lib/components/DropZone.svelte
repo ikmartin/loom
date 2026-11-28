@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The window's drop target (1b, 4d): files dragged over any view cover it with one sheet saying they go to the library, and, only while papers wait for their file, that one of them is attached to its paper. A drop anywhere hands the files to the library's intake (`$lib/library/intake`); a drop on a row among Review's papers to fetch, which waits for its file, names that work, and one on a work's row in the Library asks first whether the files are that work's (`askOnRow`), since a row under the pointer says nothing of what the person meant. The view never changes. The sheet lets the pointer through, so a part of the page that takes a drop for itself (it calls preventDefault), as an empty quilt's drop area does (`PaperDrop.svelte`), still gets it. Nothing is drawn where the publisher takes no files. Being the intake's on every view, it also asks in the column each question the intake waits on (`askWaiting`).
+	// The window's drop target (1b, 4d): files dragged over any view cover it with one sheet saying they go to the library, and, only while papers wait for their file, that one of them is attached to its paper. A drop anywhere hands the files to the library's intake (`$lib/library/intake`); a drop on a row among Review's papers to fetch, which waits for its file, names that work, and one on a work's row in the Library asks first whether the files are that work's (`askOnRow`), since a row under the pointer says nothing of what the person meant. The view never changes. The sheet lets the pointer through, so a part of the page that takes a drop for itself (it calls preventDefault) still gets it; while an empty quilt's drop area is on the page (`PaperDrop.svelte`), every drop on the window is that area's, and no sheet shows. Nothing is drawn where the publisher takes no files. Being the intake's on every view, it also asks in the column each question the intake waits on (`askWaiting`).
 	import { onMount, untrack } from 'svelte';
 	import { call } from '$lib/library/api';
 	import { addFiles, askOnRow, askWaiting } from '$lib/library/intake';
@@ -8,6 +8,7 @@
 	import { onFixture } from '$lib/library/source';
 	import { can } from '$lib/write';
 	import { library as words } from '$lib/words/library';
+	import { held } from '$lib/start/drop';
 
 	let served = false;
 	let over = $state(false);
@@ -32,7 +33,7 @@
 		void Promise.all([can('library-receive'), can('library-take')]).then(([receive, takes]) => (served = onFixture() || (receive && takes)));
 		// a drag shows the sheet while it moves over the window, and the sheet goes when the moves stop: leaving the window, or Escape, ends them
 		const move = (e: DragEvent) => {
-			if (!(served || onFixture()) || !carriesFiles(e)) return;
+			if (!(served || onFixture()) || !carriesFiles(e) || held.byStart) return;
 			e.preventDefault();
 			if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
 			if (!over) void count();
@@ -42,7 +43,7 @@
 		};
 		const drop = (e: DragEvent) => {
 			over = false;
-			if (!(served || onFixture()) || !carriesFiles(e) || e.defaultPrevented) return;
+			if (!(served || onFixture()) || !carriesFiles(e) || e.defaultPrevented || held.byStart) return;
 			e.preventDefault();
 			const row = (e.target as Element | null)?.closest?.('[data-ref]');
 			const onto = row?.getAttribute('data-ref') ?? undefined;

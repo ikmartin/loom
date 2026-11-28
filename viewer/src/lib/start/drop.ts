@@ -1,5 +1,8 @@
 // What was dropped on an empty quilt's page, read off the drop: its files with their paths, and whether it is PDFs to read or a paper. A folder is walked through the browser's entries (`webkitGetAsEntry`), since a dropped folder is no file of its own.
 
+/** Whether an empty quilt's drop area (`PaperDrop.svelte`) is on the page: while it is, every file dropped on the window is its own, and the library's drop (`DropZone.svelte`) stands aside, since a paper dropped beside the area is the quilt's paper, never a work of its library. */
+export const held = { byStart: false };
+
 /** One file to send, by its path within what was dropped. */
 export interface Dropped {
 	file: File;

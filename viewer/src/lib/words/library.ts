@@ -87,6 +87,8 @@ export const library = {
 		version: (v: number | string) => (v === 2 ? 'second version' : typeof v === 'number' ? `version ${v}` : v),
 		/** A thumbnail's page for a work of which loom has no document. */
 		noDocument: 'no document',
+		/** A thumbnail's page for a work added by an identifier and not looked up, the network not allowed. */
+		notLookedUp: 'not looked up yet',
 		/** Under the thumbnails while more are below. */
 		more: (n: number) => `${n} more as you scroll`,
 		/** The menu at a row's right; its accessible name. */
@@ -122,7 +124,7 @@ export const library = {
 	empty: {
 		/** The box an empty library shows in place of the list. */
 		head: 'Drop papers here to start your library',
-		body: "PDFs, TeX sources, or a .bib file. A paper's arXiv number or DOI is enough: loom looks up the rest, and fetches the TeX source where arXiv has it."
+		body: "PDFs, TeX sources, or a .bib file. A paper's arXiv number or DOI is enough: loom looks up the rest online once you say it may, and fetches the TeX source where arXiv has it."
 	},
 	add: {
 		/** The panel under `add work…`. */
@@ -131,6 +133,8 @@ export const library = {
 		drop: 'or drop files anywhere in loom',
 		/** The column's message after a work was added: its title, its short name, and how it was known. */
 		added: (title: string, short: string, how: string, tex: boolean) => `Added ${title}${short && short !== title ? `, ${short}` : ''}${how ? `, found by its ${how}` : ''}${tex ? ', with its TeX source' : ''}.`,
+		/** The column's message after a work was added by an identifier it was not looked up by, the network not allowed: the identifier, and what waits for the person's word in its row. */
+		addedUnlooked: (identifier: string) => `Added ${identifier}. Its title and authors are not looked up yet: that goes online, which loom does only when you say so, and its row asks.`,
 		/** The column's message when a file was filed under a work the library had: dropped on its row, or the person's answer that it is that work. */
 		filed: (name: string, short: string) => `Filed ${name} under ${short}.`,
 		/** What a work was known by, in the message. */
@@ -245,6 +249,9 @@ export const library = {
 		marked: (page: number) => `Marked on page ${page}, to digest`,
 		/** A work with no document, in place of the reader. */
 		noDocument: "Loom has this work's entry and no document. Drop its PDF anywhere to add it.",
+		/** A work added by an identifier and not looked up, in place of the reader, and its button. */
+		notLookedUp: 'Loom has not looked this work up yet, so it has no title, authors or paper here: that goes online, which loom does only when you say so.',
+		lookUpOnce: 'look it up this once',
 		/** The chip's accessible name beside a result on the page. */
 		chip: (name: string) => name,
 		/** Over the Comments list beside a work, where loom could not learn where its notes on words stand. */

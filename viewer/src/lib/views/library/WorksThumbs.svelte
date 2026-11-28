@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The list of works as thumbnails (1 thumbs): each work's first page, its title and its byline, sixty at first and more as the person scrolls; a work loom holds no document of is a blank page saying so. A thumbnail is the publisher's picture of the PDF's first page, asked for only as its card comes into view; where none can be asked for (the fixture), the card draws a plain page with the title on it.
+	// The list of works as thumbnails (1 thumbs): each work's first page, its title and its byline, sixty at first and more as the person scrolls; a work loom holds no document of is a blank page saying so, or that it is not looked up yet. A thumbnail is the publisher's picture of the PDF's first page, asked for only as its card comes into view; where none can be asked for (the fixture), the card draws a plain page with the title on it.
 	import { thumbUrl } from '$lib/library/api';
 	import type { Work } from '$lib/library/types';
 	import { library as words } from '$lib/words/library';
@@ -38,7 +38,7 @@
 			{@const src = w.holds.pdf ? thumbUrl(w.holds.pdf) : null}
 			<button type="button" class="th" class:multi={lib.multi.has(w.ref)} onclick={(e) => opened(e, w)} data-testid="work-thumb" data-ref={w.ref}>
 				{#if !w.holds.pdf}
-					<span class="pg none">{words.works.noDocument}</span>
+					<span class="pg none">{w.lookup?.state === 'unconfirmed' ? words.works.notLookedUp : words.works.noDocument}</span>
 				{:else if src}
 					<img class="pg" {src} alt="" loading="lazy" draggable="false" />
 				{:else}

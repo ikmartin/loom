@@ -22,10 +22,12 @@ let dropped = false;
 
 /** Listen to the publisher's stream, if it offers one. */
 export async function listen(): Promise<void> {
-	if (source || typeof EventSource === 'undefined') return;
+	if (source) return;
+	if (typeof EventSource === 'undefined') return updating.none();
 	const caps = await capabilities();
 	presence.probed(caps);
-	if (!caps?.stream || source) return;
+	if (source) return;
+	if (!caps?.stream) return updating.none();
 	source = new EventSource(base + '/_api/stream');
 	source.addEventListener('manifest', () => void store.refresh());
 	source.addEventListener('compiles', (e) => compiles.take((e as MessageEvent<string>).data));

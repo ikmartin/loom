@@ -109,6 +109,96 @@ test('a file dropped on the area is its own, and never the library\'s', async ({
 	expect(sent).toEqual(['/_api/paper-receive', '/_api/paper-import']);
 });
 
+test("a paper dropped anywhere on the empty page, not only on its area, is the area's, and the library's sheet never shows", async ({ page }) => {
+	await nothingToRead(page);
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['paper-receive', 'paper-import', 'paper-choose', 'library-receive', 'library-take'], token: 't' } }));
+	const sent: string[] = [];
+	await page.route('**/_api/*', (r) => {
+		const path = new URL(r.request().url()).pathname;
+		if (r.request().method() === 'POST') sent.push(path);
+		return r.fulfill(path.endsWith('paper-receive') ? { json: { ok: true, drop: '0123456789abcdef', path: 'paper.tar.gz', size: 4 } } : { status: 409, json: { error: { code: 'no-paper', message: 'what was dropped holds no .tex file that begins a document' } } });
+	});
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/');
+	const area = page.getByTestId('paper-drop');
+	await expect(area).toBeVisible();
+	// well below the area, on the page's empty part, as a person drops beside the box
+	const box = (await area.boundingBox())!;
+	const at = { x: box.x + box.width / 2, y: box.y + box.height + 200 };
+	await page.evaluate(({ x, y }) => {
+		const data = new DataTransfer();
+		data.items.add(new File(['tar'], 'arXiv-2012.12270.tar.gz', { type: 'application/gzip' }));
+		const el = document.elementFromPoint(x, y)!;
+		el.dispatchEvent(new DragEvent('dragover', { dataTransfer: data, bubbles: true, cancelable: true, clientX: x, clientY: y }));
+	}, at);
+	await expect(area).toHaveClass(/over/);
+	await expect(page.getByTestId('drop-sheet')).toHaveCount(0);
+	await page.evaluate(({ x, y }) => {
+		const data = new DataTransfer();
+		data.items.add(new File(['tar'], 'arXiv-2012.12270.tar.gz', { type: 'application/gzip' }));
+		document.elementFromPoint(x, y)!.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true, clientX: x, clientY: y }));
+	}, at);
+	await expect(page.getByTestId('paper-drop-said')).toContainText('That holds no LaTeX file that begins a document.');
+	expect(sent).toEqual(['/_api/paper-receive', '/_api/paper-import']);
+});
+
+test("a paper that comes into a quilt with nothing to read typesets with its own macros, though the page loaded MathJax before it had any", async ({ page }) => {
+	let full = false;
+	await page.route('**/build/manifest.json', async (route) => {
+		const m = structuredClone(manifest);
+		if (!full) {
+			m.masters = [];
+			m.canon = [];
+			m.corpus.home = null;
+			m.macros.default = [];
+		}
+		await route.fulfill({ json: m });
+	});
+	await page.goto('/');
+	await expect(page.getByTestId('how-to-start')).toBeVisible();
+	// MathJax loads while the page is idle, with the macros the quilt has then: none
+	await page.waitForFunction(() => !!(window as unknown as { MathJax?: { startup?: { document?: unknown } } }).MathJax?.startup?.document);
+	full = true;
+	await expect(page).toHaveURL(/\/file\/README\.md$/);
+	// on to a section using the paper's \Fix, with no reload
+	await page.evaluate(() => {
+		const a = document.createElement('a');
+		a.href = '/node/sy-0100';
+		document.body.append(a);
+		a.click();
+	});
+	const math = pane(page, 0).locator('.fragment mjx-container');
+	await expect(math.first()).toBeVisible();
+	await expect(pane(page, 0).locator('.fragment mjx-container [data-mml-node="mtext"][fill="red"], .fragment mjx-container [data-mml-node="merror"]')).toHaveCount(0);
+});
+
+/** A loom server whose first build has not ended until `built.published` or `built.failed` says so: its manifest is missing until it publishes, and its stream says how its builds ended. */
+async function firstBuild(page: Page, built: { published: number; failed: number; why: string | null }): Promise<void> {
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: [], token: 't', stream: true } }));
+	await page.route('**/_api/stream', (r) => r.fulfill({ contentType: 'text/event-stream', body: `retry: 100\nevent: built\ndata: ${JSON.stringify({ server: 7, ...built })}\n\n` }));
+	await page.route('**/build/manifest.json', (r) => (built.published ? r.fallback() : r.fulfill({ status: 404, body: '' })));
+}
+
+test('a quilt opened before its first build says it is being made, and opens once that build lands, with no reload', async ({ page }) => {
+	const built = { published: 0, failed: 0, why: null };
+	await firstBuild(page, built);
+	await page.goto('/');
+	await expect(page.getByTestId('quilt-making')).toContainText('Making this quilt');
+	await expect(page.getByText('manifest-missing')).toHaveCount(0);
+	await expect(page.getByText('Problems')).toHaveCount(0);
+	built.published = 1;
+	await expect(page).toHaveURL(/\/file\/README\.md$/);
+	await expect(pane(page, 0).getByTestId('file-item')).toContainText('The synthetic quilt: invented mathematics');
+});
+
+test('a first build that fails says that the quilt could not be made, and why, in words', async ({ page }) => {
+	await firstBuild(page, { published: 0, failed: 1, why: 'main.tex: Emergency stop' });
+	await page.goto('/');
+	await expect(page.getByTestId('quilt-making')).toContainText('Loom could not make this quilt');
+	await expect(page.getByTestId('quilt-making')).toContainText('main.tex: Emergency stop');
+	await expect(page.getByText('manifest-missing')).toHaveCount(0);
+});
+
 test('where the publisher takes no paper, a quilt with nothing to read says so', async ({ page }) => {
 	await nothingToRead(page);
 	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: [], token: 't' } }));

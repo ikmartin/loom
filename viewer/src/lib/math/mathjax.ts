@@ -1,4 +1,4 @@
-// MathJax 3, TeX input and SVG output, bundled from the mathjax package so nothing loads from a CDN and a deployed site works offline. Macros come from the manifest at startup; a fragment naming a per-fragment set gets those definitions applied before its math is typeset.
+// MathJax 3, TeX input and SVG output, bundled from the mathjax package so nothing loads from a CDN and a deployed site works offline. Macros come from the manifest: those it holds when MathJax loads are its configuration, and any the corpus gains or changes later (a paper brought into a quilt that had none) are defined before the next typeset; a fragment naming a per-fragment set gets those definitions applied before its math is typeset.
 import type { Macro } from '$lib/manifest/types';
 
 /** One formula in MathJax's list of what it has typeset; once typeset, `start.node` is its output's container. */
@@ -18,7 +18,10 @@ declare global {
 }
 
 let loaded: Promise<MJ> | null = null;
+/** The corpus-wide macros MathJax has, by name: its configuration, then each defined since. */
 let currentMacros: Record<string, string | [string, number]> = {};
+/** The list `currentMacros` was last brought up to, so a typeset with the same list costs one comparison. */
+let lastMacros: Macro[] | null = null;
 
 function toConfig(macros: Macro[]): Record<string, string | [string, number]> {
 	const out: Record<string, string | [string, number]> = {};
@@ -26,8 +29,22 @@ function toConfig(macros: Macro[]): Record<string, string | [string, number]> {
 	return out;
 }
 
+/**
+ * Load MathJax once, with the corpus-wide macros as its configuration, and bring those up to `macros` on every later call.
+ *
+ * Parameters
+ * ----------
+ * macros : Macro[]
+ *     The corpus-wide macros as the manifest now holds them.
+ *
+ * Returns
+ * -------
+ * Promise<MJ>
+ *     MathJax, with every macro of `macros` that it lacked or held otherwise queued for definition ahead of whatever the caller typesets next.
+ */
 export function ensureMathJax(macros: Macro[]): Promise<MJ> {
 	if (!loaded) {
+		lastMacros = macros;
 		currentMacros = toConfig(macros);
 		window.MathJax = {
 			tex: {
@@ -52,7 +69,22 @@ export function ensureMathJax(macros: Macro[]): Promise<MJ> {
 			return mj;
 		});
 	}
-	return loaded;
+	return loaded.then((mj) => {
+		bringUp(mj, macros);
+		return mj;
+	});
+}
+
+/** Defines each macro of `macros` that MathJax lacks or holds otherwise, a formula apiece, so one it cannot read leaves the rest defined.
+ *
+ * MathJax reads its configuration only at load: a page that loaded it before the quilt's paper came in showed the paper's macros as their names, in red. A macro the corpus dropped stays defined. */
+function bringUp(mj: MJ, macros: Macro[]): void {
+	if (macros === lastMacros) return;
+	lastMacros = macros;
+	const next = toConfig(macros);
+	const changed = macros.filter((m) => JSON.stringify(currentMacros[m.name]) !== JSON.stringify(next[m.name]));
+	currentMacros = { ...currentMacros, ...next };
+	if (changed.length) define(mj, changed, true);
 }
 
 /** A fragment's macro set as one formula of definitions. `\renewcommand` alone: MathJax's never checks that a macro exists, and it has no `\providecommand`, whose argument it would read as math and fail on, showing the formula's source instead. */
@@ -60,14 +92,14 @@ function macroPrefix(macros: Macro[]): string {
 	return macros.map((m) => (m.args > 0 ? `\\renewcommand{\\${m.name}}[${m.args}]{${m.body}}` : `\\renewcommand{\\${m.name}}{${m.body}}`)).join('');
 }
 
-/** Queue a fragment's macro set for definition: one formula of `\renewcommand`, typeset in a holder off the page and removed.
+/** Queue a fragment's macro set for definition: one formula of `\renewcommand`, or with `apart` one formula per macro, typeset in a holder off the page and removed.
  *
  * MathJax keeps a definition page-wide (WQ-51), so whatever is queued next sees it; call it in the same task as the fragment's own `run`. Not written into one of the fragment's own formulas, which need not open with `\(` or `\[` (an `align`, a formula already typeset), and outside a delimiter MathJax reads the definitions as prose. */
-function define(mj: MJ, macros: Macro[]): void {
+function define(mj: MJ, macros: Macro[], apart = false): void {
 	const holder = document.createElement('span');
 	holder.setAttribute('aria-hidden', 'true');
 	holder.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden';
-	holder.textContent = `\\(${macroPrefix(macros)}\\)`;
+	holder.textContent = apart ? macros.map((m) => `\\(${macroPrefix([m])}\\)`).join(' ') : `\\(${macroPrefix(macros)}\\)`;
 	document.body.append(holder);
 	void run(mj, [holder])
 		.catch(() => {})

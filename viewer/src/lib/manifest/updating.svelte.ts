@@ -13,6 +13,10 @@ export interface Built {
 }
 
 class Updating {
+	/** The stream's last `built` event, or null before one is heard; a server whose first build has not ended has published nothing yet, which the page says while the quilt has no manifest (`making`). */
+	built = $state.raw<Built | null>(null);
+	/** Whether the publisher has said whether it builds: a `built` event heard, or no stream to hear one on (`none`). Until then a missing manifest is not yet a problem. */
+	known = $state(false);
 	/** The build the page waits on, of the server that named it; null while it waits on none. */
 	awaited = $state.raw<{ server: number; n: number } | null>(null);
 	/** Why the build a write waited on failed, to be said until it is dismissed or another write is answered; null when there is nothing to say. */
@@ -28,6 +32,23 @@ class Updating {
 	/** Whether the page is waiting on a publication. */
 	get on(): boolean {
 		return this.awaited !== null;
+	}
+
+	/** Whether the server's first build is still running: nothing of it has published or failed. */
+	get making(): boolean {
+		const b = this.built;
+		return !!b && b.published === 0 && b.failed === 0;
+	}
+
+	/** Why the server's first build failed, '' where it said nothing; null while none has failed before one published. */
+	get unmade(): string | null {
+		const b = this.built;
+		return b && b.published === 0 && b.failed > 0 ? (b.why ?? '') : null;
+	}
+
+	/** The publisher offers no stream, so no `built` event will say how its builds stand. */
+	none(): void {
+		this.known = true;
 	}
 
 	/** A stream is listened to, so a mark set will be cleared. */
@@ -59,6 +80,8 @@ class Updating {
 	async heard(b: Built): Promise<void> {
 		if (this.#heard?.server !== b.server) this.#shown = 0;
 		this.#heard = b;
+		this.built = b;
+		this.known = true;
 		// another server than the one that answered: its first publication carries every write on disk
 		const a = this.awaited;
 		if (a && a.server !== b.server) this.awaited = { server: b.server, n: 1 };
