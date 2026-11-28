@@ -193,10 +193,10 @@ test("Ask your agent on a document's toolbar offers the words selected first, at
 	await page.getByTestId('item-controls').first().getByTestId('toolbar-ask').click();
 	await expect(page.getByTestId('ask-about-0')).toBeChecked();
 	await expect(page.locator('label', { has: page.getByTestId('ask-about-0') })).toHaveText('The words you selected in Lemma 3');
-	await expect(page.getByTestId('ask-request')).toContainText('In loom, look at talk.tex, Lemma 3 (quilt:drafting/talk.tex#sy-0002), at the words “');
+	await expect(page.getByTestId('ask-request')).toContainText('In loom, look at talk.tex, Lemma 3 (quilt:drafting/talk.tex), at the words “');
 });
 
-test('what Ask your agent copies quotes the words as the reader sees them: math as written, a reference as drawn, never its command', async ({ page }) => {
+test('what Ask your agent copies quotes the words as the reader sees them: math as its symbols, a reference as drawn, never TeX or a command', async ({ page }) => {
 	await page.goto('/master/drafting/main');
 	const proof = page.locator('.fragment p[data-src^="drafting/nodes/sy-0003.tex:437:"]').first();
 	await proof.scrollIntoViewIfNeeded();
@@ -211,7 +211,8 @@ test('what Ask your agent copies quotes the words as the reader sees them: math 
 	await page.getByTestId('item-controls').first().getByTestId('toolbar-ask').click();
 	await expect(page.getByTestId('ask-about-0')).toBeChecked();
 	const request = page.getByTestId('ask-request');
-	await expect(request).toContainText('the permutation $\\sigma$ directly, using (3) from the proof of Lemma 1.2 and Definition 1.1.');
+	await expect(request).toContainText('the permutation σ directly, using (3) from the proof of Lemma 1.2 and Definition 1.1.');
+	await expect(request).not.toContainText('$');
 	await expect(request).not.toContainText(/\\(ref|eqref|cite)\{/);
 });
 
@@ -219,5 +220,21 @@ test("Ask your agent on a result's own page is about the result", async ({ page 
 	await page.goto('/node/sy-0003');
 	await page.getByTestId('toolbar-ask').click();
 	await expect(page.locator('[data-testid^="ask-about-"]')).toHaveCount(0);
-	await expect(page.getByTestId('ask-request')).toHaveText(/^In loom, look at .+ \(quilt:sy-0003\)\.$/);
+	await expect(page.getByTestId('ask-request')).toHaveText('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex).');
+});
+
+test('Ask your agent with nothing selected offers each result on screen under its number, and its request shows no id', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/master/drafting/main');
+	// Lemma 1.2 brought to the middle of the pane, as Find leaves it, below whatever stands at the top
+	const lemma = page.locator('[data-pane="0"] .fragment .env[data-key="sy-0002"]').first();
+	await lemma.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+	await page.waitForTimeout(400);
+	await page.getByTestId('item-controls').first().getByTestId('toolbar-ask').click();
+	const about = page.locator('fieldset label');
+	await expect(about.filter({ hasText: /^Lemma 1\.2, on screen$/ })).toHaveCount(1);
+	await about.filter({ hasText: /^Lemma 1\.2,/ }).locator('input').check();
+	const request = page.getByTestId('ask-request');
+	await expect(request).toHaveText('In loom, look at main.tex, Lemma 1.2 (quilt:drafting/main.tex).');
+	await expect(request).not.toContainText('sy-');
 });

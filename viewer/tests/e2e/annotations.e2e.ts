@@ -1293,9 +1293,9 @@ test.describe('the actions at a selection', () => {
 		await page.getByTestId('selection-actions').click();
 		await page.getByTestId('selection-ask').click();
 		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
-		await expect(page.getByTestId('ask-request')).toHaveText('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex#sy-0003), at the words “finite widget”.');
+		await expect(page.getByTestId('ask-request')).toHaveText('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex), at the words “finite widget”.');
 		await page.getByTestId('ask-words').fill('Is finite needed?');
-		await expect.poll(() => page.getByTestId('ask-request').textContent()).toBe('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex#sy-0003), at the words “finite widget”.\n\nIs finite needed?');
+		await expect.poll(() => page.getByTestId('ask-request').textContent()).toBe('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex), at the words “finite widget”.\n\nIs finite needed?');
 		await page.getByTestId('ask-copy').click();
 		await expect(page.getByTestId('ask-agent')).toHaveCount(0);
 		expect(Object.keys(sent)).toEqual([]);

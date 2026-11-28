@@ -8,12 +8,13 @@ const m = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Man
 
 beforeEach(() => {
 	here.block = {};
+	here.seen = {};
 	here.selection = null;
 });
 
 describe('what Ask your agent is about from a toolbar', () => {
-	it('is a result alone on its own page', () => {
-		expect(placesFor(m, { kind: 'node', id: 'sy-0003' }).map((p) => p.href)).toEqual(['quilt:sy-0003']);
+	it('is a result alone on its own page, named and linked through the document that numbers it', () => {
+		expect(placesFor(m, { kind: 'node', id: 'sy-0003' }).map((p) => [p.name, p.href])).toEqual([['main.tex, Theorem 2.1', 'quilt:drafting/main.tex#sy-0003']]);
 	});
 
 	it('is the document alone until a result stands at the top of its pane', () => {
@@ -49,6 +50,24 @@ describe('what Ask your agent is about from a toolbar', () => {
 			['quilt:drafting/main.tex#sy-0003', 'finite widget'],
 			['quilt:drafting/main.tex', undefined]
 		]);
+	});
+
+	it('offers the results on screen after the one at the top of the pane, each under its number, then the document', () => {
+		here.block = { 'document:drafting/main.tex': { src: 'x', key: 'sy-0003' } };
+		here.seen = { 'document:drafting/main.tex': ['sy-0003', 'sy-0008'] };
+		const got = placesFor(m, { kind: 'document', id: 'drafting/main.tex' });
+		expect(got.map((p) => [p.href, p.label])).toEqual([
+			['quilt:drafting/main.tex#sy-0003', 'Theorem 2.1, where you are reading'],
+			['quilt:drafting/main.tex#sy-0008', 'Definition 2.4, on screen'],
+			['quilt:drafting/main.tex', 'The document, main.tex']
+		]);
+	});
+
+	it('offers the results on screen before a section at the top of the pane, which says only roughly where the reader is', () => {
+		here.block = { 'document:drafting/main.tex': { src: 'x', key: 'sy-0100' } };
+		here.seen = { 'document:drafting/main.tex': ['sy-0002'] };
+		const got = placesFor(m, { kind: 'document', id: 'drafting/main.tex' });
+		expect(got.map((p) => p.label)).toEqual(['Lemma 1.2, on screen', 'Section 1, where you are reading', 'The document, main.tex']);
 	});
 
 	it('asks nothing without a manifest', () => {

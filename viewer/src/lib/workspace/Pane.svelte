@@ -86,6 +86,19 @@
 		// and where the reader is, for `loom here`: the block by the key it belongs to
 		const belongs = block ? keyOf(block, '') : '';
 		here.setBlock(k, block?.dataset.src && belongs ? { src: block.dataset.src, key: belongs } : null);
+		here.setSeen(k, onScreen(el, r));
+	}
+
+	/** The results and proofs at least partly on screen in the pane, top to bottom, each once. */
+	function onScreen(el: HTMLElement, r: DOMRect): string[] {
+		const keys: string[] = [];
+		for (const at of el.querySelectorAll<HTMLElement>('div.env[data-key], details.env-proof[data-key]')) {
+			const b = at.getBoundingClientRect();
+			if (b.bottom <= r.top || b.top >= r.bottom || !b.height) continue;
+			const key = at.dataset.key;
+			if (key && !keys.includes(key)) keys.push(key);
+		}
+		return keys;
 	}
 
 	// before the pane's content changes to another item, while the one left is still in it

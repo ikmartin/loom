@@ -177,6 +177,8 @@ export const agents = {
 		document: (name: string) => `The document, ${name}`,
 		/** A choice: the result at the top of the pane. */
 		reading: (name: string) => `${name}, where you are reading`,
+		/** A choice: a result on screen in the pane, below the one at its top. */
+		onScreen: (name: string) => `${name}, on screen`,
 		/** A choice, the first: the words selected in the pane, in the result or document named. */
 		selected: (name: string) => `The words you selected in ${name}`,
 		/** The field of modes, and its first option. */
@@ -195,7 +197,7 @@ export const agents = {
 		toastLine: (ok: boolean, inClaude: boolean) => (ok ? `Paste it into your agent's conversation${inClaude ? ' in Claude' : ''}.` : 'This browser refused the clipboard.'),
 		/** When loom could not open Claude. */
 		openFailed: 'loom could not open Claude',
-		/** The request: the place and the mode in one sentence, then the person's own words. */
-		request: (mode: string, place: string, href: string, quoted: string) => `${mode ? `In loom, work in the ${mode} mode on` : 'In loom, look at'} ${place} (${href})${quoted ? `, at the words “${quoted}”` : ''}.`
+		/** The request: the place and the mode in one sentence, then the person's own words; the link, where there is one, in brackets after the place. */
+		request: (mode: string, place: string, href: string, quoted: string) => `${mode ? `In loom, work in the ${mode} mode on` : 'In loom, look at'} ${place}${href ? ` (${href})` : ''}${quoted ? `, at the words “${quoted}”` : ''}.`
 	}
 };

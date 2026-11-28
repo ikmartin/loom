@@ -7,6 +7,7 @@
 	import { say } from '$lib/review/toasts.svelte';
 	import { can, write } from '$lib/write';
 	import { agents as words } from '$lib/words/agents';
+	import { prefs } from '$lib/prefs.svelte';
 	import { request, type Place } from './ask';
 
 	let { open = $bindable(false), places }: { open?: boolean; places: Place[] } = $props();
@@ -26,7 +27,7 @@
 	});
 
 	const place = $derived(places[Math.min(which, places.length - 1)]);
-	const text = $derived(place ? request(place, mode, said) : '');
+	const text = $derived(place ? request(place, mode, said, prefs.ids) : '');
 	const fits = $derived(modes.find((x) => x.name === mode)?.fits ?? '');
 
 	async function copy(andOpen: boolean): Promise<void> {
