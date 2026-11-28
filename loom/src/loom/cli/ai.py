@@ -135,7 +135,12 @@ def delete_command(
 
 
 def install_layer(
-    root: Path, *, write: bool = True, shell: bool | None = None, apps: list[str] | None = None
+    root: Path,
+    *,
+    write: bool = True,
+    shell: bool | None = None,
+    apps: list[str] | None = None,
+    record: list[str] | None = None,
 ) -> tuple[LayerReport, ClientReport]:
     """Write the agent layer into a quilt, or refresh it where `.loom/agents/instructions/` exists, with the files of the agent apps it is for: their root lines, permission files and, in the MCP variant, the files that start the server.
 
@@ -149,6 +154,8 @@ def install_layer(
         True for an agent with no MCP, which runs `loom` in a shell; False for one that attaches over MCP, with the shell beside the tools; default the way the quilt already uses, else MCP.
     apps : list of str, optional
         The apps (`ai.clients.PROJECT` keys) whose files are written; default the apps the quilt is set up for, or every app where it is set up for none (`ai.clients.chosen`).
+    record : list of str, optional
+        The apps the quilt is recorded as set up for afterwards, beside `apps`; default `apps` alone. The viewer's setup writes one app's files and keeps the others recorded.
 
     Returns
     -------
@@ -214,7 +221,7 @@ def install_layer(
     else:
         rep = upgrade_layer(root, write=write, shell=shell, apps=apps)
     clients = write_clients(root, write, shell=shell, apps=apps)
-    said = "".join(f"{key}\n" for key in apps)
+    said = "".join(f"{key}\n" for key in chosen(root, [*apps, *(record or [])]))
     if read_plain(root, f"{AI}/{APPS_FILE}") != said:
         rep.written.append(f"{AI}/{APPS_FILE}")
         if write:

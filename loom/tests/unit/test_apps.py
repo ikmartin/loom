@@ -68,6 +68,21 @@ def test_a_second_app_is_added_beside_the_first(tmp_path: Path) -> None:
     assert not any((q / rel).exists() for rel in ("GEMINI.md", ".gemini/settings.json", ".cursor/mcp.json"))
 
 
+def test_choosing_one_app_in_a_clone_set_up_for_every_app_writes_that_app_s_files_alone(tmp_path: Path) -> None:
+    """A clone of a quilt `loom ai init` set up, as the showcase is, has no server files, which are never committed: Use with Claude writes Claude's and no other app's, and the quilt stays recorded for every app."""
+    q = bare(tmp_path)
+    ok("ai", "init", cwd=q)
+    servers = [c.file for c in PROJECT if c.file]
+    for rel in servers:
+        (q / rel).unlink()
+    (q / "AGENTS.md").write_text("Notes of mine.\n")
+    got = setup(q, "claude-code")
+    assert (q / ".mcp.json").is_file() and not any((q / rel).exists() for rel in servers if rel != ".mcp.json")
+    assert (q / "AGENTS.md").read_text() == "Notes of mine.\n", "Codex's root file is not Claude's to write"
+    assert all(rel in CLAUDE_FILES or rel.startswith((".claude/", ".loom/")) for rel in got["written"]), got["written"]  # type: ignore[union-attr]
+    assert apps_in(q) == EVERY
+
+
 def test_a_quilt_whose_agents_use_the_shell_keeps_it(tmp_path: Path) -> None:
     q = bare(tmp_path)
     ok("ai", "init", "--shell", cwd=q)

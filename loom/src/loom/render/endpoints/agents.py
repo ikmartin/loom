@@ -112,7 +112,7 @@ def _here(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """Write what agent app `app` needs to work in the quilt, as `loom ai init` writes it for every app: the agent layer where there is none, over MCP, and that app's own files alone.
 
-    The apps the quilt is set up for already keep theirs, and a quilt whose agents use the shell keeps it. The author's act, refused to a declared agent: an agent never sets up its own boundary.
+    The apps the quilt is set up for already stay recorded, their files neither written nor refreshed, so a clone of a quilt set up for every app gets one app's server file, not four; a quilt whose agents use the shell keeps it. The author's act, refused to a declared agent: an agent never sets up its own boundary.
     """
     from loom.ai.clients import BY_KEY, PROJECT, chosen
     from loom.ai.layout import MCP, variant
@@ -137,7 +137,7 @@ def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     from loom.writes import WriteRefused
 
     try:
-        layer, clients = install_layer(root, apps=[k for k in keys if k in have or k == app])
+        layer, clients = install_layer(root, apps=[app], record=[k for k in keys if k in have or k == app])
     except WriteRefused as exc:
         raise ApiError(exc.code, str(exc), status=exc.status) from exc
     written = sorted(dict.fromkeys([*layer.written, *clients.written]))
