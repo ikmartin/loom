@@ -25,7 +25,7 @@ OWN = "# your own lines go below this one; loom upgrade keeps them"
 
 LOOM_IGNORE = (
     "# loom's folders that stay on this machine: its state here, what it can make again, and the agents' scratch. "
-    "Everything else here travels with the quilt, to commit like any file of yours: the records, the library, and the agents' instructions, sessions and copies. "
+    "Everything else here travels with the quilt, to commit like any file of yours: the records, the library, and the agents' instructions and sessions, and agent documents. "
     "`loom upgrade` rewrites the lines above the last.\n" + "\n".join(LOOM_LINES) + f"\n{OWN}\n"
 )
 

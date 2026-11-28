@@ -1630,7 +1630,7 @@ KINDS = {
     "put-back": "a put-back",
     "tick": "a tick",
     "settings": "a save of Settings",
-    "adopt": "a taking in of an agent's copy",
+    "adopt": "a taking in of an agent document",
     "pull": "a pull",
     "mv": "a move",
     "atomize": "an atomize",

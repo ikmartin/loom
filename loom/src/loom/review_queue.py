@@ -174,7 +174,7 @@ def rows_for(result: ScanResult, manifest: dict[str, Any]) -> list[dict[str, Any
         copy = shared.get(key, {}).get("copy")
         # a copy's rows are named from the copy itself; a pull's by the workspace its record names
         label = (
-            f"Taken in from the copy “{Path(copy).stem}”"
+            f"Taken in from the agent document “{Path(copy).stem}”"
             if cause == "adopted" and copy
             else shared.get(key, {}).get("label", "")
         )

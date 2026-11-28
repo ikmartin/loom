@@ -516,7 +516,7 @@ def suggested(result: ScanResult) -> list[Pending]:
             copy = next((d for d in node.reached_by if result.document_role(d) == "agent"), None)
             p.state = "on-a-copy"
             p.why = (
-                f"It is on the agent's copy “{copy.rsplit('/', 1)[-1]}”; it comes in with the copy"
+                f"It is on the agent document “{copy.rsplit('/', 1)[-1]}”; it comes in with it"
                 if copy
                 else "It is on a block none of your documents reads"
             )

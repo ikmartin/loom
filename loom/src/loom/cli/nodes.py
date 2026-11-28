@@ -139,7 +139,7 @@ def new(
         refuse_protected(
             result.quilt,
             path,
-            "a new result of yours goes in a file you may write, named with --to FILE, or in your own copy of the document (loom draft DOC --ai NAME)",
+            "a new result of yours goes in a file you may write, named with --to FILE, or in an agent document of your own (loom draft DOC --ai NAME)",
         )
     rel = path.relative_to(result.quilt.root.resolve() if to else result.quilt.root).as_posix()
     name = result.taxa[env].name if env in result.taxa else env

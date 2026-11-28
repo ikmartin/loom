@@ -527,7 +527,7 @@ def prepare(
     # taking everything takes the clashes too, so they are refused by name rather than quietly left
     selected = sorted(set(offered) | clashing if keys is None else set(keys))
     issues = [
-        f"{key}: you and the agent both changed it and the edits clash; reconcile it in your editor, then refresh the copy"
+        f"{key}: you and the agent both changed it and the edits clash; reconcile it in your editor, then refresh the agent document"
         for key in selected
         if key in clashing
     ]
@@ -802,7 +802,7 @@ def _incorporate(result: ScanResult, w: Any, copy: str, token: str, saved: dict[
         history,
         data["source"],
         landmark,
-        f"Before taking changes from the copy “{Path(data['copy']).stem}”",
+        f"Before taking changes from the agent document “{Path(data['copy']).stem}”",
         who,
         kept_for="adopt",
     )
@@ -928,7 +928,7 @@ def _incorporate(result: ScanResult, w: Any, copy: str, token: str, saved: dict[
                 origins[key] = {
                     "source": f"adopt:{entry.step}",
                     "copy": data["copy"],
-                    "label": f"Taken in from the copy “{Path(data['copy']).stem}”",
+                    "label": f"Taken in from the agent document “{Path(data['copy']).stem}”",
                     "changed": key in changed,
                     "baseline": fingerprint(after, key),
                     "local_before": previous.get("local_before", False)
