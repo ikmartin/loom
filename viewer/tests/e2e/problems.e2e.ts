@@ -161,3 +161,15 @@ test('the page is read at rest with its bar drawn', async ({ page }) => {
 	await expect(page.getByTestId('problems-yours').getByTestId('problem').first()).toBeVisible();
 	expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarColor)).not.toBe('rgba(0, 0, 0, 0) rgba(0, 0, 0, 0)');
 });
+
+test('a quilt with no document of the person\'s says so, never that nothing is wrong', async ({ page }) => {
+	await serve(page, (m) => {
+		m.masters = [];
+		m.diagnostics = m.diagnostics.filter((d: D) => !latex(d));
+	});
+	await page.goto('/review/problems');
+	await expect(page.getByTestId('problems-none')).toHaveText('There is no document of yours yet, so there is no LaTeX to check.');
+	await serve(page, (m) => void (m.diagnostics = m.diagnostics.filter((d: D) => !latex(d))));
+	await page.reload();
+	await expect(page.getByTestId('problems-none')).toHaveText('Nothing is wrong in your LaTeX.');
+});

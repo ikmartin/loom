@@ -7,6 +7,7 @@
 	import { store } from '$lib/manifest/client.svelte';
 	import { landed } from '$lib/manifest/updating.svelte';
 	import type { Diagnostic, Fix } from '$lib/manifest/types';
+	import { isAgentDocument } from '$lib/manifest/documents';
 	import { forPerson, groupProblems, lineUrl, openUrl, partsOf, splitFixes, titleOf, type Group } from '$lib/diagnostics';
 	import { keyTarget, placeUrl } from '$lib/nav';
 	import { route } from '$lib/paths';
@@ -32,6 +33,8 @@
 	const all = $derived(partsOf(shown));
 	const parts = $derived(partsOf(shown.filter(matches)));
 	const filtered = $derived(!!(severity || code || words));
+	// a quilt with no document of the person's has had nothing checked, which is not "nothing is wrong"
+	const documents = $derived(m.masters.some((x) => !isAgentDocument(x)));
 	const counts = $derived(Object.fromEntries(SEVERITIES.map((s) => [s, shown.filter((d) => d.severity === s).length])));
 	const pick = (v: string) => void setQuery(page.url, 'severity', severity === v ? '' : v);
 	// what the person opened or folded, kept across the manifest drawn again after an act
@@ -124,7 +127,7 @@
 		{#if parts.yours.length}
 			{@render groups(parts.yours, 'yours')}
 		{:else}
-			<Empty text={filtered && all.yours.length ? 'None of yours matches these filters.' : 'Nothing is wrong in your LaTeX.'} testid="problems-none" />
+			<Empty text={filtered && all.yours.length ? reviewWords.problems.unmatched : documents ? reviewWords.problems.none : reviewWords.problems.noDocument} testid="problems-none" />
 		{/if}
 	</section>
 

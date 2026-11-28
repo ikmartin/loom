@@ -697,6 +697,14 @@ export const review = {
 		confirm: 'Delete'
 	},
 	/** The question-mark circle beside a page's title (Review's page where loom serves no lists, and Problems): what the page shows and what each state means. */
+	problems: {
+		/** In place of the person's problems, where none is wrong. */
+		none: 'Nothing is wrong in your LaTeX.',
+		/** In place of the person's problems, where the filters leave none of them. */
+		unmatched: 'None of yours matches these filters.',
+		/** In place of the person's problems, where the quilt holds no document of theirs: nothing has been checked, so nothing is said to be right. */
+		noDocument: 'There is no document of yours yet, so there is no LaTeX to check.'
+	},
 	help: {
 		review: {
 			title: 'What the Your Changes page shows',
