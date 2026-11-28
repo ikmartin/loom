@@ -18,7 +18,7 @@ def q(tmp_path: Path) -> Path:
     save_author("Tester")
     root = opened(demo(tmp_path))  # the paper open to agents, so the look watches it
     (root / "notes").mkdir()
-    (root / "notes" / "a.md").write_text("# A\n\nfirst\n", encoding="utf-8")
+    (root / "notes" / "a.tex").write_text("# A\n\nfirst\n", encoding="utf-8")
     (root / "notes" / "fig.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00")
     return root
 
@@ -28,22 +28,45 @@ def changes(q: Path) -> dict[str, str]:
     return {c["path"]: c["new"] for c in json_of("changes", "--json", cwd=q)["changes"] if c["kind"] == "edit"}
 
 
-def test_a_look_holds_every_open_text_file_and_nothing_else(q: Path) -> None:
-    """Shown text files only, LaTeX included; an image, a hidden file and loom's own records are left out, and each text is kept by its hash."""
+def test_a_look_holds_every_open_latex_file_and_nothing_else(q: Path) -> None:
+    """Shown LaTeX files only; an image, a hidden file and loom's own records are left out, and each text is kept by its hash."""
     from loom.looks import read_look
     from loom.records.snapshots import read_raw
     from loom.scan.quilt import load_quilt
 
-    (q / ".hidden.md").write_text("no", encoding="utf-8")
+    (q / ".hidden.tex").write_text("no", encoding="utf-8")
     assert json_of("changes", "--json", cwd=q)["look"] is None
     assert ok("changes", "--keep-all", cwd=q).stdout.startswith("took your first look")
     look = read_look(q, "Tester")
     assert look is not None and look.who == "Tester"
-    assert "notes/a.md" in look.files and "drafting/main.tex" in look.files
+    assert "notes/a.tex" in look.files and "drafting/main.tex" in look.files
     assert not [p for p in look.files if p.startswith(".") or p.endswith(".png")]
-    assert read_raw(q, look.files["notes/a.md"], load_quilt(q).history_dir) == "# A\n\nfirst\n"
+    assert read_raw(q, look.files["notes/a.tex"], load_quilt(q).history_dir) == "# A\n\nfirst\n"
     assert (q / ".loom/records/looked/tester.json").is_file()
     assert changes(q) == {}
+
+
+def test_only_latex_source_is_watched_so_a_change_to_markdown_notes_or_a_bibliography_is_never_listed(q: Path) -> None:
+    """Proposed edits watch LaTeX documents only: a change made where agents may edit to Markdown, the research state, a bibliography or plain text is never listed, and one to a `.tex` file still is."""
+    from loom.looks import read_look
+
+    (q / "notes/a.md").write_text("# A\n\nfirst\n", encoding="utf-8")
+    (q / "notes/refs.bib").write_text("@book{a, title={A}}\n", encoding="utf-8")
+    (q / "notes/plain.txt").write_text("plain\n", encoding="utf-8")
+    (q / "notes/b.tex").write_text("first\n", encoding="utf-8")
+    ok("changes", "--keep-all", cwd=q)
+    look = read_look(q, "Tester")
+    assert look is not None and sorted(p for p in look.files if p.startswith("notes/")) == [
+        "notes/a.tex",
+        "notes/b.tex",
+    ]
+    (q / "notes/a.md").write_text("# A\n\nmy own answer\n", encoding="utf-8")
+    (q / "notes/new.md").write_text("a new note\n", encoding="utf-8")
+    (q / "notes/refs.bib").write_text("@book{a, title={B}}\n", encoding="utf-8")
+    (q / "notes/plain.txt").write_text("changed\n", encoding="utf-8")
+    (q / "research-state.md").write_text("# State\n\nchanged\n", encoding="utf-8")
+    (q / "notes/b.tex").write_text("second\n", encoding="utf-8")
+    assert changes(q) == {"notes/b.tex": "second"}
 
 
 def test_an_svg_is_drawn_as_a_picture_and_never_listed(q: Path) -> None:
@@ -59,26 +82,27 @@ def test_an_svg_is_drawn_as_a_picture_and_never_listed(q: Path) -> None:
     (q / "notes" / "fig.svg").write_text(svg.replace('r="1"', 'r="2"'), encoding="utf-8")
     (q / "notes" / "new.svg").write_text(svg, encoding="utf-8")
     (q / "notes" / "gone.svg").unlink()
-    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
-    assert changes(q) == {"notes/a.md": "second"}
+    (q / "notes/a.tex").write_text("# A\n\nsecond\n", encoding="utf-8")
+    assert changes(q) == {"notes/a.tex": "second"}
     # a look that holds a picture, as one taken by an earlier loom does, lists no change to it either
-    _write(q, Look(look.who, look.when, {**look.files, "notes/gone.svg": look.files["notes/a.md"]}, deny=look.deny))
-    assert changes(q) == {"notes/a.md": "second"}
+    _write(q, Look(look.who, look.when, {**look.files, "notes/gone.svg": look.files["notes/a.tex"]}, deny=look.deny))
+    assert changes(q) == {"notes/a.tex": "second"}
 
 
 def test_changes_since_the_look_are_in_changed_new_and_gone_files_each_with_its_patch(q: Path) -> None:
+    (q / "notes/gone.tex").write_text("to go\n", encoding="utf-8")
     ok("changes", "--keep-all", cwd=q)
-    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
-    (q / "notes/b.md").write_text("new\n", encoding="utf-8")
-    (q / "README.md").unlink()
-    assert changes(q) == {"notes/a.md": "second", "notes/b.md": "new", "README.md": ""}
+    (q / "notes/a.tex").write_text("# A\n\nsecond\n", encoding="utf-8")
+    (q / "notes/b.tex").write_text("new\n", encoding="utf-8")
+    (q / "notes/gone.tex").unlink()
+    assert changes(q) == {"notes/a.tex": "second", "notes/b.tex": "new", "notes/gone.tex": ""}
     run("build", cwd=q)
     m = json.loads((q / ".loom/cache/site/manifest.json").read_text())
     assert m["changes_since"]["who"] == "Tester"
-    row = next(c for c in m["changes"] if c["path"] == "notes/a.md")
+    row = next(c for c in m["changes"] if c["path"] == "notes/a.tex")
     assert (row["old"], row["new"], row["documents"]) == ("first", "second", [])
     patch = (q / ".loom/cache/site" / row["diff"]).read_text()
-    assert patch.startswith("--- a/notes/a.md") and "-first" in patch and "+second" in patch
+    assert patch.startswith("--- a/notes/a.tex") and "-first" in patch and "+second" in patch
 
 
 def test_keep_takes_a_change_into_the_look_and_discard_puts_its_old_words_back(q: Path) -> None:
@@ -87,32 +111,33 @@ def test_keep_takes_a_change_into_the_look_and_discard_puts_its_old_words_back(q
     from loom.records.snapshots import read_raw
     from loom.scan.quilt import load_quilt
 
+    (q / "notes/gone.tex").write_text("to go\n", encoding="utf-8")
     ok("changes", "--keep-all", cwd=q)
-    (q / "notes/a.md").write_text("# A\n\nan agent's edit\n", encoding="utf-8")
-    (q / "README.md").unlink()
-    (q / "notes/b.md").write_text("new\n", encoding="utf-8")
-    ok("changes", "--discard", "notes/a.md", cwd=q)
-    assert (q / "notes/a.md").read_text() == "# A\n\nfirst\n"
-    ok("changes", "--discard", "README.md", cwd=q)
-    assert (q / "README.md").is_file()
-    ok("changes", "--discard", "notes/b.md", cwd=q)
-    assert not (q / "notes/b.md").exists() and changes(q) == {}
+    (q / "notes/a.tex").write_text("# A\n\nan agent's edit\n", encoding="utf-8")
+    (q / "notes/gone.tex").unlink()
+    (q / "notes/b.tex").write_text("new\n", encoding="utf-8")
+    ok("changes", "--discard", "notes/a.tex", cwd=q)
+    assert (q / "notes/a.tex").read_text() == "# A\n\nfirst\n"
+    ok("changes", "--discard", "notes/gone.tex", cwd=q)
+    assert (q / "notes/gone.tex").is_file()
+    ok("changes", "--discard", "notes/b.tex", cwd=q)
+    assert not (q / "notes/b.tex").exists() and changes(q) == {}
     quilt = load_quilt(q)
     undone = [e for e in load_history(quilt.history_dir).entries if e.action == "undo"]
-    assert [e.data["path"] for e in undone] == ["notes/a.md", "README.md", "notes/b.md"]
+    assert [e.data["path"] for e in undone] == ["notes/a.tex", "notes/gone.tex", "notes/b.tex"]
     assert read_raw(q, undone[0].data["from"], quilt.history_dir) == "# A\n\nan agent's edit\n"
     assert undone[2].data["to"] is None and read_raw(q, undone[2].data["from"], quilt.history_dir) == "new\n"
-    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
-    ok("changes", "--keep", "notes/a.md", cwd=q)
-    assert changes(q) == {} and (q / "notes/a.md").read_text() == "# A\n\nsecond\n"
+    (q / "notes/a.tex").write_text("# A\n\nsecond\n", encoding="utf-8")
+    ok("changes", "--keep", "notes/a.tex", cwd=q)
+    assert changes(q) == {} and (q / "notes/a.tex").read_text() == "# A\n\nsecond\n"
 
 
 def test_keeping_and_discarding_are_the_authors(q: Path) -> None:
     ok("changes", "--keep-all", cwd=q)
-    (q / "notes/a.md").write_text("changed\n", encoding="utf-8")
-    for args in (("--keep-all",), ("--discard", "notes/a.md")):
+    (q / "notes/a.tex").write_text("changed\n", encoding="utf-8")
+    for args in (("--keep-all",), ("--discard", "notes/a.tex")):
         refused("changes", *args, cwd=q, code=2, match="author's", env={"AI_AGENT": "1"})
-    assert (q / "notes/a.md").read_text() == "changed\n"
+    assert (q / "notes/a.tex").read_text() == "changed\n"
 
 
 def test_keeping_one_change_leaves_the_time_of_the_look(q: Path) -> None:
@@ -121,11 +146,11 @@ def test_keeping_one_change_leaves_the_time_of_the_look(q: Path) -> None:
 
     ok("changes", "--keep-all", cwd=q)
     when = read_look(q, "Tester").when  # type: ignore[union-attr]
-    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
-    (q / "notes/b.md").write_text("new\n", encoding="utf-8")
-    ok("changes", "--keep", "notes/a.md", cwd=q)
+    (q / "notes/a.tex").write_text("# A\n\nsecond\n", encoding="utf-8")
+    (q / "notes/b.tex").write_text("new\n", encoding="utf-8")
+    ok("changes", "--keep", "notes/a.tex", cwd=q)
     assert read_look(q, "Tester").when == when  # type: ignore[union-attr]
-    assert changes(q) == {"notes/b.md": "new"}
+    assert changes(q) == {"notes/b.tex": "new"}
 
 
 NODE = "drafting/nodes/dm-0001.tex"
@@ -142,12 +167,12 @@ def test_accepting_keeps_only_the_changes_that_touch_nothing_else(q: Path) -> No
     text = node.read_text()
     inside = text[: text.index("\\end{")].rstrip().rsplit("\n", 1)[-1]
     node.write_text(text.replace(inside, inside + " Indeed.", 1), encoding="utf-8")
-    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
+    (q / "notes/a.tex").write_text("# A\n\nsecond\n", encoding="utf-8")
     result = scan(load_quilt(q))
     key = next(c["key"] for c in json_of("changes", "--json", cwd=q)["changes"] if c["path"] == NODE)
     assert keep_accepted(result, "Tester", ["some-other-key"]) == []
     assert keep_accepted(result, "Tester", [key]) == [NODE]
-    assert changes(q) == {"notes/a.md": "second"}
+    assert changes(q) == {"notes/a.tex": "second"}
 
 
 def test_serve_takes_a_first_look_when_there_is_none_and_leaves_one_that_stands(q: Path) -> None:
@@ -159,10 +184,10 @@ def test_serve_takes_a_first_look_when_there_is_none_and_leaves_one_that_stands(
     ServeSession(load_quilt(q), q, port=0, compile_masters=False).first_look()
     first = read_look(q, "Tester")
     assert first is not None
-    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
+    (q / "notes/a.tex").write_text("# A\n\nsecond\n", encoding="utf-8")
     stamp = look_path(q, "Tester").stat().st_mtime_ns
     ServeSession(load_quilt(q), q, port=0, compile_masters=False).first_look()
-    assert look_path(q, "Tester").stat().st_mtime_ns == stamp and changes(q) == {"notes/a.md": "second"}
+    assert look_path(q, "Tester").stat().st_mtime_ns == stamp and changes(q) == {"notes/a.tex": "second"}
 
 
 def test_latexs_auxiliary_files_are_in_no_look_and_an_old_look_holding_one_reports_nothing(q: Path) -> None:
@@ -177,7 +202,7 @@ def test_latexs_auxiliary_files_are_in_no_look_and_an_old_look_holding_one_repor
         p for p in look.files if p.startswith("drafting/main.") and p != "drafting/main.tex"
     ]
     (q / "drafting/main.log").write_text("written again\n", encoding="utf-8")
-    look.files["drafting/main.aux"] = look.files["notes/a.md"]
+    look.files["drafting/main.aux"] = look.files["notes/a.tex"]
     _write(q, look)
     (q / "drafting/main.aux").unlink()
     assert changes(q) == {}
@@ -198,13 +223,14 @@ def test_a_save_after_the_scan_is_the_next_scans_change(q: Path) -> None:
     edit("one or two points", "one or two points, never three")
     result = scan(load_quilt(q))
     edit("never three", "never more")
-    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
+    (q / "notes/a.tex").write_text("# A\n\nsecond\n", encoding="utf-8")
     edits = {c.path: c for c in in_place(result, "Tester")}
     mine = edits[path]
     assert mine.new == "never three," and result.files[path].text[mine.at[0] : mine.at[1]] == "never three,"
     assert "+Every orbit of a widget has one or two points, never three," in patch_of(result, mine, "Tester")
-    assert edits["notes/a.md"].new == "second"
-    assert {c.path: c.new for c in in_place(scan(load_quilt(q)), "Tester")}[path] == "never more,"
+    assert "notes/a.tex" not in edits
+    later = {c.path: c.new for c in in_place(scan(load_quilt(q)), "Tester")}
+    assert later[path] == "never more," and later["notes/a.tex"] == "second"
 
 
 def test_a_new_name_takes_the_newest_look_and_nothing_waiting_is_lost(q: Path) -> None:
@@ -213,15 +239,15 @@ def test_a_new_name_takes_the_newest_look_and_nothing_waiting_is_lost(q: Path) -
     from loom.scan.quilt import save_author
 
     ok("changes", "--keep-all", cwd=q)
-    (q / "notes/a.md").write_text("# A\n\nan agent's edit\n", encoding="utf-8")
+    (q / "notes/a.tex").write_text("# A\n\nan agent's edit\n", encoding="utf-8")
     save_author("Isaac Martin")
     listed = json_of("changes", "--json", cwd=q)
-    assert listed["look"]["carried"] == "Tester" and changes(q) == {"notes/a.md": "an agent's edit"}
+    assert listed["look"]["carried"] == "Tester" and changes(q) == {"notes/a.tex": "an agent's edit"}
     assert "carried over from Tester's" in ok("changes", cwd=q).stdout
     look = read_look(q, "Isaac Martin")
     assert look is not None and look.carried == "Tester"
     save_author("Tester")
-    assert changes(q) == {"notes/a.md": "an agent's edit"}
+    assert changes(q) == {"notes/a.tex": "an agent's edit"}
 
 
 def test_a_new_quilt_keeps_the_look_with_no_setting(tmp_path: Path) -> None:
@@ -233,9 +259,9 @@ def test_a_new_quilt_keeps_the_look_with_no_setting(tmp_path: Path) -> None:
     ok("init", str(q), "--prefix", "fr", "--ai", "none", "--yes", cwd=tmp_path)
     assert "[review]" not in (q / "config.toml").read_text(encoding="utf-8")
     ok("changes", "--keep-all", cwd=q)
-    (q / "README.md").write_text("an edit in place\n", encoding="utf-8")
+    (q / "draft.tex").write_text("an edit in place\n", encoding="utf-8")
     listed = json_of("changes", "--json", cwd=q)
-    assert listed["look"] is not None and [c["path"] for c in listed["changes"]] == ["README.md"]
+    assert listed["look"] is not None and [c["path"] for c in listed["changes"]] == ["draft.tex"]
 
 
 def test_a_track_edits_left_in_a_config_says_the_look_is_kept_now_at_its_line(q: Path) -> None:
@@ -297,19 +323,19 @@ def test_an_agent_s_edit_waiting_in_a_file_stays_listed_when_the_person_s_act_wr
     from loom import writes
     from loom.scan.quilt import load_quilt
 
-    note = person / "notes/a.md"
+    note = person / "notes/a.tex"
     note.write_text("# A\n\nfirst\n\nan agent's line\n", encoding="utf-8")
     held = note.read_bytes()
     writes.put(
         person,
         load_quilt(person).history_dir,
-        "notes/a.md",
+        "notes/a.tex",
         held.replace(b"# A", b"# Renamed"),
         kind="page",
         expect=held,
     )
     rows = [c for c in json_of("changes", "--json", cwd=person)["changes"] if c["kind"] == "edit"]
-    assert [c["path"] for c in rows] == ["notes/a.md"] and "an agent's line" in rows[0]["new"]
+    assert [c["path"] for c in rows] == ["notes/a.tex"] and "an agent's line" in rows[0]["new"]
     assert not any("Renamed" in c["new"] for c in rows)
 
 
@@ -328,9 +354,9 @@ def test_an_agent_s_edit_before_the_first_serve_is_listed(tmp_path: Path, monkey
     save_author("Tester")
     q = tmp_path / "fresh"
     ok("init", str(q), "--prefix", "fr", "--ai", "none", "--yes", cwd=tmp_path)
-    (q / "README.md").write_text("an agent's edit before any serve\n", encoding="utf-8")
+    (q / "draft.tex").write_text("an agent's edit before any serve\n", encoding="utf-8")
     ServeSession(load_quilt(q), q, port=0, compile_masters=False).first_look()
-    assert edits(q) == ["README.md"]
+    assert edits(q) == ["draft.tex"]
 
 
 def test_a_copied_quilt_s_server_file_does_not_start_loom_on_the_original(tmp_path: Path) -> None:
@@ -360,7 +386,7 @@ def test_keep_all_from_the_shell_says_what_its_act_settled(q: Path, monkeypatch:
             w.replace("drafting/fig.bin", b"\xff\x00binary")
             w.replace("drafting/notes.md", b"# Notes\n")
     restore()
-    (q / "notes/a.md").write_text("# A\n\nan agent's edit\n", encoding="utf-8")
+    (q / "notes/a.tex").write_text("# A\n\nan agent's edit\n", encoding="utf-8")
     said = ok("changes", "--keep-all", cwd=q).stderr
     assert said.count("loom: undid pdf-save:") == 1, said
     assert not writes.read_journal(q).begun and not (q / "drafting/fig.bin").exists()
@@ -445,20 +471,20 @@ def test_the_deny_list_decides_and_a_waiting_change_outlives_closing_its_place(p
     from loom.config_edit import set_values
     from loom.scan.quilt import load_quilt
 
-    note = person / "notes/a.md"
+    note = person / "notes/a.tex"
     note.write_text("# A\n\nfirst\n\nan agent's line\n", encoding="utf-8")
-    assert edits(person) == ["notes/a.md"]
+    assert edits(person) == ["notes/a.tex"]
     set_values(load_quilt(person), {"agents.deny": ["notes/"]})
-    assert denied_by(load_quilt(person).config, "notes/a.md") == "notes/"
+    assert denied_by(load_quilt(person).config, "notes/a.tex") == "notes/"
     assert edits(person) == []
-    made = person / "notes/b.md"
+    made = person / "notes/b.tex"
     made.write_text("the person's own note\n", encoding="utf-8")
     assert edits(person) == []
     set_values(load_quilt(person), {"agents.deny": []})
     rows = [c for c in json_of("changes", "--json", cwd=person)["changes"] if c["kind"] == "edit"]
-    assert [c["path"] for c in rows] == ["notes/a.md"] and "an agent's line" in rows[0]["new"]
+    assert [c["path"] for c in rows] == ["notes/a.tex"] and "an agent's line" in rows[0]["new"]
     made.write_text("the person's own note\n\nan agent's word\n", encoding="utf-8")
-    assert edits(person) == ["notes/a.md", "notes/b.md"]
+    assert edits(person) == ["notes/a.tex", "notes/b.tex"]
 
 
 def test_a_write_the_viewer_asks_for_is_the_person_s_whatever_shell_started_the_server(
@@ -516,15 +542,15 @@ def test_an_agent_s_new_file_waiting_in_a_place_closed_and_opened_again_is_liste
     """A place closed to agents keeps what the look held of it, and holds a file made there since the look as absent at it, so when the place is opened again an agent's change, removal and new file are each listed as before; nothing an agent made is taken in without having been listed (R2-5), and the new file is discarded as one the look did not hold (R2-12)."""
     import re
 
-    (person / "notes/gone.md").write_text("to be removed\n", encoding="utf-8")
+    (person / "notes/gone.tex").write_text("to be removed\n", encoding="utf-8")
     from loom.looks import take
     from loom.scan.quilt import load_quilt
 
     take(load_quilt(person), "Tester")
-    (person / "notes/a.md").write_text("# A\n\nfirst, and an agent's word\n", encoding="utf-8")
-    (person / "notes/gone.md").unlink()
-    (person / "notes/new.md").write_text("an agent's new note\n", encoding="utf-8")
-    waiting = ["notes/a.md", "notes/gone.md", "notes/new.md"]
+    (person / "notes/a.tex").write_text("# A\n\nfirst, and an agent's word\n", encoding="utf-8")
+    (person / "notes/gone.tex").unlink()
+    (person / "notes/new.tex").write_text("an agent's new note\n", encoding="utf-8")
+    waiting = ["notes/a.tex", "notes/gone.tex", "notes/new.tex"]
     assert edits(person) == waiting
 
     def set_deny(*entries: str) -> None:
@@ -541,8 +567,8 @@ def test_an_agent_s_new_file_waiting_in_a_place_closed_and_opened_again_is_liste
     set_deny()
     assert edits(person) == waiting
     # the new file, held as absent at the look, is discarded as a file the look did not hold: it goes, and so does its row
-    ok("changes", "--discard", "notes/new.md", cwd=person)
-    assert not (person / "notes/new.md").exists() and edits(person) == ["notes/a.md", "notes/gone.md"]
+    ok("changes", "--discard", "notes/new.tex", cwd=person)
+    assert not (person / "notes/new.tex").exists() and edits(person) == ["notes/a.tex", "notes/gone.tex"]
 
 
 def test_an_act_signed_as_an_agent_s_is_refused_a_denied_place_in_a_shell_with_no_marker(tmp_path: Path) -> None:
@@ -564,9 +590,9 @@ def test_a_file_renamed_while_its_place_is_closed_is_found_by_its_text_when_it_o
     """A place closed to agents keeps the text each of its files held as it closed, so a file renamed meanwhile is found by it when the place opens: an agent's new file is listed as new at its new path, and an agent's change waiting in a file the look held is listed there, never taken in as the file stands (R2-14)."""
     import re
 
-    (person / "notes/a.md").write_text("# A\n\nfirst, and an agent's word\n", encoding="utf-8")
-    (person / "notes/new.md").write_text("an agent's new note\n", encoding="utf-8")
-    assert edits(person) == ["notes/a.md", "notes/new.md"]
+    (person / "notes/a.tex").write_text("# A\n\nfirst, and an agent's word\n", encoding="utf-8")
+    (person / "notes/new.tex").write_text("an agent's new note\n", encoding="utf-8")
+    assert edits(person) == ["notes/a.tex", "notes/new.tex"]
 
     def set_deny(*entries: str) -> None:
         if how == "in Settings":
@@ -578,27 +604,27 @@ def test_a_file_renamed_while_its_place_is_closed_is_found_by_its_text_when_it_o
 
     set_deny("notes/")
     assert edits(person) == []  # read as the server reads it at once, so the place is seen closed before the renames
-    (person / "notes/a.md").rename(person / "notes/b.md")
-    (person / "notes/new.md").rename(person / "notes/moved.md")
+    (person / "notes/a.tex").rename(person / "notes/b.tex")
+    (person / "notes/new.tex").rename(person / "notes/moved.tex")
     set_deny()
     rows = {c["path"]: c for c in json_of("changes", "--json", cwd=person)["changes"] if c["kind"] == "edit"}
-    assert sorted(rows) == ["notes/b.md", "notes/moved.md"], sorted(rows)
+    assert sorted(rows) == ["notes/b.tex", "notes/moved.tex"], sorted(rows)
     # a change against the text the look held, not the whole file as new
-    assert rows["notes/b.md"]["old"].strip() == "first" and "an agent's word" in rows["notes/b.md"]["new"]
-    assert rows["notes/moved.md"]["new"].strip() == "an agent's new note"
+    assert rows["notes/b.tex"]["old"].strip() == "first" and "an agent's word" in rows["notes/b.tex"]["new"]
+    assert rows["notes/moved.tex"]["new"].strip() == "an agent's new note"
 
 
 def test_two_files_with_one_text_renamed_while_their_place_is_closed_are_both_found(person: Path) -> None:
     """Each gone file of a closed place is kept by its text, files that share a text each their own, so two of an agent's new files with the same text, both renamed while the place is closed, are both listed as new when it opens; nothing an agent made is taken in without having been listed (R2-17)."""
-    for name in ("one.md", "two.md"):
+    for name in ("one.tex", "two.tex"):
         (person / f"notes/{name}").write_text("a stub\n", encoding="utf-8")
-    assert edits(person) == ["notes/one.md", "notes/two.md"]
+    assert edits(person) == ["notes/one.tex", "notes/two.tex"]
     denying(person, "notes/")
     assert edits(person) == []
-    (person / "notes/one.md").rename(person / "notes/first.md")
-    (person / "notes/two.md").rename(person / "notes/second.md")
+    (person / "notes/one.tex").rename(person / "notes/first.tex")
+    (person / "notes/two.tex").rename(person / "notes/second.tex")
     denying(person)
-    assert edits(person) == ["notes/first.md", "notes/second.md"]
+    assert edits(person) == ["notes/first.tex", "notes/second.tex"]
 
 
 def test_a_lake_project_is_the_agents_own_and_nothing_in_it_is_ever_listed(person: Path) -> None:

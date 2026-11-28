@@ -1,6 +1,6 @@
 """A person's look at the places agents may edit: each file's text as they last saw it, and which files changed since.
 
-A look is `.loom/records/looked/<reviewer>.json`, `{who, when, files: {path: hash}, deny}`, each file's text stored exactly in the history's `texts/` (`write_raw`). It watches every open text file agents may edit (`watching`): one the viewer shows that reads as UTF-8 and is at most 1 MB, LaTeX included and LaTeX's auxiliary files and SVG pictures left out (`files.LATEX_AUX`), and that no `[agents] deny` entry or protection keeps from agents (`agents.denied_by`). A place agents are denied is the person's own, so a change there is never listed and not tracked; loom cannot tell who saved a file, and where agents may edit, a change is listed whoever made it. `deny` is the list the look was last brought to: a file opened to agents since goes in as it stands, and one closed to them keeps what the look held, so a change waiting there is listed again if it is opened (`read_look`). It is personal, by the reviewer name Review resolves, and taken when the person acts or when `loom serve` starts and finds none; every act the person makes through loom puts what it wrote into it (`writes._follow_look`, and Keep, the undo, Discard and a tick themselves), so it records what the person did, never a save (P13). What changed since it is cut into changes by words, and kept or discarded one by one, in `pending.py`.
+A look is `.loom/records/looked/<reviewer>.json`, `{who, when, files: {path: hash}, deny}`, each file's text stored exactly in the history's `texts/` (`write_raw`). It watches the LaTeX documents agents may edit (`watching`): each open `.tex` file, one the viewer shows that reads as UTF-8 and is at most 1 MB, that no `[agents] deny` entry or protection keeps from agents (`agents.denied_by`); Markdown, notes, bibliographies, plain text and every other file are never watched, so a change to one is never listed and never waits to be kept. A place agents are denied is the person's own, so a change there is never listed and not tracked; loom cannot tell who saved a file, and where agents may edit, a change to a LaTeX file is listed whoever made it. `deny` is the list the look was last brought to: a file opened to agents since goes in as it stands, and one closed to them keeps what the look held, so a change waiting there is listed again if it is opened (`read_look`). It is personal, by the reviewer name Review resolves, and taken when the person acts or when `loom serve` starts and finds none; every act the person makes through loom puts what it wrote into it (`writes._follow_look`, and Keep, the undo, Discard and a tick themselves), so it records what the person did, never a save (P13). What changed since it is cut into changes by words, and kept or discarded one by one, in `pending.py`.
 """
 
 from __future__ import annotations
@@ -87,26 +87,20 @@ def _load(path: Path) -> Look | None:
 
 
 def watching(config: QuiltConfig, root: Path) -> Callable[[str], bool]:
-    """Whether the look watches quilt-relative `rel`: a place agents may edit, by the predicate the door's refusal and the agents' permission files read (`agents.denied_by`), outside a Lake project (`scan.source.lake_project`), and not a file the viewer shows as an image, and the research state, which agents keep through `loom write state` though they may not edit it directly.
+    """Whether the look watches quilt-relative `rel`: a LaTeX source file (`.tex`) in a place agents may edit, by the predicate the door's refusal and the agents' permission files read (`agents.denied_by`), outside a Lake project (`scan.source.lake_project`).
 
-    A place agents are denied is the person's own and a Lake project the agents' own, and a change in either is never listed; an SVG is text but is drawn as a picture, so a change to it would be drawn as markup nobody reads. Each folder's Lake test is made once per predicate.
+    Only LaTeX is watched, since keeping a change there is a reading of mathematics; a change to Markdown, notes, a bibliography or any other file is never listed. A place agents are denied is the person's own and a Lake project the agents' own, and a change in either is never listed either. Each folder's Lake test is made once per predicate.
     """
-    from pathlib import PurePosixPath
-
     from loom.agents import denied_by
-    from loom.files import SUFFIX_KINDS
     from loom.scan.source import lake_project
 
-    state = config.research_state
     known: dict[str, bool] = {}
-    return lambda rel: (
-        rel == state
-        or (
-            SUFFIX_KINDS.get(PurePosixPath(rel).suffix.lower()) != "image"
-            and denied_by(config, rel) is None
-            and lake_project(root, rel, known) is None
-        )
-    )
+    return lambda rel: is_latex(rel) and denied_by(config, rel) is None and lake_project(root, rel, known) is None
+
+
+def is_latex(rel: str) -> bool:
+    """Whether quilt-relative `rel` is a LaTeX source file, the only kind the look watches (`watching`)."""
+    return rel.lower().endswith(".tex")
 
 
 def unwatched(config: QuiltConfig) -> list[str]:
@@ -229,7 +223,7 @@ def take(quilt: Quilt, who: str) -> Look:
     closed: dict[str, str] = {}
     if old is not None:
         watched = watching(quilt.config, quilt.root)
-        files |= {rel: h for rel, h in old.files.items() if not watched(rel)}
+        files |= {rel: h for rel, h in old.files.items() if is_latex(rel) and not watched(rel)}
         closed = {rel: h for rel, h in old.closed.items() if rel in files and not watched(rel)}
     look = Look(who, stamp(), files, deny=list(quilt.config.agents_deny), closed=closed)
     _write(quilt.root, look)
