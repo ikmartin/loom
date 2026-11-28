@@ -2,7 +2,7 @@
 import { dataUrl } from '$lib/paths';
 import { loadManifest, type Loaded } from './loader';
 import { untrack } from 'svelte';
-import type { AdoptionReview, Diagnostic, Macro, Manifest } from './types';
+import type { AdoptionReview, Diagnostic, Macro, Manifest, PendingChange } from './types';
 
 /** A plain manifest as JSON with each adoption's choices left out, to tell a manifest that changed only in them; the choices are taken off and put back rather than copied, since a copy of every contribution costs more than the writing. */
 function contentOf(m: Manifest): string {
@@ -50,6 +50,45 @@ class ManifestStore {
 			return { ...c, choices };
 		});
 		if (changed) this.manifest = { ...m, contributions };
+	}
+
+	/** Pending changes an act made pending again before a publication lists them (an undone Keep), put into every manifest held that does not list them, until `release`, or with no `until`, until a manifest that lists them or a later one is loaded. */
+	#held: { row: PendingChange; until: boolean }[] = [];
+
+	/**
+	 * Show `rows` in the manifest's pending changes at once, before the publication that lists them lands.
+	 *
+	 * Parameters
+	 * ----------
+	 * rows : PendingChange[]
+	 *     The rows as the manifest last listed them; one the manifest lists already is left out.
+	 * until : Promise, optional
+	 *     Resolves once the manifest held carries the act, when the rows go; without it, they go at the next manifest loaded.
+	 */
+	hold(rows: PendingChange[], until?: Promise<unknown>): void {
+		if (!rows.length) return;
+		const ids = new Set(rows.map((r) => r.id));
+		this.#held = [...this.#held.filter((h) => !ids.has(h.row.id)), ...rows.map((row) => ({ row, until: !!until }))];
+		if (this.manifest) this.manifest = this.#withHeld(this.manifest);
+		const go = () => this.#release(ids);
+		until?.then(go, go);
+	}
+
+	/** `m` with the held rows it does not list added at the end; a row it lists is no longer held. */
+	#withHeld(m: Manifest): Manifest {
+		if (!this.#held.length) return m;
+		const listed = new Set((m.changes ?? []).map((c) => c?.id));
+		this.#held = this.#held.filter((h) => !listed.has(h.row.id));
+		return this.#held.length ? { ...m, changes: [...(m.changes ?? []), ...this.#held.map((h) => h.row)] } : m;
+	}
+
+	/** Let the held rows `ids` go, taking out of the manifest held those it shows only because they were held. */
+	#release(ids: Set<string>): void {
+		const gone = new Set(this.#held.filter((h) => ids.has(h.row.id)).map((h) => h.row));
+		if (!gone.size) return;
+		this.#held = this.#held.filter((h) => !gone.has(h.row));
+		const m = this.manifest;
+		if (m?.changes?.some((c) => gone.has(c))) this.manifest = { ...m, changes: m.changes.filter((c) => !gone.has(c)) };
 	}
 
 	#running: Promise<void> | null = null;
@@ -100,7 +139,11 @@ class ManifestStore {
 				const content = contentOf(loaded.manifest);
 				if (this.manifest && content === this.#content) {
 					for (const c of loaded.manifest.contributions ?? []) if (c.kind === 'adopt') this.setAdoption(c.copy, c.fingerprint, c.choices);
-				} else this.manifest = loaded.manifest;
+				} else {
+					// a row held with nothing to wait on goes with the first manifest loaded after it
+					this.#held = this.#held.filter((h) => h.until);
+					this.manifest = this.#withHeld(loaded.manifest);
+				}
 				this.#content = content;
 				this.hash = loaded.hash;
 				this.problem = null;

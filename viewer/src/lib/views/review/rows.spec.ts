@@ -39,7 +39,7 @@ describe("round six's rows", () => {
 		expect(quiet(okafor)).toBe('PDF only · main.tex rests on both');
 		const smith = r.rows.find((x) => x.kind === 'cited' && x.citation === undefined && x.short === 'Smith 2024')!;
 		expect(quiet(smith)).toBe('not found in its TeX source · bounds.tex rests on it');
-		expect(line(byRow('cited:m-'), n)).toBe('main.tex · the proof of Theorem 3.4 cites Okafor 2022 without naming a result');
+		expect(line(byRow('cited:m-'), n)).toBe('main.tex · the proof of Theorem 3.4 cites Okafor 2022: which result?');
 		expect(quiet(byRow('check:ev-'))).toBe('proposed by Claude Code');
 		expect(line(byRow('check:ev-'), n)).toBe('Arden 2024 · a correction to Definition 1.2');
 		expect(line(byRow('attested-changed:def'), n)).toBe('main.tex · Definition 3.7');

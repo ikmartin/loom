@@ -62,3 +62,23 @@ export function compareWith(pane: number, item: Item, id: string): void {
 	if (mine >= 0) workspace.focusOn(mine);
 	workspace.compare();
 }
+
+/**
+ * Show another version of the document chosen from its history: an earlier one beside the text, compared with it, so the text stays where it was; the live draft, from one of its versions, in that version's place. Where the window shows one pane at a time, no compare can start, and the version takes the tab's place.
+ *
+ * Parameters
+ * ----------
+ * pane : number
+ *     The pane the document stands in.
+ * item : Item
+ *     The version shown now.
+ * id : str
+ *     The version chosen.
+ * live : str
+ *     The live draft's path.
+ */
+export function showVersion(pane: number, item: Item, id: string, live: string): void {
+	if (id === item.id || comparingWith(item, id)) return;
+	if (id === live || workspace.narrow) return turnTo(pane, item, id);
+	compareWith(pane, item, id);
+}

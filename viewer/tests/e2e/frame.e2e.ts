@@ -65,7 +65,7 @@ test('a view name shows its hover card after a moment, is described by it, and e
 	}
 });
 
-test('How loom works opens from the foot in every view, says the margin, the marks, versions and compare, and closes on a click elsewhere or on Escape', async ({ page }) => {
+test('How loom works opens from the foot in every view, says the margin, the marks, versions, compare and side by side, and closes on a click elsewhere or on Escape', async ({ page }) => {
 	await open(page, 1440);
 	for (const v of ['docs', 'library', 'web', 'review']) {
 		await page.getByTestId(`primary-${v}`).click();
@@ -79,7 +79,8 @@ test('How loom works opens from the foot in every view, says the margin, the mar
 	const panel = page.getByTestId('legend');
 	await expect(panel.getByTestId('legend-margin')).toContainText('a proposed edit, to keep or discard');
 	await expect(panel.getByTestId('legend-versions')).toContainText('Saving a file makes none.');
-	await expect(panel).toContainText('choose compare beside a version');
+	await expect(panel).toContainText("open history on the document's toolbar and choose a version: it opens beside the text");
+	await expect(panel.getByTestId('legend-beside')).toContainText('point at a file under Files and choose ⇄');
 	// the whole panel is on screen, at the foot of a 900 px window
 	const box = (await panel.boundingBox())!;
 	expect(box.y).toBeGreaterThanOrEqual(0);

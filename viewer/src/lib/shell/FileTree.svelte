@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Docs as the project's tree (plan 0.22.7): the person's directories and the files the viewer shows, each directory folding as an explorer's does. A document opens as itself, with the agent's copies of it beneath its row; the tree carries no compiled PDF and no compile state (its PDF opens from the toolbar's `view PDF`), and the document's row is current while its PDF is read; the research state opens as the page it is, where it lives; an included `.tex` file opens the document that reads it, at its place (V7); every other file opens as a file. Which directories are open is the reader's alone, kept per quilt in this browser: the ones holding a live document start open, the rest folded, and only the reader's click turns one, so a file opened from a link or a search into a folded directory leaves it folded, its name in bold, saying what it holds.
+	// Docs as the project's tree (plan 0.22.7): the person's directories and the files the viewer shows, each directory folding as an explorer's does. A document opens as itself, with the agent's copies of it beneath its row; the tree carries no compiled PDF and no compile state (its PDF opens from the toolbar's `view PDF`), and the document's row is current while its PDF is read; the research state opens as the page it is, where it lives; an included `.tex` file opens the document that reads it, at its place (V7); every other file opens as a file. A click opens a row's file in the pane being read; its ⇄, shown with the pointer or focus on the row, opens it beside, in a second pane, or in the other where there are two. Which directories are open is the reader's alone, kept per quilt in this browser: the ones holding a live document start open, the rest folded, and only the reader's click turns one, so a file opened from a link or a search into a folded directory leaves it folded, its name in bold, saying what it holds.
 	import { store } from '$lib/manifest/client.svelte';
 	import { keptUnder } from '$lib/manifest/kept.svelte';
 	import type { Master, ProjectFile } from '$lib/manifest/types';
@@ -7,6 +7,7 @@
 	import { documentLabel } from '$lib/workspace/names';
 	import { docs as words } from '$lib/words/docs';
 	import { workspace } from '$lib/workspace/store.svelte';
+	import { itemFromPath } from '$lib/workspace/item';
 	import { prefs } from '$lib/prefs.svelte';
 	import { isAgentConfig, isAux } from './aux';
 	import { accessOf, accessOfAll, explain, says } from './access';
@@ -120,6 +121,11 @@
 
 	const ownPaths = $derived(new Set(own.map((o) => o.path)));
 	const href = (f: ProjectFile) => fileHref(m, f);
+	/** Open a row's file beside what is being read, as its link would open it. */
+	function beside(f: ProjectFile): void {
+		const item = itemFromPath(m, href(f));
+		if (item) workspace.beside(item, workspace.focus);
+	}
 </script>
 
 {#snippet link(d: Master)}
@@ -151,7 +157,7 @@
 			</li>
 		{:else}
 			<li class="file" class:document={f.kind === 'document'} class:live={ownPaths.has(f.path)} data-kind={f.kind} data-testid="docs-file">
-				<a href={href(f)} class:here aria-current={here ? 'page' : undefined} title={f.path}>{name(f.path)}</a>{@render mark(f)}
+				<a href={href(f)} class:here aria-current={here ? 'page' : undefined} title={f.path}>{name(f.path)}</a>{@render mark(f)}<button type="button" class="beside" title={words.files.beside} aria-label={words.files.besideLabel(name(f.path))} data-testid="docs-beside" onclick={() => beside(f)}>⇄</button>
 				{#if copies.length}
 					<!-- the agent's copies of this document, which the person and an agent both edit -->
 					<ul class="plain docs copies" data-testid="docs-copies">
@@ -198,6 +204,31 @@
 	.docs a.here {
 		color: var(--ink);
 		font-weight: 600;
+	}
+	/* a row's ⇄ stands over its right end, drawn with the pointer or focus on the row, so a row never grows under the pointer */
+	.file {
+		position: relative;
+	}
+	.beside {
+		all: unset;
+		position: absolute;
+		top: 0;
+		right: 0;
+		padding: 0 4px;
+		cursor: pointer;
+		color: var(--ink-faint);
+		background: var(--leaf);
+		font-size: 11px;
+		line-height: inherit;
+		opacity: 0;
+	}
+	.file:hover > .beside,
+	.beside:focus-visible {
+		opacity: 1;
+	}
+	.beside:hover,
+	.beside:focus-visible {
+		color: var(--link);
 	}
 	.aside {
 		margin-left: 0.4em;

@@ -210,13 +210,15 @@ test("a cited result is located in its paper, its passage marked to digest, and 
 	await expect(count(page, 'review-kind-agents')).toHaveText('10');
 });
 
-test('a citation that names no result says what to add, and is asked about or remembered as a mention', async ({ page }) => {
+test('a citation that names no result is a question, not a fault: it says what to add, and is asked about or remembered as a mention', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-cited').click();
-	const bare = page.getByTestId('review-row').filter({ hasText: 'main.tex · the proof of Theorem 3.4 cites Okafor 2022 without naming a result' });
+	const bare = page.getByTestId('review-row').filter({ hasText: 'main.tex · the proof of Theorem 3.4 cites Okafor 2022: which result?' });
 	await bare.getByRole('button', { expanded: false }).click();
 	await expect(bare.locator('span.cite.hot')).toHaveText('[2]');
-	await expect(bare).toContainText('Add the result to this citation in main.tex, for example \\cite[Lemma 2.4]{Oka22}.');
+	// a question loom asks, never read as a fault
+	await expect(bare).toContainText('Nothing is wrong in your LaTeX: loom is asking.');
+	await expect(bare).toContainText('If it rests on one, name it in this citation in main.tex, for example \\cite[Lemma 2.4]{Oka22}.');
 	await bare.getByRole('button', { name: 'only a mention' }).click();
 	await expect(page.getByTestId('column-message')).toContainText('Remembered as a mention. It is not asked about again.');
 	await expect(bare).toHaveCount(0);
@@ -296,7 +298,7 @@ test('an attested definition that changed is asked about in three steps, and eac
 test('see it lays the document over Review, read only, lands at the place, and closes back to the list', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-cited').click();
-	const cite = rows(page).filter({ hasText: 'main.tex · the proof of Theorem 3.4 cites Okafor 2022 without naming a result' });
+	const cite = rows(page).filter({ hasText: 'main.tex · the proof of Theorem 3.4 cites Okafor 2022: which result?' });
 	await cite.getByRole('button', { expanded: false }).click();
 	await cite.getByTestId('see-it').click();
 	const over = page.getByTestId('review-over');

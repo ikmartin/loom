@@ -38,7 +38,7 @@ export const review = {
 	kinds: {
 		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or from Overleaf, what one copy brought in as one row. Read each, and accept it or not; those never accepted are folded beneath.' },
 		questions: { name: 'Agent questions', hover: 'Questions an agent asked while working. Answer with one of its choices or in your own words.' },
-		cited: { name: "Cited results loom can't read", hover: 'Results your drafts cite that loom could not read by itself. Have an agent read them, or locate one yourself.' },
+		cited: { name: "Cited results loom can't read", hover: 'Results your drafts cite that loom could not read by itself: have an agent read them, or locate one yourself. Then citations that name no result, where loom asks which one the text rests on; none is a fault in your LaTeX.' },
 		check: { name: 'Results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
 		attest: { name: 'Lean statements to attest', hover: "Results whose statement, or a definition under it, changed since you attested the Lean come first: say whether the Lean still states each. Then those Lean has accepted that you never attested. To attest is to give your word that the Lean statement says what your result says; only then does the result read 'formalized'." },
 		fetch: { name: 'Papers to add', hover: 'Papers an agent needs and could not download. Open each page, download the paper, and drop the file anywhere in loom.' },
@@ -121,12 +121,12 @@ export const review = {
 		pdfOnly: 'PDF only',
 		/** A cited row's quiet line, for a result loom looked for in the work's TeX source and did not find. */
 		notInSource: 'not found in its TeX source',
-		/** The row of a citation that names no result. */
-		namesNone: (doc: string, where: string, short: string) => `${file(doc)} · ${where} cites ${short} without naming a result`
+		/** The row of a citation that names no result: a question loom asks, not a fault. */
+		namesNone: (doc: string, where: string, short: string) => `${file(doc)} · ${where} cites ${short}: which result?`
 	},
 	citation: {
-		/** Under a citation that names no result: what is wrong, and what to add. */
-		explain: (short: string, doc: string) => `This cites ${short} without naming a result, so loom cannot tell what the proof rests on. Add the result to this citation in ${file(doc)}, for example`,
+		/** Under a citation that names no result: that nothing is wrong, what loom asks, and what to add. */
+		explain: (short: string, doc: string) => `Nothing is wrong in your LaTeX: loom is asking. This cites ${short} without saying which of its results, so loom cannot tell which one the text rests on. If it rests on one, name it in this citation in ${file(doc)}, for example`,
 		/** The example of what to add, in the person's own key. */
 		example: (citekey: string) => `\\cite[Lemma 2.4]{${citekey}}`,
 		/** Asks an agent which result it is. */
@@ -796,6 +796,14 @@ export const review = {
 		confirm: 'Delete'
 	},
 	/** The question-mark circle beside a page's title (Review's page where loom serves no lists, and Problems): what the page shows and what each state means. */
+	problems: {
+		/** In place of the person's problems, where none is wrong. */
+		none: 'Nothing is wrong in your LaTeX.',
+		/** In place of the person's problems, where the filters leave none of them. */
+		unmatched: 'None of yours matches these filters.',
+		/** In place of the person's problems, where the quilt holds no document of theirs: nothing has been checked, so nothing is said to be right. */
+		noDocument: 'There is no document of yours yet, so there is no LaTeX to check.'
+	},
 	help: {
 		review: {
 			title: 'What the Your Changes page shows',

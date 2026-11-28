@@ -24,7 +24,9 @@ vi.mock('$lib/write', () => ({
 const MAIN = 'drafting/main.tex';
 const change = (over: Partial<PendingChange>): PendingChange => ({ id: 'c-0001', kind: 'edit', path: 'drafting/nodes/sy-0001.tex', key: 'sy-0001', documents: [MAIN], old: 'a widget', new: 'a gadget', state: 'ready', ...over });
 const live = { annotations: {}, annotation_types: [], reviewer: { name: 'me', source: '' }, masters: [], changes: [] as PendingChange[] };
-vi.mock('$lib/manifest/client.svelte', () => ({ store: { manifest: live, refresh: async () => {} } }));
+/** What the history asked the store to show pending before a publication lists it. */
+const held: PendingChange[][] = [];
+vi.mock('$lib/manifest/client.svelte', () => ({ store: { manifest: live, refresh: async () => {}, hold: (rows: PendingChange[]) => held.push(rows) } }));
 
 const { actSays, allSays, authorOf, byDocument, changeById, changesIn, IN_THE_FILE, kindName, pending, ready, refusal, summary, whoMade } = await import('./changes');
 const { acted, mark, prune } = await import('./acted.svelte');
@@ -41,6 +43,7 @@ beforeEach(() => {
 	history.done = [];
 	history.undone = [];
 	live.changes = [];
+	held.length = 0;
 });
 
 describe('the pending changes the manifest lists', () => {
@@ -190,6 +193,24 @@ describe('Keep and Discard', () => {
 		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
 		expect(await redo()).toBe('');
 		expect(calls.at(-1)).toEqual(['change-keep', { changes: ['e-1'] }]);
+	});
+
+	it('shows an undone Keep pending again from its answer, as the manifest listed it before, not once a publication lists it', async () => {
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await keepChanges({ changes: ['e-1'] });
+		// the publication after the Keep lists it no more
+		live.changes = [];
+		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
+		expect(await undo()).toBe('');
+		expect(held).toEqual([[suggestion]]);
+		// kept again and undone again: the same row
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		live.changes = [suggestion];
+		expect(await redo()).toBe('');
+		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
+		expect(await undo()).toBe('');
+		expect(held).toEqual([[suggestion], [suggestion]]);
 	});
 
 	it('says why an undo of a keep was refused; one that can never be undone leaves the history, uncovering what is beneath it', async () => {

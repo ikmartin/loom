@@ -1,5 +1,5 @@
 <script lang="ts">
-	// **history ▾** on a document's toolbar (plan 0.20.6, 0.25.5): `record this version…`, which names and records the version in place, its live text, and its versions newest first, each named by the act it was kept at and with a `compare` at its right, the newest twelve and then a line that lists the rest in the menu; then its live agent copies to compare with. A landmark of the draft carries the same menu, and an agent copy one line, for its source. Choosing a version shows it in this tab's place, at the result the reader was at; choosing `compare` opens the other beside and compares the two, and choosing it again stops. Nothing here leaves Docs: Review › History holds the same versions, and none of its lines go there. Drawn only where there is a history to list (`historyOf`).
+	// **history ▾** on a document's toolbar (plan 0.20.6, 0.25.5): `record this version…`, which names and records the version in place, its live text, and its versions newest first, each named by the act it was kept at and with a `compare` at its right, the newest twelve and then a line that lists the rest in the menu; then its live agent copies to compare with. A landmark of the draft carries the same menu, and an agent copy one line, for its source. Choosing an earlier version opens it beside the text and compares the two, as its `compare` does, so the text stays where it was; choosing the live text from one of its versions shows it in that version's place, at the result the reader was at, as does any choice where the window shows one pane at a time. Choosing `compare` again stops. Nothing here leaves Docs: Review › History holds the same versions, and none of its lines go there. Drawn only where there is a history to list (`historyOf`).
 	import { tick } from 'svelte';
 	import { shortDate } from '$lib/badges';
 	import { said } from '$lib/library/said';
@@ -15,7 +15,7 @@
 	import { workspace } from './store.svelte';
 	import ToolbarItem from './ToolbarItem.svelte';
 	import ToolbarMenu from './ToolbarMenu.svelte';
-	import { compareWith, comparingWith, turnTo } from './versions';
+	import { compareWith, comparingWith, showVersion } from './versions';
 	import { versionLabel } from '$lib/review/timeline';
 	import { can, write } from '$lib/write';
 
@@ -28,6 +28,8 @@
 	const m = $derived(store.manifest!);
 	const pane = getPane();
 	const history = $derived(historyOf(m, item.id));
+	/** The live draft's path, which a version chosen from its history is shown in place of; '' for an agent copy, whose menu lists no versions. */
+	const live = $derived(history?.of === 'draft' ? history.draft : '');
 	let records = $state(false);
 	$effect(() => {
 		void can('history-record').then((yes) => (records = yes));
@@ -67,7 +69,7 @@
 
 {#snippet row(id: string, label: string, testid: string, aside = '', title = '')}
 	<div class="row" role="none" title={title || undefined}>
-		<button type="button" class="version" role="menuitemradio" tabindex="-1" aria-checked={id === item.id} aria-label={w.versionName(label, name)} data-testid="history-version-{testid}" onclick={() => turnTo(pane.index, item, id)}
+		<button type="button" class="version" role="menuitemradio" tabindex="-1" aria-checked={id === item.id} aria-label={w.versionName(label, name)} data-testid="history-version-{testid}" onclick={() => showVersion(pane.index, item, id, live)}
 			><span class="mark" aria-hidden="true">{id === item.id ? '●' : ''}</span><span class="lab">{label}</span>{#if aside}<span class="aside">{aside}</span>{/if}</button
 		>
 		{#if id !== item.id}

@@ -1,6 +1,6 @@
-// A draft's history menu (plan 0.20.6), on the fixture: main.tex has three landmarks, widgets-v1 to -v3, and one agent copy, aidoc.tex. A landmark is shown read-only in the draft's own tab, at the result the reader was at; compare is started from the menu and nowhere else.
+// A draft's history menu (plan 0.20.6), on the fixture: main.tex has three landmarks, widgets-v1 to -v3, and one agent copy, aidoc.tex. An earlier version chosen from the menu opens beside the text, compared with it; where the window shows one pane at a time it is shown read-only in the draft's own tab, at the result the reader was at; compare is started from the menu and nowhere else.
 import { expect, test, type Page } from '@playwright/test';
-import { beside, openHere, pane } from '../workspace';
+import { openHere, pane } from '../workspace';
 import { serve } from '../manifest';
 
 const tabs = (page: Page, index: number) => pane(page, index).getByTestId('item-tab');
@@ -48,8 +48,28 @@ test('a draft with no landmarks and no copies, and a landmark no live draft lead
 	await expect(pane(page, 0).getByTestId('toolbar-history')).toHaveCount(0);
 });
 
-test('a landmark is shown in the draft’s own tab, read-only, at the result the reader was at, and the live text is one choice back', async ({ page }) => {
-	await page.goto('/master/drafting/main' + beside('/node/sy-0002'));
+test('an earlier version chosen from the menu opens beside the text, compared with it, and the text stays in its pane', async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	await expect(pane(page, 0).locator('.fragment').first()).toBeVisible();
+	await history(page);
+	await page.getByTestId('history-version-widgets-v2').click();
+	await expect(tabs(page, 0)).toHaveCount(1);
+	await expect(tabs(page, 0)).toContainText('main.tex');
+	await expect(tabs(page, 0)).not.toContainText('widgets');
+	await expect(tabs(page, 1)).toContainText('main.tex · widgets-v2');
+	await expect(page).toHaveURL(/compare=1/);
+	await expect(page.getByTestId('compare-count')).toBeVisible();
+	// its compare says so, and the version chosen again leaves the two compared
+	await history(page);
+	await expect(page.getByTestId('history-compare-widgets-v2')).toHaveAttribute('aria-checked', 'true');
+	await page.getByTestId('history-version-widgets-v2').click();
+	await expect(page.getByTestId('compare-count')).toBeVisible();
+	await expect(tabs(page, 1)).toContainText('main.tex · widgets-v2');
+});
+
+test('where the window shows one pane at a time, a landmark is shown in the draft’s own tab, read-only, at the result the reader was at, and the live text is one choice back', async ({ page }) => {
+	await page.setViewportSize({ width: 600, height: 800 });
+	await page.goto('/master/drafting/main');
 	await pane(page, 0).locator('.fragment').first().click();
 	await expect(tabs(page, 0)).toHaveCount(1);
 	// the reader at Theorem 3
@@ -275,12 +295,12 @@ test('past the newest twelve, the menu lists the older versions in itself, and n
 		expect(new URL(page.url()).pathname).not.toMatch(/\/review|\/library|\/web/);
 		await page.keyboard.press('Escape');
 	}
-	// the oldest version, shown in the draft's tab, is one choice from there
+	// the oldest version, opened beside the draft, is one choice from there
 	await page.goto('/master/drafting/main');
 	await history(page);
 	await page.getByTestId('history-older').click();
 	await page.getByTestId('history-version-widgets-v1').click();
-	await expect(page).toHaveURL(/\/canon\/widgets-v1/);
+	await expect(page).toHaveURL(/\/master\/drafting\/main\?beside=.*widgets-v1/);
 });
 
 test('an undo’s set-aside text is put back from everything recorded, after asking', async ({ page }) => {

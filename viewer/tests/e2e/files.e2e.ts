@@ -52,6 +52,24 @@ test('a folder holding the open file folds at a click, its name bold with the fi
 	await expect(tree.getByRole('link', { name: 'main.tex', exact: true })).toHaveCount(0);
 });
 
+test("a row's ⇄, shown with the pointer on it, opens its file beside what is being read, in a second pane", async ({ page }) => {
+	await page.goto('/master/drafting/main');
+	const tree = page.getByTestId('docs-tree');
+	const row = tree.getByTestId('docs-file').filter({ has: page.getByRole('link', { name: 'README.md', exact: true }) });
+	const open = row.getByTestId('docs-beside');
+	await expect(open).toHaveCSS('opacity', '0');
+	await row.hover();
+	await expect(open).toHaveCSS('opacity', '1');
+	await expect(open).toHaveAttribute('title', 'Open beside, in a second pane');
+	await expect(open).toHaveAccessibleName('Open README.md beside, in a second pane');
+	await open.click();
+	// the paper stays where it was, and the file is beside it
+	await expect(pane(page, 0).getByTestId('item-tab')).toHaveCount(1);
+	await expect(pane(page, 0).getByTestId('item-tab')).toContainText('main.tex');
+	await expect(pane(page, 1).getByTestId('item-tab')).toContainText('README.md');
+	await expect(page).toHaveURL(/\/master\/drafting\/main\?beside=/);
+});
+
 test('a Markdown file is drawn, opened at the heading a link names, and its links are followed in the viewer', async ({ page }) => {
 	await page.goto('/file/notes/intro.md#next');
 	const file = pane(page, 0).getByTestId('file-item');
