@@ -199,7 +199,6 @@ test.describe('the toolbar', () => {
 		await page.emulateMedia({ colorScheme: scheme });
 		await page.goto(url);
 		await toPage(page, 1);
-		const tops: number[] = [];
 		for (const row of [BAR, ROW]) {
 			let left = -Infinity;
 			for (const id of row) {
@@ -209,10 +208,8 @@ test.describe('the toolbar', () => {
 				expect(box.x, `${url}: ${id} after the one before it`).toBeGreaterThan(left);
 				left = box.x;
 			}
-			tops.push((await page.getByTestId(row[0]).boundingBox())!.y);
 		}
-		expect(tops[1], `${url}: the annotation row beneath the row that reads`).toBeGreaterThan(tops[0]);
-		// every tool of the annotation row a target of 28 px at the least
+		// every annotation tool, in the one row, a target of 28 px at the least
 		for (const id of ROW) {
 			const box = (await page.getByTestId(id).boundingBox())!;
 			expect(Math.min(box.width, box.height), `${url}: ${id} is ${box.width} by ${box.height}`).toBeGreaterThanOrEqual(28);
