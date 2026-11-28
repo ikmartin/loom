@@ -1,6 +1,6 @@
 """The Web's reads over the drafts and the library: their results listed by document, by work or by status, a search in their statements, a result's neighbourhood and its graph (`docs/design/library.md`, "The views"; `docs/specs/evidence.md` §8).
 
-A draft's result is a theorem-like block of a document of the person's, named by its key as the manifest names it, drawn from the manifest's numbers and fragments and the scan's edges; what it uses is status's own walk (`web.rests_on`), so the Web and status never disagree about what rests on what. A library result is a statement node, stubs included, read from the node store's files (`LibraryWeb`), named by its id; what it uses is its header's, and what its proofs use their files'. How each stands is status's (§5), over the two webs together. A draft's citation does not reach the library until citations resolve to nodes, so nothing here joins a draft's result to a library result.
+A draft's result is a theorem-like block of a document of the person's, named by its key as the manifest names it, drawn from the manifest's numbers and fragments and the scan's edges; what it uses is status's own walk (`web.rests_on`), so the Web and status never disagree about what rests on what. A library result is a statement node, stubs included, read from the node store's files (`LibraryWeb`), named by its id; what it uses is its header's, and what its proofs use their files'. How each stands is status's (§5), over the two webs together. A draft's result uses a library result where one of its citations reaches that statement (`library.citations.resolve`); a citation naming no result, or one the store does not hold, joins nothing.
 """
 
 from __future__ import annotations
@@ -279,13 +279,23 @@ class Drafts:
                 if used not in seen:
                     seen.add(used)
                     todo.append(used)
-        return [n.key for n in self.results if n.key in seen]
+        return [n.key for n in self.results if n.key in seen] + [k for k in self.nodes if k in seen]
 
     def rests(self, key: str) -> list[str]:
-        """The results the statement or proof at `key` uses directly, by status's own walk (`rests_on`) over every block of the drafts, kept to the Web's results."""
+        """The results the statement or proof at `key` uses directly: the drafts' by status's own walk (`rests_on`) over every block of the drafts, then the library's its citations reach (`cited`), kept to the Web's results."""
         if key not in self._rests:
-            self._rests[key] = [k for k in rests_on(self.result, key, self._blocks) if k in self._keys]
+            drafts = [k for k in rests_on(self.result, key, self._blocks) if k in self._keys]
+            self._rests[key] = list(dict.fromkeys([*drafts, *self.cited.get(key, [])]))
         return self._rests[key]
+
+    @cached_property
+    def cited(self) -> dict[str, list[str]]:
+        """Each block's citations that reach one library statement (`CiteRec.target`, `library.citations.resolve`), by the key of the statement or proof that makes them, in source order."""
+        out: dict[str, list[str]] = {}
+        for c in self.result.edges.cites:
+            if c.target and c.target in self.nodes:
+                out.setdefault(c.src, []).append(c.target)
+        return out
 
     def uses(self, key: str) -> tuple[list[str], list[tuple[str, int]]]:
         """What a result's statement uses, and what each of its proofs uses as `(key, proof's number among them)`: a library result's by its header and its proofs' files, kept to the library's statements."""
@@ -411,10 +421,14 @@ def listing(
         }
     opened = opened or []
     if scope in ("draft", "deps"):
-        own = [k for k in keys if doc in d.node(k).reached_by]  # type: ignore[union-attr]
+        own = [k for k in keys if not d.is_library(k) and doc in d.node(k).reached_by]  # type: ignore[union-attr]
         sections: list[dict[str, Any]] = [{"head": "draft", "doc": doc, "rows": [d.row(k, doc) for k in own]}]
         if scope == "deps":
-            groups = _groups(d, _grouped(d, scope, doc), opened, open_all=True)
+            uses = _grouped(d, scope, doc)
+            drafts = [k for k in uses if not d.is_library(k)]
+            library = [k for k in uses if d.is_library(k)]
+            works = [d.nodes.source(k) or "" for k in library]
+            groups = _groups(d, drafts, opened, open_all=True) + _works(d, library, works)
             sections.append({"head": "uses", "doc": doc, "groups": groups})
         return {"count": len(keys), "sections": sections, "undigested": d.undigested}
     mine = [k for k in keys if not d.is_library(k)]
@@ -425,13 +439,13 @@ def listing(
 
 
 def _grouped(d: Drafts, scope: str, doc: str | None) -> list[str]:
-    """The keys a scope lists in groups by document: under `deps` those its draft does not read, else all of them.
+    """The keys a scope lists in groups, by document or by work: under `deps` those its draft does not read, the library's among them, else all of them.
 
     `web-list` and `web-group` both read this, so a group opened later holds what the list counted in it.
     """
     keys = d.scope(scope, doc)
     if scope == "deps":
-        return [k for k in keys if doc not in d.node(k).reached_by]  # type: ignore[union-attr]
+        return [k for k in keys if d.is_library(k) or doc not in d.node(k).reached_by]  # type: ignore[union-attr]
     return keys
 
 

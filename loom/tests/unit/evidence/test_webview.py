@@ -447,6 +447,27 @@ def test_a_draft_scope_holds_no_library_result_until_citations_reach_one(library
     assert not any(d.is_library(k) for k in d.scope("draft", DOC) + d.scope("deps", DOC))
 
 
+def test_a_library_result_a_proof_cites_is_what_the_proof_uses_and_its_draft_rests_on(library: Path) -> None:
+    text = (library / DOC).read_text(encoding="utf-8")
+    (library / DOC).write_text(text.replace("a polynomial count follows.", r"a polynomial count follows by \cite[Lemma 3.2]{tq-00A1-ref}."), encoding="utf-8")  # fmt: skip
+    d = _d(library)
+    lemma = _key(d, "lem:balanced")
+    card = webview.focus(d, "all", None, lemma)
+    assert [r["result"] for r in card["uses"]["proof"]] == [_key(d, "def:connected"), "tq-00K3"]
+    assert [r["result"] for r in card["uses"]["statement"]] == [_key(d, "def:cycle")]
+    # not read against its paper, so the card says the result rests on it
+    assert [r["result"] for r in card["rests_on"]] == ["tq-00K3"]
+    assert lemma in [r["result"] for r in webview.focus(d, "all", None, "tq-00K3")["used_by"]["rows"]]
+    fold = webview.focus(d, "all", None, lemma, more=True)["more"]
+    assert "tq-00K3" in [r["result"] for r in fold["proofs"][0]["uses"]]
+    # a draft and what it rests on holds it, under its work, open
+    assert "tq-00K3" in d.scope("deps", DOC) and "tq-00K3" not in d.scope("draft", DOC)
+    uses = webview.listing(d, "deps", DOC)["sections"][1]
+    opened = [(g["group"], [r["result"] for r in g["rows"]]) for g in uses["groups"]]
+    assert opened == [("tq-00A1-ref", ["tq-00A4", "tq-00K3"])]
+    assert webview.group(d, "deps", DOC, "tq-00A1-ref")["n"] == 2
+
+
 def test_the_list_takes_the_library_from_the_index_and_reads_no_node_file_and_no_body(
     library: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
