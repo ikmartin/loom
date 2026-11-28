@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A document's toolbar: Ask your agent, about the document or the result at the top of its pane (`agents/places`); the annotating bar (Annotate, Comment, the format menu and Undo and Redo where a publisher serves writes, with the hint beneath saying what the tool in hand does; Changes where its text has pending changes; the stepper, Comments and Notes), then its own text size (`TextSize`), then Update from Overleaf on a document that mirrors Overleaf (`UpdateButton`), then **history ▾** where the document has one; under *view*, `show settled annotations`, then `view PDF`, which opens its compiled PDF beside it as a link in a pane does, and says beside it in the tree's words how its compile stands, greyed where there is no PDF to open. A version (a landmark) has the history and its text size, and on its bar its own controls (`VersionControls`): older and newer, live text, compare with now, restore; a closed or context-only agent document has its text size alone, and `view PDF` only where a PDF of it was compiled.
+	// A document's toolbar: Ask your agent, about the document or the results on screen in its pane, read as it is pressed (`agents/places`); the annotating bar (Annotate, Comment, the format menu and Undo and Redo where a publisher serves writes, with the hint beneath saying what the tool in hand does; Changes where its text has pending changes; the stepper, Comments and Notes), then its own text size (`TextSize`), then Update from Overleaf on a document that mirrors Overleaf (`UpdateButton`), then **history ▾** where the document has one; under *view*, `show settled annotations`, then `view PDF`, which opens its compiled PDF beside it as a link in a pane does, and says beside it in the tree's words how its compile stands, greyed where there is no PDF to open. A version (a landmark) has the history and its text size, and on its bar its own controls (`VersionControls`): older and newer, live text, compare with now, restore; a closed or context-only agent document has its text size alone, and `view PDF` only where a PDF of it was compiled.
 	import { store } from '$lib/manifest/client.svelte';
 	import { compiles, pdfLine } from '$lib/manifest/compiles.svelte';
 	import { isLandmark, type Item } from '../item';
@@ -66,7 +66,7 @@
 {/snippet}
 
 {#if master && !master.closed && !master.context_only}
-	<ItemToolbar {name} {note} ask={() => placesFor(m, item)} bar={reading} tools={writes ? writing : undefined} history={history ? versions : undefined} on={ui.showSettled} hint={writes ? hintFor(m, notes, hand.value) : ''}>
+	<ItemToolbar {name} {note} ask={() => (pane.look(), placesFor(m, item))} bar={reading} tools={writes ? writing : undefined} history={history ? versions : undefined} on={ui.showSettled} hint={writes ? hintFor(m, notes, hand.value) : ''}>
 		{#snippet view()}
 			{#if notes.ready || anySettled}
 				<!-- Settled annotations are hidden at rest; this shows them faintly, for the sitting, on every document and node. -->

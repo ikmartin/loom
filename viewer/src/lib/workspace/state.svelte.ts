@@ -101,6 +101,8 @@ export interface PaneContext {
 	scroller: () => HTMLElement | null;
 	/** The pane itself, which does not scroll: a floating panel is placed against it. */
 	frame: () => HTMLElement | null;
+	/** Read where the reader is in the pane now (the block at its top, the results on screen) into `here`, for a control that acts on it as it is pressed. */
+	look: () => void;
 }
 
 const PANE = Symbol('pane');
@@ -110,7 +112,7 @@ export function setPane(ctx: PaneContext): void {
 }
 
 export function getPane(): PaneContext {
-	return getContext<PaneContext>(PANE) ?? { index: 0, scroller: () => null, frame: () => null };
+	return getContext<PaneContext>(PANE) ?? { index: 0, scroller: () => null, frame: () => null, look: () => {} };
 }
 
 /** The pane a renderer stands in, or null outside every pane (a hover card, the Review page). */

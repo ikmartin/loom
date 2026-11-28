@@ -23,7 +23,10 @@
 			return index;
 		},
 		scroller: () => body,
-		frame: () => frame
+		frame: () => frame,
+		look: () => {
+			if (body && key && shown === key) read(body, key);
+		}
 	});
 
 	const item = $derived(workspace.active(index));
@@ -76,17 +79,28 @@
 		const { timer, el, key: k } = pending;
 		clearTimeout(timer);
 		pending = null;
-		// a pane being taken down loses its content first, and the scroll that follows is not the reader's; nor is the place of another item shown here since
-		if (shown !== k || !el.isConnected || !workspace.onScreen || !el.querySelector('[data-src]')) return;
+		// the place of another item shown here since is not this one's; nor, in `read`, is a pane taken down, which loses its content first
+		if (shown !== k) return;
+		const at = read(el, k);
+		if (at) workspace.scrolls.set(k, { top: el.scrollTop, src: at.block?.dataset.src ?? null, below: at.block ? at.block.getBoundingClientRect().top - at.r.top : 0 });
+	}
+
+	/**
+	 * Read where the reader is in the pane, now, into `here`: the block at its top, for `loom here`, and the results on screen, for Ask your agent. Null for a pane with nothing laid out in it.
+	 *
+	 * Read at each pause in a scroll and again as Ask your agent is pressed (`look`): the page lays itself out after a scroll, fetched, typeset, its fonts arriving, and a page never scrolled has no pause to be read at.
+	 */
+	function read(el: HTMLElement, k: string): { block: HTMLElement | null; r: DOMRect } | null {
+		if (!el.isConnected || !workspace.onScreen || !el.querySelector('[data-src]')) return null;
 		const r = el.getBoundingClientRect();
 		// a point in the text column just below the pane's top, clear of the toolbar at its right
 		const hit = document.elementFromPoint(r.left + r.width * 0.3, r.top + 48)?.closest<HTMLElement>('[data-src]');
 		const block = hit && el.contains(hit) ? hit : null;
-		workspace.scrolls.set(k, { top: el.scrollTop, src: block?.dataset.src ?? null, below: block ? block.getBoundingClientRect().top - r.top : 0 });
-		// and where the reader is, for `loom here`: the block by the key it belongs to
+		// the block by the key it belongs to
 		const belongs = block ? keyOf(block, '') : '';
 		here.setBlock(k, block?.dataset.src && belongs ? { src: block.dataset.src, key: belongs } : null);
 		here.setSeen(k, onScreen(el, r));
+		return { block, r };
 	}
 
 	/** The results and proofs on screen in the pane, top to bottom, each once: half of one in view, or enough to fill a third of the pane, so the tail of one scrolled past is not offered. */

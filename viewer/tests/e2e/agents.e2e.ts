@@ -229,7 +229,7 @@ test('Ask your agent with nothing selected offers each result on screen under it
 	// Lemma 1.2 brought to the middle of the pane, as Find leaves it, below whatever stands at the top
 	const lemma = page.locator('[data-pane="0"] .fragment .env[data-key="sy-0002"]').first();
 	await lemma.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-	await page.waitForTimeout(400);
+	await expect(lemma).toBeInViewport();
 	await page.getByTestId('item-controls').first().getByTestId('toolbar-ask').click();
 	const about = page.locator('fieldset label');
 	await expect(about.filter({ hasText: /^Lemma 1\.2, on screen$/ })).toHaveCount(1);
@@ -237,4 +237,12 @@ test('Ask your agent with nothing selected offers each result on screen under it
 	const request = page.getByTestId('ask-request');
 	await expect(request).toHaveText('In loom, look at main.tex, Lemma 1.2 (quilt:drafting/main.tex).');
 	await expect(request).not.toContainText('sy-');
+});
+
+test('Ask your agent pressed as the page loads, never scrolled, offers the results on screen', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/master/drafting/main');
+	await expect(page.locator('[data-pane="0"] .fragment .env[data-key="sy-0002"]').first()).toBeInViewport();
+	await page.getByTestId('item-controls').first().getByTestId('toolbar-ask').click();
+	await expect(page.locator('fieldset label').filter({ hasText: /^Lemma 1\.2, on screen$/ })).toHaveCount(1);
 });
