@@ -186,16 +186,18 @@ def _history_restore(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     from loom.pending import in_place
     from loom.scan.scan import scan
 
+    # a LaTeX file agents may edit, since only those are watched
+    (q / "aside.tex").write_text("an aside\n", encoding="utf-8")
     succeeds(s, "change-keep", {"all": True})
-    (q / "README.md").write_text("an edit undone\n", encoding="utf-8")
-    ids = [c.id for c in in_place(scan(load_quilt(q))) if c.path == "README.md"]
+    (q / "aside.tex").write_text("an edit undone\n", encoding="utf-8")
+    ids = [c.id for c in in_place(scan(load_quilt(q))) if c.path == "aside.tex"]
     succeeds(s, "change-discard", {"changes": ids})
     undone = [e for e in load_history(load_quilt(q).history_dir).entries if e.action == "undo"][-1]
-    succeeds(s, "history-restore", {"path": "README.md", "text": undone.get("from")})
-    assert (q / "README.md").read_text() == "an edit undone\n"
-    outside = {"path": "../outside.md", "text": undone.get("from")}
+    succeeds(s, "history-restore", {"path": "aside.tex", "text": undone.get("from")})
+    assert (q / "aside.tex").read_text() == "an edit undone\n"
+    outside = {"path": "../outside.tex", "text": undone.get("from")}
     refuses(s, "history-restore", outside, 409, "outside-quilt", "outside the quilt")
-    assert not (q.parent / "outside.md").exists()
+    assert not (q.parent / "outside.tex").exists()
 
 
 def _left_restore(q: Path) -> str:
