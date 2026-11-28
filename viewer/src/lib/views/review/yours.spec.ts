@@ -162,9 +162,11 @@ describe('the changes section', () => {
 	});
 });
 
-it("counts loom's rows of a kind that concern a draft, and nothing before they are read", () => {
-	const list = { groups: [{ kind: 'edits', rows: [{ row: 'edits:a', kind: 'edits', docs: [MAIN] }, { row: 'edits:b', kind: 'edits', docs: [MAIN, TALK] }, { row: 'edits:c', kind: 'edits', docs: [] }] }] } as unknown as ReviewList;
-	expect(theirs(list, MAIN)).toBe(2);
-	expect(theirs(list, TALK)).toBe(1);
-	expect(theirs(null, MAIN)).toBeNull();
+it("counts loom's rows of the kinds asked for that concern a draft, from the whole list, and nothing before it is read", () => {
+	const list = { groups: [{ kind: 'edits', rows: [{ row: 'edits:a', kind: 'edits', docs: [MAIN] }, { row: 'edits:b', kind: 'edits', docs: [MAIN, TALK] }, { row: 'edits:c', kind: 'edits', docs: [] }] }, { kind: 'cited', rows: [{ row: 'cited:a', kind: 'cited', docs: [TALK] }] }] } as unknown as ReviewList;
+	expect(theirs(list, MAIN, ['edits'])).toBe(2);
+	expect(theirs(list, TALK, ['edits'])).toBe(1);
+	expect(theirs(list, TALK, ['edits', 'cited'])).toBe(2);
+	expect(theirs(list, MAIN, ['cited'])).toBe(0);
+	expect(theirs(null, MAIN, ['edits'])).toBeNull();
 });

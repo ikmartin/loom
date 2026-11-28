@@ -50,8 +50,8 @@ class ReviewState {
 
 	counts = new Read<ReviewCounts>();
 	list = new Read<ReviewList>();
-	/** Loom's own rows of the two kinds drawn from the manifest, whole, by which a draft's count is made what is drawn. */
-	theirs = { 'accepted-changed': new Read<ReviewList>(), edits: new Read<ReviewList>() };
+	/** Loom's list read whole, every kind and every draft, by whose rows' `docs` the column counts each kind in one draft, and makes a draft's count of the two kinds drawn from the manifest what is drawn. */
+	whole = new Read<ReviewList>();
 
 	#asked = false;
 

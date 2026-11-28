@@ -802,7 +802,9 @@ export const review = {
 		/** In place of the person's problems, where the filters leave none of them. */
 		unmatched: 'None of yours matches these filters.',
 		/** In place of the person's problems, where the quilt holds no document of theirs: nothing has been checked, so nothing is said to be right. */
-		noDocument: 'There is no document of yours yet, so there is no LaTeX to check.'
+		noDocument: 'There is no document of yours yet, so there is no LaTeX to check.',
+		/** Under the person's problems, where Review waits on their citations, before the link to that kind: why those are not counted here. */
+		cited: (n: number) => `What loom asks about your citations is not a fault in your LaTeX, so it is not counted here: ${n === 1 ? 'one waits' : `${n} wait`} under`
 	},
 	help: {
 		review: {

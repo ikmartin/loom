@@ -59,11 +59,43 @@ test('the column shows a kind alone, and a draft narrows the list and the counts
 	await page.getByTestId('review-draft').filter({ hasText: 'bounds.tex' }).click();
 	await expect(page.getByTestId('review-row')).toHaveCount(1);
 	await expect(count(page, 'review-kind-all')).toHaveText('5');
-	// the kinds are counted for every draft only, so under a draft they show none
-	await expect(count(page, 'review-kind-check')).toHaveText('');
+	// under a draft each kind counts what it holds there, and each draft what the kind shown holds there
+	await expect(count(page, 'review-kind-check')).toHaveText('1');
+	await expect(page.getByTestId('review-draft').filter({ hasText: 'bounds.tex' }).locator('.n')).toHaveText('1');
 	await page.getByTestId('review-kind-all').click();
 	await expect(count(page, 'review-kind-all')).toHaveText('28');
 	await expect(page).toHaveURL(/\/review/);
+});
+
+test('every count in the column is what its list shows, whichever kind is shown and whichever draft is chosen', async ({ page }) => {
+	await open(page);
+	const kinds = ['questions', 'cited', 'attest', 'fetch', 'edits', 'accepted-changed', 'check'];
+	for (const draft of ['bounds.tex', 'main.tex']) {
+		const chosen = page.getByTestId('review-draft').filter({ hasText: draft });
+		// Everything, narrowed to the draft
+		await page.getByTestId('review-kind-all').click();
+		await chosen.click();
+		const all = await count(page, 'review-kind-all').textContent();
+		await expect(rows(page)).toHaveCount(Number(all));
+		await expect(chosen.locator('.n')).toHaveText(all!);
+		for (const k of kinds) {
+			await page.getByTestId(`review-kind-${k}`).click();
+			const n = await count(page, `review-kind-${k}`).textContent();
+			expect(n, `${k} in ${draft}`).toMatch(/^\d+$/);
+			await expect(rows(page), `${k} in ${draft}`).toHaveCount(Number(n));
+			await expect(chosen.locator('.n'), `${draft} under ${k}`).toHaveText(n!);
+		}
+	}
+});
+
+test('Problems says why the citations Review asks about are not counted there, and shows them a click away', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-problems').click();
+	await expect(page.getByTestId('problems-cited')).toContainText('What loom asks about your citations is not a fault in your LaTeX, so it is not counted here: 4 wait under');
+	await page.getByTestId('problems-cited-link').click();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
+	await expect(page.getByTestId('review-kind-cited')).toHaveAttribute('aria-current', 'true');
+	await expect(rows(page)).toHaveCount(4);
 });
 
 test("an agent's question is answered by a choice or in the person's words, and leaves", async ({ page }) => {
@@ -358,7 +390,7 @@ test("Problems has its own entry in Review's column, with its count, and opens R
 	await expect(page.getByTestId('review-column')).toBeVisible();
 	await expect(entry).toHaveAttribute('aria-current', 'page');
 	await expect(page.getByTestId('problems-yours-count')).toHaveText(n);
-	// under a draft, it counts nothing, as the kinds do
+	// under a draft it counts nothing, since nothing counts the problems for one draft
 	await page.getByTestId('review-draft').first().click();
 	await expect(page).toHaveURL(/\/review(\?|$)/);
 	await expect(count(page, 'review-problems')).toHaveText('');
