@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: whether the page is updating after a write, the column's message, How loom works, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message, one while the page updates, and the agent's.
+	// The left column's frame: Your quilts, the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: whether the page is updating after a write, the column's message, How loom works, and the agent's row. Folded, it is a strip of the four names with Your quilts and the fold above them and, at its foot, a dot for a message, one while the page updates, and the agent's.
 	//
 	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, its kinds and drafts (`ReviewColumn`) where the source serves its reads, else today's sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`) and the documents listed by name (`DocumentList`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs (`LibraryColumn`, `WebColumn`). At the foot, `Updating`, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
 	import Contents from './Contents.svelte';
@@ -9,6 +9,7 @@
 	import Legend from './column/Legend.svelte';
 	import Message from './column/Message.svelte';
 	import Updating from './column/Updating.svelte';
+	import YourQuilts from './column/YourQuilts.svelte';
 	import { updating } from '$lib/manifest/updating.svelte';
 	import LibraryColumn from './column/library/LibraryColumn.svelte';
 	import DocumentList from './column/DocumentList.svelte';
@@ -177,7 +178,8 @@
 <div class="shell-c" class:folded={!shown} style:--column-width="{width}px">
 	<div class="panel" class:away={!shown} data-testid="column" bind:this={panelBox}>
 		{#if !shown}
-			<!-- folded: the fold, then the four names one above the other with their cards beside the strip, and at its foot a dot for the message and the agent's -->
+			<!-- folded: Your quilts and the fold, then the four names one above the other with their cards beside the strip, and at its foot a dot for the message and the agent's -->
+			<YourQuilts />
 			<button class="ib fold unfold" title={frame.column.show} aria-label={frame.column.show} aria-expanded="false" data-testid="panel-fold" onclick={fold}><Icon name="fold" size={18} /></button>
 			<nav class="strip" aria-label={frame.views.nav}>
 				{#each shownViews as v (v)}
@@ -197,6 +199,7 @@
 			<AgentStatus folded />
 		{:else}
 			<div class="head">
+				<YourQuilts />
 				<!-- the quilt's name is its name, not a way anywhere: only the four views' names change view -->
 				<span class="name" data-testid="quilt-name">{label}</span>
 				<!-- the development shelf's links open Docs' pages, so they are offered only in Docs, where following one does not change view -->

@@ -8,9 +8,14 @@
 	import QuiltWindow from './QuiltWindow.svelte';
 	import YourName from './YourName.svelte';
 	import { home as words } from '$lib/words/home';
+	import { HOME_TAB } from './tab';
 
 	onDestroy(() => homePage.stop());
-	onMount(() => homePage.start());
+	onMount(() => {
+		// the tab a quilt's Your quilts comes back to (`tab.ts`)
+		window.name = HOME_TAB;
+		homePage.start();
+	});
 
 	/** Whether the window for a new quilt is open. */
 	let win = $state(false);

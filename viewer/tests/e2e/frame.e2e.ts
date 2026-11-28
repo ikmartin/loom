@@ -101,6 +101,23 @@ test("the quilt's name is not a way anywhere, and the head's icons are 28 px tar
 	}
 });
 
+test("Your quilts stands at the head's left as a 28 px target where loom serves the quilt, and a published viewer shows none", async ({ page }) => {
+	await open(page, 1440);
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByTestId('your-quilts')).toHaveCount(0);
+	// served by loom while a home runs, as `write-api.md` §1 has it
+	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: [], token: 't', home: 'http://127.0.0.1:8790/' } }));
+	await page.reload();
+	const back = page.getByTestId('your-quilts');
+	await expect(back).toHaveAttribute('href', 'http://127.0.0.1:8790/');
+	const target = (await back.boundingBox())!;
+	const glyph = (await back.locator('svg').boundingBox())!;
+	expect(target.width).toBeGreaterThanOrEqual(28);
+	expect(target.height).toBeGreaterThanOrEqual(28);
+	expect(glyph.width).toBeGreaterThanOrEqual(16);
+	expect(target.x + target.width).toBeLessThanOrEqual((await page.getByTestId('quilt-name').boundingBox())!.x);
+});
+
 test("a message dismissed by mouse lets the next go by itself, and one dismissed by keyboard hands the keyboard to the foot's next control", async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto('/review?fixture=round6');

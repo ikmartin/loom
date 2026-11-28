@@ -39,6 +39,10 @@
 		<!-- the column's fold: two chevrons pointing the way it goes; the strip turns it round -->
 		<path d="m11.5 4.5-7.5 7.5 7.5 7.5" />
 		<path d="m20 4.5-7.5 7.5 7.5 7.5" />
+	{:else if name === 'home'}
+		<!-- Your quilts, loom's home page: a house with its door -->
+		<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+		<path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
 	{:else if name === 'gear'}
 		<!-- Settings: a cog, a ring with eight teeth and a hole at its centre -->
 		<path data-glyph="cog" d="M10.40 5.08L10.66 2.49L13.34 2.49L13.60 5.08A7.1 7.1 0 0 1 15.76 5.98L17.78 4.33L19.67 6.22L18.02 8.24A7.1 7.1 0 0 1 18.92 10.40L21.51 10.66L21.51 13.34L18.92 13.60A7.1 7.1 0 0 1 18.02 15.76L19.67 17.78L17.78 19.67L15.76 18.02A7.1 7.1 0 0 1 13.60 18.92L13.34 21.51L10.66 21.51L10.40 18.92A7.1 7.1 0 0 1 8.24 18.02L6.22 19.67L4.33 17.78L5.98 15.76A7.1 7.1 0 0 1 5.08 13.60L2.49 13.34L2.49 10.66L5.08 10.40A7.1 7.1 0 0 1 5.98 8.24L4.33 6.22L6.22 4.33L8.24 5.98A7.1 7.1 0 0 1 10.40 5.08Z" />

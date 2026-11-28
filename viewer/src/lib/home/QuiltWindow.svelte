@@ -123,7 +123,7 @@
 				<button type="button" class="btn primary" disabled={busy} onclick={() => void create()} data-testid="quilt-window-create">{words.window.create}</button>
 			{:else if at === 'done'}
 				{#if row?.url}
-					<a class="btn primary" href={row.url} target="_blank" rel="noopener" onclick={() => setTimeout(onclose)} data-testid="quilt-window-open">{words.window.open}</a>
+					<a class="btn primary" href={row.url} target="_blank" rel="opener" onclick={() => setTimeout(onclose)} data-testid="quilt-window-open">{words.window.open}</a>
 				{:else}
 					<button type="button" class="btn" onclick={onclose}>{words.window.closeButton}</button>
 				{/if}

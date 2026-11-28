@@ -202,6 +202,32 @@ test("a quilt's page whose server stopped says so and links to the home page, an
 	await quilt.close();
 });
 
+test("a quilt's Your quilts goes back to the home page in the home's own tab, and opens no other", async ({ page, context, homed }) => {
+	test.setTimeout(120_000);
+	expect((await homed.call('quilt-create', { name: 'Thesis' })).status).toBe(200);
+	await page.goto('/');
+	const row = page.getByTestId('quilt-row');
+	await expect(row).toHaveAttribute('data-state', 'running', { timeout: 30_000 });
+	const opened = context.waitForEvent('page');
+	await row.getByTestId('quilt-open').click();
+	const quilt = await opened;
+	await quilt.waitForLoadState();
+	const there = quilt.url();
+	const back = quilt.getByTestId('your-quilts');
+	await expect(back).toHaveAttribute('href', homed.url);
+	await expect(back).toHaveAttribute('aria-label', 'Your quilts');
+	await expect(back).toHaveAttribute('title', 'Your quilts');
+	// the home's tab loads the home page again; the quilt's tab stays where it was, and no third tab opens
+	const reloaded = page.waitForEvent('load');
+	await back.click();
+	await reloaded;
+	expect(page.url()).toBe(homed.url);
+	await expect(page.getByTestId('quilt-row')).toHaveCount(1);
+	expect(context.pages()).toHaveLength(2);
+	expect(quilt.url()).toBe(there);
+	await quilt.close();
+});
+
 test("a quilt that refused to start shows loom's refusal worded, with no command and no long path, and Copy details", async ({ page, homed }) => {
 	test.setTimeout(120_000);
 	const made = await homed.call('quilt-create', { name: 'Covering estimates' });

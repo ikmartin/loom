@@ -1,5 +1,7 @@
 // The frame's words: the column's head and foot, the four views' names and their hover cards, the panel How loom works, and the column's message. Every sentence the viewer says is written in this folder, a file for each view and this one for the frame; a component holds none (`scripts/checks/words.py`). An entry is named for the place it shows, with a comment saying where, on one line, so that words seen on screen are found by searching for them.
 
+import { home } from './home';
+
 export const frame = {
 	views: {
 		/** The row of four view names under the quilt's name, and the folded column's strip; its accessible name. */
@@ -30,6 +32,8 @@ export const frame = {
 		}
 	},
 	column: {
+		/** The house at the left of the column's head, and atop the folded strip, that opens loom's home page: its accessible name, and its hover text while a home runs, the home page's own heading. Where none runs, its hover text and what a click says are `stopped.noHome`. */
+		yourQuilts: home.heading,
 		/** The button at the column's head that folds it to a strip. */
 		hide: 'Hide the column',
 		/** The button at the top of the folded strip that opens the column again. */

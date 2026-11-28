@@ -15,6 +15,7 @@ import { itemFromPath, itemKey, pathFor, type Item } from './item';
 export { itemForFile } from './item';
 import { workspace } from './store.svelte';
 import { write } from '$lib/write';
+import { HOME_TAB } from '$lib/home/tab';
 
 /** The kinds of project file a `quilt:` link opens as a file item; a `.tex` file is linked by its document or its keys. */
 const LINKED = new Set(['markdown', 'html', 'pdf', 'image', 'notebook', 'text', 'other']);
@@ -284,6 +285,8 @@ export function interceptLinks(active: () => boolean, manifest: () => Manifest |
 		const a = (e.target as Element | null)?.closest?.('a');
 		const href = a?.getAttribute('href');
 		if (!a || !href || a.target === '_blank' || a.hasAttribute('download')) return;
+		// Your quilts, aimed at the home page's own tab, which the browser finds by its name (`$lib/home/tab.ts`)
+		if (a.target === HOME_TAB) return;
 		const m = manifest();
 		if (!m) return;
 		const from = paneOfElement(a);

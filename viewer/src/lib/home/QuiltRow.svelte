@@ -87,7 +87,7 @@
 	</div>
 	<div class="qc">
 		{#if q.state === 'running'}
-			<a class="btn" href={q.url} target="_blank" rel="noopener" title={words.control.openRunning} data-testid="quilt-open">{words.control.open}</a>
+			<a class="btn" href={q.url} target="_blank" rel="opener" title={words.control.openRunning} data-testid="quilt-open">{words.control.open}</a>
 			<button type="button" class="btn" disabled={busy || disabled} title={words.control.stopTip} onclick={() => void act('quilt-stop')} data-testid="quilt-stop">{words.control.stop}</button>
 		{:else if q.state === 'stopped'}
 			<button type="button" class="btn" disabled={busy || disabled} title={words.control.openStopped} onclick={() => void openStopped()} data-testid="quilt-open">{words.control.open}</button>

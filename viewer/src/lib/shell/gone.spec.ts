@@ -34,4 +34,16 @@ describe("a quilt's page whose server stopped", () => {
 		judgeStopped({ write_api: 1, capabilities: [] });
 		expect(stopped.home).toBe('http://127.0.0.1:8790/');
 	});
+
+	it('is told a page a quilt’s server answered for, never a published one or the home page itself, and keeps it', () => {
+		stopped.served = false;
+		judgeStopped(null);
+		expect(stopped.served).toBe(false);
+		judgeStopped({ write_api: 0, capabilities: [], home: true });
+		expect(stopped.served).toBe(false);
+		judgeStopped({ write_api: 1, capabilities: [] });
+		expect(stopped.served).toBe(true);
+		judgeStopped(null);
+		expect(stopped.served).toBe(true);
+	});
 });
