@@ -148,7 +148,7 @@ readOnly('Ask your agent copies a request naming the result, its link and the mo
 	await page.getByTestId('toolbar-ask').click();
 	const request = page.getByTestId('ask-request');
 	await expect(request).toContainText('In loom, look at');
-	await expect(request).toContainText('(quilt:sy-0008).');
+	await expect(request).toContainText(', Definition 2.4 (quilt:drafting/main.tex).');
 	await page.getByTestId('ask-mode').selectOption('referee');
 	await expect(page.getByTestId('ask-fits')).not.toBeEmpty();
 	await page.getByTestId('ask-words').fill('Is the second step right?');
@@ -171,5 +171,5 @@ readOnly('Ask your agent copies a request naming the result, its link and the mo
 	await page.getByTestId('selection-actions').click();
 	await page.getByTestId('selection-ask').click();
 	await expect(request).toContainText('at the words “');
-	await expect(request).toContainText('(quilt:sy-0008)');
+	await expect(request).not.toContainText('sy-0008');
 });

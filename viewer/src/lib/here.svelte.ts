@@ -38,6 +38,15 @@ class Here {
 	/** The block under review and why, while a document shows Review's panel beside it. */
 	review = $state<{ key: string; cause: string | null } | null>(null);
 
+	/** By item key, the results and proofs on screen in its pane, top to bottom: what Ask your agent offers where nothing is selected. The viewer's own; never reported. */
+	seen = $state<Record<string, string[]>>({});
+
+	setSeen(item: string, keys: string[]): void {
+		const was = this.seen[item] ?? [];
+		if (was.length === keys.length && was.every((k, i) => k === keys[i])) return;
+		this.seen = { ...this.seen, [item]: keys };
+	}
+
 	setBlock(item: string, block: Block | null): void {
 		const was = this.block[item];
 		if (block ? was?.src === block.src && was?.key === block.key : !was) return;

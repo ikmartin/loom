@@ -35,7 +35,7 @@
 
 <svelte:window onpointerdown={away} />
 
-<main class="lv" data-testid="library-view">
+<main class="lv" data-testid="library-view" data-open-work={lib.tab === 'works' ? undefined : lib.tab}>
 	<div class="tabs" role="tablist">
 		<button type="button" class="tab doc-tab pin" class:on={lib.tab === 'works'} role="tab" aria-selected={lib.tab === 'works'} title={words.tabs.works} data-testid="library-tab-works" onclick={() => lib.show('works')}><span class="name">{words.tabs.works}</span></button>
 		{#each lib.open as ref (ref)}

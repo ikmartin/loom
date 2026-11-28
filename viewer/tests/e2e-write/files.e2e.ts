@@ -215,7 +215,7 @@ test('words selected in a Markdown file are annotated on the file, marked there,
 	await expect(words).toBeVisible();
 	await selectAll(words);
 	await page.getByTestId('selection-actions').click();
-	await page.getByTestId('selection-annotate').click();
+	await page.getByTestId('selection-comment').click();
 	// the comment box opens on the words, which its Annotate writes with nothing said
 	await page.getByTestId('popup-save').click();
 	// on the file by its path, its quote the file's own words, links and all

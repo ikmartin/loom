@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The actions at a selection, on documents and PDF pages alike: a button at the end of the words, which a click (never a hover) opens into **Quote**, **Ask your agent**, **Annotate** and **New note**. Pressing it or an action never ends the selection (`AtSelection` swallows the press), so the words stay lit while the menu is open. Quote copies the words with a link to where they are and writes nothing; Ask your agent opens the box that copies a request about them (`agents/AskAgent`); Annotate, the host's, opens the comment box on them in a document and marks them on a PDF page, and is absent where they are marked already (Annotate's tool on) or annotating is not served; New note runs the person's command on the link (`notes/newNote.ts`). A view's own control goes before the button (`before`: Add comment, after Annotate marked the words) and its own actions after it (`more`, the Library's digest).
+	// The actions at a selection, on documents and PDF pages alike: a button at the end of the words, which a click (never a hover) opens into **Quote**, **Ask your agent**, **Comment** and **New note**. Pressing it or an action never ends the selection (`AtSelection` swallows the press), so the words stay lit while the menu is open. Quote copies the words with a link to where they are and writes nothing; Ask your agent opens the box that copies a request about them (`agents/AskAgent`); Comment, the host's, opens the comment box on them in a document and marks them on a PDF page, and is absent where they are marked already (Annotate's tool on) or annotating is not served; New note runs the person's command on the link (`notes/newNote.ts`). A view's own control goes before the button (`before`: Add comment, after Annotate marked the words) and its own actions after it (`more`, the Library's digest).
 	import type { Snippet } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { copyText } from '$lib/clipboard';
@@ -86,7 +86,7 @@
 	}
 
 	function ask(): void {
-		// the request quotes the words as the reader sees them: math as written, a citation or a reference as drawn
+		// the request quotes the words as the reader sees them: math as its symbols, a citation or a reference as drawn
 		const place = { name, href: withoutQuote(link), words: (range && readOf(range)) || read || text };
 		window.getSelection()?.removeAllRanges();
 		open = false;
@@ -117,7 +117,7 @@
 			<span class="menu" class:up={flip.up} class:left={flip.left} role="menu" aria-label={words.menu.menu} data-testid="selection-menu">
 				<button type="button" role="menuitem" title={words.menu.quoteHover} data-testid="quote-offer" onclick={() => void quote()}><Icon name="quote" size={15} />{words.menu.quote}</button>
 				<button type="button" role="menuitem" title={agentsWords.ask.hoverWords} data-testid="selection-ask" onclick={ask}><Icon name="ask" size={15} />{agentsWords.ask.open}</button>
-				{#if annotate}<button type="button" role="menuitem" title={words.menu.annotateHover} data-testid="selection-annotate" onclick={mark}><Icon name="highlighter" size={15} />{words.menu.annotate}</button>{/if}
+				{#if annotate}<button type="button" role="menuitem" title={words.menu.commentHover} data-testid="selection-comment" onclick={mark}><Icon name="highlighter" size={15} />{words.menu.comment}</button>{/if}
 				{#if notes}<button type="button" role="menuitem" title={words.menu.newNoteHover} data-testid="selection-new-note" onclick={note}><Icon name="note" size={15} />{words.menu.newNote}</button>{/if}
 			</span>
 		{/if}

@@ -310,7 +310,7 @@ test.describe('the toolbar', () => {
 		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
 		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
-		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
+		await expect(page.getByTestId('selection-comment')).toHaveCount(0);
 		await page.keyboard.press('Escape');
 		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
 		await expect(tool).toHaveAttribute('aria-pressed', 'true');
@@ -1239,7 +1239,7 @@ test.describe('Quote', () => {
 		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
 		// annotating and New note need a publisher that takes them
-		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
+		await expect(page.getByTestId('selection-comment')).toHaveCount(0);
 		await expect(page.getByTestId('selection-new-note')).toHaveCount(0);
 	});
 });
@@ -1252,12 +1252,15 @@ test.describe('the actions at a selection', () => {
 		await markOf(page, 'a-2026-09-16-ecnav2').scrollIntoViewIfNeeded();
 		await selectWithin(markOf(page, 'a-2026-09-16-ecnav2'));
 		const opener = page.getByTestId('selection-actions');
+		// the button is named for what it opens, as hover text and to a screen reader
+		await expect(opener).toHaveAccessibleName('Quote, ask your agent, comment or start a note');
+		await expect(opener).toHaveAttribute('title', 'Quote these words, ask your agent about them, comment on them or start a note on them');
 		await opener.hover();
 		await page.waitForTimeout(400);
 		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
 		await opener.click();
 		await expect(page.getByTestId('selection-menu')).toBeVisible();
-		await expect(page.getByTestId('selection-menu').getByRole('menuitem')).toHaveText(['Quote', 'Ask your agent', 'Annotate', 'New note']);
+		await expect(page.getByTestId('selection-menu').getByRole('menuitem')).toHaveText(['Quote', 'Ask your agent', 'Comment', 'New note']);
 		expect(await page.evaluate(() => getSelection()!.toString())).toContain('finite widget');
 		// a reasonable size: the button and each action are tall enough to hit
 		for (const at of [opener, page.getByTestId('selection-new-note')]) expect((await at.boundingBox())!.height).toBeGreaterThanOrEqual(26);
@@ -1266,13 +1269,13 @@ test.describe('the actions at a selection', () => {
 		await expect(opener).toBeVisible();
 	});
 
-	test('Annotate opens the comment box on exactly the words selected, and writes them as its quote with what is said', async ({ page }) => {
+	test('Comment opens the comment box on exactly the words selected, and writes them as its quote with what is said', async ({ page }) => {
 		const sent = await writes(page, ['annotate', 'new-note']);
 		await page.goto('/master/drafting/main');
 		await markOf(page, 'a-2026-09-16-ecnav2').scrollIntoViewIfNeeded();
 		await selectWithin(markOf(page, 'a-2026-09-16-ecnav2'));
 		await page.getByTestId('selection-actions').click();
-		await page.getByTestId('selection-annotate').click();
+		await page.getByTestId('selection-comment').click();
 		const draft = popup(page);
 		await expect(draft).toBeVisible();
 		expect(sent.annotate).toBeUndefined();
@@ -1290,9 +1293,9 @@ test.describe('the actions at a selection', () => {
 		await page.getByTestId('selection-actions').click();
 		await page.getByTestId('selection-ask').click();
 		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
-		await expect(page.getByTestId('ask-request')).toHaveText('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex#sy-0003), at the words “finite widget”.');
+		await expect(page.getByTestId('ask-request')).toHaveText('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex), at the words “finite widget”.');
 		await page.getByTestId('ask-words').fill('Is finite needed?');
-		await expect.poll(() => page.getByTestId('ask-request').textContent()).toBe('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex#sy-0003), at the words “finite widget”.\n\nIs finite needed?');
+		await expect.poll(() => page.getByTestId('ask-request').textContent()).toBe('In loom, look at main.tex, Theorem 2.1 (quilt:drafting/main.tex), at the words “finite widget”.\n\nIs finite needed?');
 		await page.getByTestId('ask-copy').click();
 		await expect(page.getByTestId('ask-agent')).toHaveCount(0);
 		expect(Object.keys(sent)).toEqual([]);

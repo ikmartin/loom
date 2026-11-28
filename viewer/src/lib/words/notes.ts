@@ -1,23 +1,23 @@
-// Notes' words: the actions at a selection (Quote, Annotate, New note), New note in an item's toolbar, what a new note's toast says, the Notes list of a quilt's note files, and Settings › Notes. An entry is named for the place it shows, with a comment saying where, on one line.
+// Notes' words: the actions at a selection (Quote, Ask your agent, Comment, New note), New note in an item's toolbar, what a new note's toast says, the Notes list of a quilt's note files, and Settings › Notes. An entry is named for the place it shows, with a comment saying where, on one line.
 
 export const notes = {
 	/** The actions at the end of a selection, on documents and PDF pages alike. */
 	menu: {
 		/** Hover text on the button standing at the end of a selection, which a click opens. */
-		hover: 'Quote, annotate or start a note on these words',
+		hover: 'Quote these words, ask your agent about them, comment on them or start a note on them',
 		/** The button's accessible name. */
-		label: 'Actions on the words selected',
+		label: 'Quote, ask your agent, comment or start a note',
 		/** The menu's accessible name. */
 		menu: 'What to do with the words selected',
 		/** The first action: copy the words and where they came from. */
 		quote: 'Quote',
 		/** Hover text on Quote. */
 		quoteHover: 'Copy the words, with where they came from, to paste to your agent',
-		/** The second action: mark the words in the look in hand. */
-		annotate: 'Annotate',
-		/** Hover text on Annotate. */
-		annotateHover: 'Mark the words in the look in hand, to comment on them',
-		/** The third action: run the person's new-note command with a link to the words. */
+		/** The third action: mark the words in the look in hand, with a comment; the Comment tool's name, since an annotation's words are its comment. */
+		comment: 'Comment',
+		/** Hover text on Comment. */
+		commentHover: 'Mark the words in the look in hand and write a comment on them',
+		/** The fourth action: run the person's new-note command with a link to the words. */
 		newNote: 'New note',
 		/** Hover text on New note at a selection. */
 		newNoteHover: 'Start a note of your own on these words, with a link back to them'
