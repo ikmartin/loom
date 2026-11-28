@@ -35,6 +35,8 @@
 	const filtered = $derived(!!(severity || code || words));
 	// a quilt with no document of the person's has had nothing checked, which is not "nothing is wrong"
 	const documents = $derived(m.masters.some((x) => !isAgentDocument(x)));
+	// what Review asks about the person's citations, which is no fault here, counted where it waits
+	const cited = $derived(rv.counts.value?.kinds.cited ?? 0);
 	const counts = $derived(Object.fromEntries(SEVERITIES.map((s) => [s, shown.filter((d) => d.severity === s).length])));
 	const pick = (v: string) => void setQuery(page.url, 'severity', severity === v ? '' : v);
 	// what the person opened or folded, kept across the manifest drawn again after an act
@@ -130,6 +132,10 @@
 			<Empty text={filtered && all.yours.length ? reviewWords.problems.unmatched : documents ? reviewWords.problems.none : reviewWords.problems.noDocument} testid="problems-none" />
 		{/if}
 	</section>
+
+	{#if rv.served && cited}
+		<p class="whose" data-testid="problems-cited">{reviewWords.problems.cited(cited)} <a href={route('/review')} onclick={() => rv.choose('cited')} data-testid="problems-cited-link">{reviewWords.kinds.cited.name}</a>.</p>
+	{/if}
 
 	{#if parts.copy.length}
 		<details class="part" open={isOpen('copy', false)} ontoggle={toggled('copy')} data-testid="problems-copy">

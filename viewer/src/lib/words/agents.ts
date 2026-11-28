@@ -101,7 +101,9 @@ export const agents = {
 	/** The setup card, in the panel with nothing set up and always in Settings › Agents. */
 	setup: {
 		/** Above the apps' buttons, with nothing set up. */
-		lead: 'An agent in Claude or Codex can work in this folder through loom: it reads what you read, comments on it, and suggests edits for you to keep or discard. Nothing is written here until you choose an app.',
+		lead: 'An agent in Claude or Codex can work in this folder through loom: it reads what you read, comments on it, and suggests edits for you to keep or discard.',
+		/** Under the lead, above the buttons: what one press writes, at once, so the press is the person's yes. */
+		writes: "Pressing Use with Claude or Use with Codex sets this folder up for that app at once. It writes the files the app reads here: a line in the file it reads on starting, the permissions loom gives its agent, how it starts loom, and a skill for each of the quilt's modes; and, the first time, what agents are told, in loom's own folder. Nothing is written before you press one.",
 		/** The button that sets the quilt up for an app. */
 		use: (app: string) => `Use with ${app}`,
 		/** The same button for a second app, once one is set up. */

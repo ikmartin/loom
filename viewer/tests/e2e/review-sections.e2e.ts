@@ -54,6 +54,24 @@ test('History\'s Sessions lists every session with when it was last active, and 
 	await expect(page.locator('body')).not.toContainText(/writing in|write here|session chosen/i);
 });
 
+test('at 760 with the column open, a session whose name wraps opens wherever its name is clicked', async ({ page }) => {
+	await page.setViewportSize({ width: 760, height: 800 });
+	await serve(page, (m) => {
+		m.sessions.find((s: { id: string }) => s.id === REFEREE).title = 'referee the second reading of the rank theorem and of everything its proof reaches';
+	});
+	await page.goto('/review/record/sessions');
+	const fold = page.getByTestId('panel-fold');
+	if ((await fold.getAttribute('aria-expanded')) === 'false') await fold.click();
+	await expect(fold).toHaveAttribute('aria-expanded', 'true');
+	const name = page.getByTestId(`session-row-${REFEREE}`).getByRole('link');
+	// wrapped onto several lines, the name is one box, so the middle of it is the name too
+	const box = (await name.boundingBox())!;
+	expect(box.height).toBeGreaterThan(30);
+	expect(await name.evaluate((a) => a.getClientRects().length)).toBe(1);
+	await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+	await expect(page).toHaveURL(new RegExp(`/session/${REFEREE}`));
+});
+
 test('History shows a document’s versions oldest first and Now, every act recorded on its own tab, and flags a version no live draft leads to', async ({ page }) => {
 	await serve(page, (m) => {
 		const oldest = m.canon[0];

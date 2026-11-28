@@ -40,7 +40,7 @@ const W: Record<string, N> = {
 	'tq-020E': { name: 'Lemma 5.7', src: 'arden24', st: 'unchecked', ex: 'An exchange preserves balance.' },
 	'tq-02D4': { name: 'Definition 4.1', title: 'Exchange', src: 'arden24', st: 'checked', ex: 'An exchange between two weightings is …' },
 	'tq-0201': { name: 'Definition 1.2', title: 'Cycle space', src: 'arden24', st: 'checked', ex: 'The cycle space of Q is the kernel 𝒵(Q) of the divergence map …' },
-	'tq-0203': { name: 'Proposition 2.1', src: 'arden24', st: 'assumed', s: ['tq-0201'], ex: 'The image of the divergence map … has rank |V(Q)| − c.' },
+	'tq-0203': { name: 'Proposition 2.1', src: 'arden24', st: 'assumed', s: ['tq-0201'], ex: 'The image of the divergence map is the lattice of vectors in $\\ZZ^{V(Q)}$ summing to zero on each component; it has rank |V(Q)| − c.' },
 	'tq-020G': { name: 'Lemma 5.9', title: 'Exchange bound', src: 'arden24', st: 'unchecked', p: ['tq-00K9'], ex: 'If w ⪯ w′ differ on one cycle, then ‖w − w′‖ ≤ …' },
 	'tq-05A1': { name: 'Theorem 5.1', title: 'Extension criterion', src: 'arden25', st: 'unchecked', ex: 'A weighting of a full subquiver extends iff …' },
 	'tq-04A1': { name: 'Theorem 2.3', src: 'okafor', st: 'stub' },
@@ -54,6 +54,9 @@ const W: Record<string, N> = {
 };
 
 const SHORT: Record<string, [string, string]> = { arden24: ['Arden 2024', 'Cycle spaces of finite quivers'], arden25: ['Arden 2025', 'Cycle spaces of finite quivers'], okafor: ['Okafor 2022', 'Median orders on weighting lattices'], smith: ['Smith 2024', 'Widgets and their bounds'], jones: ['Jones 2019', 'Covering estimates'] };
+
+/** A work's macros node, as `library-node` gives it: Arden 2024's, which its statements' `\\ZZ` needs; none for the others. */
+const MACROS: Record<string, { node: string; hash: string; body: string }> = { arden24: { node: 'tq-0200-macros', hash: 'sha256:0200', body: '\\newcommand{\\ZZ}{\\mathbb{Z}}\n' } };
 
 const own = (id: string) => W[id].src.endsWith('.tex');
 /** A work's reference: the Library's for round six's works, its own key for a work of the large web. */
@@ -199,7 +202,7 @@ export function webFocus(refs: Record<string, string>, a: { scope: WebScope; doc
 	if (!n) return null;
 	const inS = (k: string) => inScope(k, a.scope, a.doc);
 	const row = (k: string) => rowOf(k, refs);
-	const statement = own(id) ? { fragment: `fixture/web/${id}.html` } : n.ex ? { body: n.ex, macros: null, points: {} } : null;
+	const statement = own(id) ? { fragment: `fixture/web/${id}.html` } : n.ex ? { body: n.ex, macros: MACROS[n.src] ?? null, points: {} } : null;
 	const users = usedBy(id).filter(inS);
 	return {
 		row: row(id),

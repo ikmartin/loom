@@ -30,6 +30,8 @@ test('a draft and what it rests on lists the draft, then the library a work at a
 	await page.getByTestId('web-standing').getByRole('button', { name: 'Proposition 2.1 of Arden 2024' }).click();
 	await expect(card).toContainText('Proposition 2.1');
 	await expect(card).toContainText('assumed in Lean');
+	// a library result's statement is drawn with its work's macros, which come as the macros node
+	await expect(card).toContainText('summing to zero on each component');
 	await page.locator('.trail').getByRole('button', { name: 'Theorem 3.4' }).click();
 	await expect(card).toContainText('Theorem 3.4 Bounded balanced weightings');
 	await expect(page.getByTestId('web-standing')).toContainText('Not formalized. It rests on');

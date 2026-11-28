@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, Problems among them by its name, which opens Review's Problems page with the count of what is wrong in the person's own files, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds drawn from the manifest, Results to accept and Proposed edits, are counted as their rows are drawn (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
+	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, Problems among them by its name, which opens Review's Problems page with the count of what is wrong in the person's own files, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. Every count is what choosing its entry would list: under a draft each kind counts its rows in that draft, and each draft counts what the kind shown holds there (loom's whole list, its rows' `docs`). The two kinds drawn from the manifest, Results to accept and Proposed edits, are counted as their rows are drawn (`views/review/yours.ts`), and Everything and each draft with them.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { route } from '$lib/paths';
@@ -17,7 +17,7 @@
 	$effect(() => {
 		void gen.gen;
 		void rv.counts.load('counts', (s) => api.reviewCounts(s));
-		for (const k of YOURS) void rv.theirs[k].load(`theirs:${k}`, (s) => api.reviewList(k, undefined, s));
+		void rv.whole.load('whole', (s) => api.reviewList('all', undefined, s));
 	});
 
 	const m = $derived(store.manifest);
@@ -30,16 +30,23 @@
 	function draftCount(d: { doc: string; n: number }): number {
 		let n = d.n;
 		for (const k of YOURS) {
-			const t = theirs(rv.theirs[k].value, d.doc);
+			const t = theirs(rv.whole.value, d.doc, [k]);
 			if (t === null) return d.n;
 			n += ours(k, d.doc) - t;
 		}
 		return n;
 	}
+	/** What one kind, or the agents' tasks, holds in one draft: as drawn for the two from the manifest, else loom's rows there; '' before loom's whole list is read. */
+	function inDraft(kind: ReviewKind | 'agents', doc: string): number | '' {
+		if (isYours(kind)) return m ? ours(kind, doc) : '';
+		return theirs(rv.whole.value, doc, kind === 'agents' ? ['agents'] : (READS[kind] ?? [kind])) ?? '';
+	}
+	/** A draft's entry: what the list would show choosing it, the kind shown in that draft. */
+	const draftShown = (d: { doc: string; n: number }) => (rv.kind === 'all' ? draftCount(d) : inDraft(rv.kind, d.doc));
 
 	const counts = $derived(rv.counts.value);
 	const everything = $derived(counts ? counts.everything + YOURS.reduce((n, k) => n + ours(k) - (counts.kinds[k] ?? 0), 0) : undefined);
-	// a draft's count is its entry in `drafts`; the kinds are counted for every draft only, so under a draft they show none
+	// a draft's whole count is its entry in `drafts`, made what is drawn for the two kinds from the manifest
 	const draft = $derived(rv.doc ? counts?.drafts.find((d) => d.doc === rv.doc) : undefined);
 	const kinds = $derived(COLUMN_ORDER.filter((k) => loomCount(k) !== undefined));
 	const inList = $derived(page.route.id === '/review');
@@ -77,7 +84,7 @@
 				>
 			{:else}
 				<button type="button" class:on={on(k)} aria-current={on(k) ? 'true' : undefined} data-testid="review-kind-{k}" use:hovercard={{ text: words.kinds[k].hover, place: 'beside' }} onclick={() => pick(k)}
-					><span class="t">{words.kinds[k].name}</span><span class="n">{rv.doc ? '' : kindCount(k)}</span></button
+					><span class="t">{words.kinds[k].name}</span><span class="n">{rv.doc ? inDraft(k, rv.doc) : kindCount(k)}</span></button
 				>
 			{/if}
 		{/each}
@@ -86,14 +93,14 @@
 		<p class="rl"><span use:hovercard={{ text: words.column.draftsHover, place: 'beside' }}>{words.column.drafts}</span></p>
 		<nav class="navl" aria-label={words.column.drafts}>
 			{#each counts.drafts as d (d.doc)}
-				<button type="button" class:on={inList && rv.doc === d.doc} aria-pressed={rv.doc === d.doc} data-testid="review-draft" onclick={() => narrow(d.doc)}><span class="t">{words.file(d.doc)}</span><span class="n">{draftCount(d)}</span></button>
+				<button type="button" class:on={inList && rv.doc === d.doc} aria-pressed={rv.doc === d.doc} data-testid="review-draft" onclick={() => narrow(d.doc)}><span class="t">{words.file(d.doc)}</span><span class="n">{draftShown(d)}</span></button>
 			{/each}
 		</nav>
 	{/if}
 	<!-- nothing in it needs the person, so it stands apart from what waits for them -->
 	<nav class="navl" aria-label={words.kinds.agents.name}>
 		<button type="button" class:on={on('agents')} aria-current={on('agents') ? 'true' : undefined} data-testid="review-kind-agents" use:hovercard={{ text: words.kinds.agents.hover, place: 'beside' }} onclick={() => pick('agents')}
-			><span class="t">{words.kinds.agents.name}</span><span class="n">{rv.doc ? '' : (counts?.agents ?? '')}</span></button
+			><span class="t">{words.kinds.agents.name}</span><span class="n">{rv.doc ? inDraft('agents', rv.doc) : (counts?.agents ?? '')}</span></button
 		>
 	</nav>
 	<span class="grow"></span>

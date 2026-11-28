@@ -203,7 +203,7 @@ export function yoursCount(kind: YoursKind, m: Manifest, gone: Record<string, un
 	return kind === 'accepted-changed' ? acceptWaiting(m, doc) : changesWaiting(m, gone, doc);
 }
 
-/** How many of loom's rows of one kind concern a draft, from its whole list; null before the list is read. */
-export function theirs(list: ReviewList | null, doc: string): number | null {
-	return list ? list.groups.reduce((n, g) => n + g.rows.filter((r) => r.docs.includes(doc)).length, 0) : null;
+/** How many of loom's rows of the kinds `kinds` concern a draft, from its whole list; null before the list is read. */
+export function theirs(list: ReviewList | null, doc: string, kinds: readonly string[]): number | null {
+	return list ? list.groups.filter((g) => kinds.includes(g.kind)).reduce((n, g) => n + g.rows.filter((r) => r.docs.includes(doc)).length, 0) : null;
 }

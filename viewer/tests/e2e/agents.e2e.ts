@@ -147,6 +147,12 @@ test('Settings › Agents offers the setup card and Set up beside an app not set
 	await settings(page, 'agents');
 	await expect(page.getByTestId('use-claude-code')).toHaveText('Use with Claude');
 	await expect(page.getByTestId('use-codex')).toHaveText('Use with Codex');
+	// a press writes at once, so what it writes is said above the buttons, in words, before it is pressed
+	const writes = page.getByTestId('setup-writes');
+	await expect(writes).toContainText('sets this folder up for that app at once');
+	await expect(writes).toContainText('a skill for each of the quilt');
+	expect(await writes.evaluate((p) => !!(p.compareDocumentPosition(document.querySelector('[data-testid="use-claude-code"]')!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+	await expect(page.getByTestId('settings-window')).not.toContainText('Nothing is written here until you choose an app');
 	await expect(page.getByTestId('agents-apps').getByRole('button', { name: 'Set up' }).first()).toBeVisible();
 	await expect(page.getByTestId('settings-window')).not.toContainText('loom ai init');
 	await expect(page.getByTestId('settings-window')).toContainText('What it sees');
