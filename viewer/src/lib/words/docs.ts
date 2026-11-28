@@ -87,7 +87,10 @@ export const docs = {
 		/** The row for the quilt's research state, in the tree or, where the publisher lists no files, alone. */
 		researchState: 'Research state',
 		/** Hover text on a folded folder in the tree holding the file being read: that file, as a path from the folder. */
-		holds: (file: string) => `Holds ${file}, which is open`
+		holds: (file: string) => `Holds ${file}, which is open`,
+		/** A file's ⇄ in the tree, shown with the pointer or focus on its row: its hover text, and its accessible name with the file's name. With two panes it opens in the other. */
+		beside: 'Open beside, in a second pane',
+		besideLabel: (name: string) => `Open ${name} beside, in a second pane`
 	},
 	picker: {
 		/** The button in Docs' column that opens the library over Docs. */
