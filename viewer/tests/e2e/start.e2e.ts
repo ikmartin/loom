@@ -109,6 +109,39 @@ test('a file dropped on the area is its own, and never the library\'s', async ({
 	expect(sent).toEqual(['/_api/paper-receive', '/_api/paper-import']);
 });
 
+test("a paper dropped anywhere on the empty page, not only on its area, is the area's, and the library's sheet never shows", async ({ page }) => {
+	await nothingToRead(page);
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['paper-receive', 'paper-import', 'paper-choose', 'library-receive', 'library-take'], token: 't' } }));
+	const sent: string[] = [];
+	await page.route('**/_api/*', (r) => {
+		const path = new URL(r.request().url()).pathname;
+		if (r.request().method() === 'POST') sent.push(path);
+		return r.fulfill(path.endsWith('paper-receive') ? { json: { ok: true, drop: '0123456789abcdef', path: 'paper.tar.gz', size: 4 } } : { status: 409, json: { error: { code: 'no-paper', message: 'what was dropped holds no .tex file that begins a document' } } });
+	});
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/');
+	const area = page.getByTestId('paper-drop');
+	await expect(area).toBeVisible();
+	// well below the area, on the page's empty part, as a person drops beside the box
+	const box = (await area.boundingBox())!;
+	const at = { x: box.x + box.width / 2, y: box.y + box.height + 200 };
+	await page.evaluate(({ x, y }) => {
+		const data = new DataTransfer();
+		data.items.add(new File(['tar'], 'arXiv-2012.12270.tar.gz', { type: 'application/gzip' }));
+		const el = document.elementFromPoint(x, y)!;
+		el.dispatchEvent(new DragEvent('dragover', { dataTransfer: data, bubbles: true, cancelable: true, clientX: x, clientY: y }));
+	}, at);
+	await expect(area).toHaveClass(/over/);
+	await expect(page.getByTestId('drop-sheet')).toHaveCount(0);
+	await page.evaluate(({ x, y }) => {
+		const data = new DataTransfer();
+		data.items.add(new File(['tar'], 'arXiv-2012.12270.tar.gz', { type: 'application/gzip' }));
+		document.elementFromPoint(x, y)!.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true, clientX: x, clientY: y }));
+	}, at);
+	await expect(page.getByTestId('paper-drop-said')).toContainText('That holds no LaTeX file that begins a document.');
+	expect(sent).toEqual(['/_api/paper-receive', '/_api/paper-import']);
+});
+
 test('where the publisher takes no paper, a quilt with nothing to read says so', async ({ page }) => {
 	await nothingToRead(page);
 	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: [], token: 't' } }));

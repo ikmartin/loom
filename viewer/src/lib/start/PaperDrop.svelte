@@ -1,11 +1,12 @@
 <script lang="ts">
-	// The drop area on the page of a quilt with nothing to read (`routes/+page.svelte`): a paper, its folder or its source archive dropped on it comes into the quilt as its paper, and a PDF into its library; "or choose a file…" opens the system's file dialog for one (`bring.ts`). Once it is in, the page opens on the paper, or on the library. The area takes its drop for itself, so the library's sheet (`DropZone.svelte`) neither covers it nor takes the files.
+	// The drop area on the page of a quilt with nothing to read (`routes/+page.svelte`): a paper, its folder or its source archive dropped anywhere on the window while it shows comes into the quilt as its paper, and a PDF into its library; "or choose a file…" opens the system's file dialog for one (`bring.ts`). Once it is in, the page opens on the paper, or on the library. While it is mounted it holds the window's drops (`held`), so the library's sheet (`DropZone.svelte`) neither covers the page nor takes the files, wherever they land.
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { landed } from '$lib/manifest/updating.svelte';
 	import { made } from '$lib/shell/made.svelte';
 	import { masterUrl } from '$lib/nav';
 	import { route } from '$lib/paths';
-	import { readDrop } from './drop';
+	import { held, readDrop } from './drop';
 	import { answer, bringDrop, choose, saidOf, type Answer, type Brought, type Said } from './bring';
 	import { docs } from '$lib/words/docs';
 
@@ -23,23 +24,27 @@
 
 	const carries = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
 
+	onMount(() => {
+		held.byStart = true;
+		return () => (held.byStart = false);
+	});
+
 	function dragover(e: DragEvent): void {
 		if (!carries(e)) return;
 		e.preventDefault();
-		e.stopPropagation();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = stage === 'ready' ? 'copy' : 'none';
 		over = stage === 'ready';
 	}
 
+	/** A drag leaving the window, which names nothing it entered. */
 	function dragleave(e: DragEvent): void {
-		if (!(e.currentTarget as Element).contains(e.relatedTarget as Node | null)) over = false;
+		if (!e.relatedTarget) over = false;
 	}
 
 	async function drop(e: DragEvent): Promise<void> {
 		over = false;
 		if (!carries(e)) return;
 		e.preventDefault();
-		e.stopPropagation();
 		if (stage !== 'ready') return;
 		const read = await readDrop(e.dataTransfer!);
 		if (!read) return;
@@ -92,7 +97,9 @@
 	}
 </script>
 
-<div class="area" class:over role="region" aria-label={words.heading} ondragover={dragover} ondragleave={dragleave} ondrop={(e) => void drop(e)} data-testid="paper-drop" data-stage={stage}>
+<svelte:window ondragover={dragover} ondragleave={dragleave} ondrop={(e) => void drop(e)} />
+
+<div class="area" class:over role="region" aria-label={words.heading} data-testid="paper-drop" data-stage={stage}>
 	<h2>{words.heading}</h2>
 	<p>{words.paper[0]}<span class="mono">{words.paper[1]}</span>{words.paper[2]}</p>
 	<p>{words.pdf}</p>
