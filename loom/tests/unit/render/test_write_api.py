@@ -53,6 +53,8 @@ def test_discovery_lists_what_this_publisher_serves(session) -> None:  # type: i
     assert body["capabilities"] == discovery()["capabilities"]
     # the frames origin is named, and it is not this server
     assert body["frames"].startswith("http://127.0.0.1:") and body["frames"] != s.url.rstrip("/")
+    # no home page runs under the test's own HOME, so none is named, and the viewer's Your quilts says how to open one (`test_home.py` has the home that is named)
+    assert "home" not in body
 
 
 def test_a_comment_written_over_http_is_the_same_comment(session) -> None:  # type: ignore[no-untyped-def]
