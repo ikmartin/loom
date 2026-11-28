@@ -1,14 +1,16 @@
 <script lang="ts">
-	// What it did: a session's command log read as its record. **Ran** lists every command once, with how many times and when last, and links what it names, a moved document under where it is now. **Every line, in order** keeps the log as it is, newest at the bottom, so nothing in it is hidden (V3). Annotations belong to no session, so none is listed here.
+	// What it did: a session's command log read as its record. The steps list every command once, said in words by what it did (`stepOf`), with how many times and when last, and link what it names, a moved document under where it is now. The record at the foot keeps the log as loom wrote it, every command, newest at the bottom, folded, so nothing in it is hidden (V3). Annotations belong to no session, so none is listed here.
 	import { store } from '$lib/manifest/client.svelte';
-	import { didOf, type Named } from '$lib/sessions/did';
+	import { didOf, stepOf, type Named } from '$lib/sessions/did';
 	import { when } from '$lib/sessions/when';
 	import { keyName } from '$lib/workspace/names';
+	import { review } from '$lib/words/review';
 	import type { Item } from '../item';
 	import { recordOf } from './session';
 
 	let { item }: { item: Item } = $props();
 
+	const words = review.session;
 	const m = $derived(store.manifest!);
 	const log = $derived(recordOf(m, item.id).log ?? []);
 	const did = $derived(didOf(log));
@@ -22,13 +24,14 @@
 
 <div class="did" data-testid="session-did">
 	{#if log.length}
+		<p class="about" data-testid="did-about">{words.did}</p>
 		{#if did.ran.length}
 			<section data-testid="did-ran">
-				<h3>Ran <span class="n">{did.ran.length} {did.ran.length === 1 ? 'command' : 'commands'}</span></h3>
+				<h3>{words.heading} <span class="n">{did.ran.length}</span></h3>
 				<ul class="ran">
 					{#each did.ran as r (r.command)}
 						<li class="cmd" data-testid="did-command">
-							<code class="command">{r.command}</code>
+							<span class="step" data-testid="did-step">{stepOf(r.command)}</span>
 							<span class="times" data-testid="did-times">{r.count > 1 ? `×${r.count} · ` : ''}{when(r.last)} {clock(r.last)}</span>
 							{#if r.names.length}
 								<span class="names">{#each r.names as n, i (i)}{@const l = named(n)}<a href={l.href} title={l.title} data-testid="did-named">{l.text}</a>{/each}</span>
@@ -39,7 +42,7 @@
 			</section>
 		{/if}
 		<details class="every" data-testid="did-every">
-			<summary>Every line, in order <span class="n">{log.length}</span></summary>
+			<summary title={words.recordHover}>{words.record} <span class="n">{log.length}</span></summary>
 			<ol class="rows">
 				{#each log as e, i (i)}
 					<li class="row" data-testid="did-row">
@@ -50,7 +53,7 @@
 			</ol>
 		</details>
 	{:else}
-		<p class="empty muted">Nothing done through loom in this session yet.</p>
+		<p class="empty muted">{words.none}</p>
 	{/if}
 </div>
 
@@ -119,7 +122,13 @@
 		font-size: 11px;
 		padding-top: 1px;
 	}
-	.empty {
+	.empty,
+	.about {
 		margin: 0;
+	}
+	.about {
+		max-width: var(--measure);
+		color: var(--ink-soft);
+		line-height: 1.5;
 	}
 </style>

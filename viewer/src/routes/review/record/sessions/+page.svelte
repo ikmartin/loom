@@ -10,6 +10,7 @@
 	import { grouped, sessionView, titleOf } from '$lib/sessions/sessions.svelte';
 	import { when } from '$lib/sessions/when';
 	import type { SessionRow } from '$lib/manifest/types';
+	import { review } from '$lib/words/review';
 
 	const m = $derived(store.manifest!);
 	const rows = $derived([...grouped(m).open, ...grouped(m).closed]);
@@ -41,6 +42,7 @@
 	}
 </script>
 
+	<p class="lead" data-testid="sessions-lede">{review.session.lede}</p>
 	{#if !rows.length}
 		<Empty text="No sessions yet. An agent opens its own." testid="sessions-none" />
 	{:else}
@@ -89,6 +91,13 @@
 {/if}
 
 <style>
+	.lead {
+		max-width: var(--measure);
+		margin: 0 0 var(--gap);
+		color: var(--ink-soft);
+		font-size: 13px;
+		line-height: 1.6;
+	}
 	.verbs {
 		white-space: nowrap;
 		text-align: right;

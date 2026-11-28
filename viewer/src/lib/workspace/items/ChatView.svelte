@@ -13,6 +13,7 @@
 	import { carried, isAgent, Transcript } from '$lib/sessions/transcript.svelte';
 	import { when } from '$lib/sessions/when';
 	import { capabilities } from '$lib/write';
+	import { review } from '$lib/words/review';
 	import type { Item } from '../item';
 	import { soleSession } from '../links';
 
@@ -145,6 +146,7 @@
 </script>
 
 <div class="chat" data-testid="chat">
+	<p class="about" data-testid="transcript-about">{review.session.transcript}</p>
 	<div class="log" bind:this={scroller} data-testid="chat-log">
 		<div class="top" bind:this={top} aria-hidden="true"></div>
 		<ol class="messages" data-testid="transcript">
@@ -176,6 +178,17 @@
 		flex-direction: column;
 		height: 100%;
 		min-height: 0;
+	}
+	/* what a transcript is, above it however far it scrolls */
+	.about {
+		flex: none;
+		margin: 0;
+		padding: var(--gap-tight) var(--gap-wide);
+		border-bottom: 1px solid var(--rule);
+		font-family: var(--sans);
+		font-size: 12px;
+		line-height: 1.45;
+		color: var(--ink-soft);
 	}
 	.log {
 		flex: 1 1 auto;

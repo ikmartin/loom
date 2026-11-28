@@ -43,6 +43,9 @@ test.describe('the transcript', () => {
 		await expect(chat.getByTestId('message-40')).toBeInViewport();
 		await expect(chat.getByTestId('message-1')).not.toBeInViewport();
 		await expect(chat.locator('h1, h2')).toHaveCount(0);
+		// above the log however far it scrolls, one line says what a transcript is
+		await expect(chat.getByTestId('transcript-about')).toBeInViewport();
+		await expect(chat.getByTestId('transcript-about')).toContainText('not a copy of its conversation');
 	});
 
 	test('scrolling to the top loads the page before, and the reader stays where they were', async ({ page }) => {

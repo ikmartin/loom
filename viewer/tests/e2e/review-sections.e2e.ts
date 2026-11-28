@@ -34,6 +34,10 @@ test('Review\'s column lists its sections, each counting what waits there, the c
 
 test('History\'s Sessions lists every session with when it was last active, and counts no annotation, each opening its transcript', async ({ page }) => {
 	await page.goto('/review/record/sessions');
+	// what a session and its transcript are, in words, with no command
+	await expect(page.getByTestId('sessions-lede')).toContainText('A session is a stretch of work an agent did in this quilt');
+	await expect(page.getByTestId('sessions-lede')).toContainText('Its transcript is what the agent wrote down there for you');
+	await expect(page.getByTestId('sessions-lede')).not.toContainText(/loom session|--/);
 	const table = page.getByTestId('sessions-table');
 	await expect(table.locator('thead')).not.toContainText('Awaiting an answer');
 	await expect(table.locator('thead')).toContainText('Last active');

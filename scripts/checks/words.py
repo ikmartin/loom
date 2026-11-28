@@ -111,7 +111,6 @@ LEGACY = (
     "viewer/src/lib/workspace/items/FileItem.svelte",
     "viewer/src/lib/workspace/items/NodeControls.svelte",
     "viewer/src/lib/workspace/items/PageMeta.svelte",
-    "viewer/src/lib/workspace/items/SessionDid.svelte",
     "viewer/src/lib/workspace/items/WorkControls.svelte",
     "viewer/src/routes/graph/+page.svelte",
     "viewer/src/routes/loose/+page.svelte",

@@ -1,4 +1,4 @@
-// What it did: a session's command log read as its record. Ran lists every command once, with how many times and what it names, and every line stays, in order, folded at the foot. Annotations belong to no session, so none is listed. Each test is named for the rule it holds.
+// What it did: a session's command log read as its record. Its steps list every command once, said in words, with how many times and what it names, and every line stays, in order, folded at the foot as the agent's own record. Annotations belong to no session, so none is listed. Each test is named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
 import { manifest, QUICK, REFEREE, serve } from '../manifest';
 
@@ -24,16 +24,25 @@ test('every line of the log stays, in order, folded at the foot', async ({ page 
 test('a command run again and again is one row, with how many times, and links what it names', async ({ page }) => {
 	await longLog(page, 60);
 	await page.goto(`/session/${REFEREE}?view=did`);
-	const ran = page.getByTestId('did-ran').getByTestId('did-command').filter({ hasText: 'loom source sy-0000 --closure' });
+	const ran = page.getByTestId('did-ran').getByTestId('did-command').filter({ has: page.locator('a[href="quilt:sy-0000"]') });
 	await expect(ran).toHaveCount(1);
+	await expect(ran.getByTestId('did-step')).toHaveText("Read a result's source");
 	await expect(ran.getByTestId('did-times')).toContainText('×7 ·');
 	await expect(ran.getByTestId('did-named')).toHaveAttribute('href', 'quilt:sy-0000');
 	await expect(page.getByTestId('did-recorded')).toHaveCount(0);
 });
 
+test('the steps say what the agent did in words, and show no command until the record is opened', async ({ page }) => {
+	await serve(page, (m) => (m.threads[REFEREE].log = [{ time: '2026-09-16T11:00:00Z', command: 'loom write state' }]));
+	await page.goto(`/session/${REFEREE}?view=did`);
+	await expect(page.getByTestId('did-about')).toContainText('Each step the agent took through loom');
+	await expect(page.getByTestId('did-step')).toHaveText('Wrote the research state');
+	await expect(page.getByTestId('session-did').getByText('loom write state')).toBeHidden();
+});
+
 test('with an empty log it says so in one line, rather than a section over nothing', async ({ page }) => {
 	await serve(page, (m) => (m.threads[QUICK].log = []));
 	await page.goto(`/session/${QUICK}?view=did`);
-	await expect(page.getByTestId('session-did')).toHaveText('Nothing done through loom in this session yet.');
+	await expect(page.getByTestId('session-did')).toHaveText('No step through loom in this session yet. What the agent wrote for you is in its Transcript.');
 	await expect(page.getByTestId('did-row')).toHaveCount(0);
 });
