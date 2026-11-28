@@ -289,6 +289,11 @@ export const frame = {
 		/** The heading of the page shown when the manifest could not be read. */
 		problems: 'Problems',
 		/** The page shown while the manifest is loading. */
-		loading: 'Loading the quilt…'
+		loading: 'Loading the quilt…',
+		/** The page shown while a quilt's first build runs, before it has anything to show: what loom is doing, and what follows. */
+		making: 'Making this quilt: loom is reading its files and typesetting its documents.',
+		makingSub: 'They open here once it is done, which the first time can take a few minutes.',
+		/** The page shown when a quilt's first build ended without publishing, above loom's own line saying why. */
+		unmade: 'Loom could not make this quilt. What stopped it:'
 	}
 } as const;

@@ -37,6 +37,7 @@
 	import { capabilities } from '$lib/write';
 	import Home from '$lib/home/Home.svelte';
 	import { homePage } from '$lib/home/listing.svelte';
+	import { updating } from '$lib/manifest/updating.svelte';
 
 	let { children } = $props();
 
@@ -57,6 +58,9 @@
 	$effect(() => prefs.apply());
 
 	const m = $derived(store.manifest);
+	// a missing manifest is a quilt whose first build has not published while a loom server says so, and a problem only once the publisher has said how its builds stand
+	const missing = $derived(!m && store.problem?.code === 'viewer:manifest-missing');
+	const making = $derived(missing && (updating.making || updating.unmade !== null));
 
 	// MathJax is two megabytes of script. Loading it while the browser is idle, once the corpus's macros are known, means the first page with mathematics does not wait for it.
 	let warmed = false;
@@ -163,7 +167,17 @@
 	panel={panel.snippet ? pagePanel : undefined}
 	panelLabel={panel.label}
 >
-	{#if store.problem && !m}
+	{#if making}
+		<main class="page" data-testid="quilt-making">
+			{#if updating.unmade === null}
+				<p>{frame.page.making}</p>
+				<p class="muted">{frame.page.makingSub}</p>
+			{:else}
+				<p>{frame.page.unmade}</p>
+				{#if updating.unmade}<p class="why">{updating.unmade}</p>{/if}
+			{/if}
+		</main>
+	{:else if store.problem && !m && !(missing && !updating.known)}
 		<main class="page">
 			<h1>{frame.page.problems}</h1>
 			<Diagnostics items={[store.problem]} />
@@ -194,3 +208,12 @@
 <Toast />
 <NameAsk />
 {/if}
+
+<style>
+	.why {
+		font: 12px/1.5 var(--mono);
+		color: var(--ink-soft);
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+</style>

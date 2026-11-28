@@ -142,6 +142,33 @@ test("a paper dropped anywhere on the empty page, not only on its area, is the a
 	expect(sent).toEqual(['/_api/paper-receive', '/_api/paper-import']);
 });
 
+/** A loom server whose first build has not ended until `built.published` or `built.failed` says so: its manifest is missing until it publishes, and its stream says how its builds ended. */
+async function firstBuild(page: Page, built: { published: number; failed: number; why: string | null }): Promise<void> {
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: [], token: 't', stream: true } }));
+	await page.route('**/_api/stream', (r) => r.fulfill({ contentType: 'text/event-stream', body: `retry: 100\nevent: built\ndata: ${JSON.stringify({ server: 7, ...built })}\n\n` }));
+	await page.route('**/build/manifest.json', (r) => (built.published ? r.fallback() : r.fulfill({ status: 404, body: '' })));
+}
+
+test('a quilt opened before its first build says it is being made, and opens once that build lands, with no reload', async ({ page }) => {
+	const built = { published: 0, failed: 0, why: null };
+	await firstBuild(page, built);
+	await page.goto('/');
+	await expect(page.getByTestId('quilt-making')).toContainText('Making this quilt');
+	await expect(page.getByText('manifest-missing')).toHaveCount(0);
+	await expect(page.getByText('Problems')).toHaveCount(0);
+	built.published = 1;
+	await expect(page).toHaveURL(/\/file\/README\.md$/);
+	await expect(pane(page, 0).getByTestId('file-item')).toContainText('The synthetic quilt: invented mathematics');
+});
+
+test('a first build that fails says that the quilt could not be made, and why, in words', async ({ page }) => {
+	await firstBuild(page, { published: 0, failed: 1, why: 'main.tex: Emergency stop' });
+	await page.goto('/');
+	await expect(page.getByTestId('quilt-making')).toContainText('Loom could not make this quilt');
+	await expect(page.getByTestId('quilt-making')).toContainText('main.tex: Emergency stop');
+	await expect(page.getByText('manifest-missing')).toHaveCount(0);
+});
+
 test('where the publisher takes no paper, a quilt with nothing to read says so', async ({ page }) => {
 	await nothingToRead(page);
 	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: [], token: 't' } }));
