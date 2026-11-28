@@ -99,6 +99,25 @@ test('the bar undoes a kept suggestion, which waits again', async ({ page }) => 
 	await expect(page.getByTestId('review-undo')).toHaveCount(0);
 });
 
+test('an undone Keep is a card again at once, before a publication lists it again', async ({ page }) => {
+	let listed = rows;
+	await serve(page, (m) => (m.changes = listed));
+	const sent = await serving(page);
+	await page.goto('/review');
+	await card(page, SUGGESTED).getByTestId('card-keep').click();
+	await expect(card(page, SUGGESTED)).toHaveCount(0);
+	// the publication after the Keep lists it no more, and none after the undo lists it yet
+	listed = rows.filter((r) => r.id !== SUGGESTED);
+	await page.waitForResponse('**/build/manifest.json');
+	await page.getByTestId('review-undo').click();
+	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED], quilt: 'q-test' });
+	await expect(card(page, SUGGESTED)).toHaveCount(1, { timeout: 2000 });
+	// the publication that lists it again shows it once
+	listed = rows;
+	await page.waitForResponse('**/build/manifest.json');
+	await expect(card(page, SUGGESTED)).toHaveCount(1);
+});
+
 test("Keep all and Discard all act on a document's ready changes, saying what each does", async ({ page }) => {
 	await withChanges(page);
 	const sent = await serving(page);

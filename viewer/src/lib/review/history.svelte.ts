@@ -6,7 +6,8 @@
 import { refusalOf } from '$lib/library/said';
 import { review } from '$lib/words/review';
 import { store } from '$lib/manifest/client.svelte';
-import type { Annotation, Look } from '$lib/manifest/types';
+import type { Annotation, Look, PendingChange } from '$lib/manifest/types';
+import { updating } from '$lib/manifest/updating.svelte';
 import { capabilities, onCapabilities, write, type Capabilities, type WriteResult } from '$lib/write';
 import { plain, typeById } from './annotating.svelte';
 import { mark, prune, unmark } from './acted.svelte';
@@ -29,6 +30,8 @@ interface Step {
 	keeps?: string[];
 	/** For the Keep of suggestions, the quilt it was made in, which its undo names so that no other quilt's server does it. */
 	quilt?: string;
+	/** For the Keep of suggestions, their rows as the manifest listed them before, shown pending again the moment the undo is answered (`store.hold`); none for a step a reload brought back. */
+	rows?: PendingChange[];
 }
 
 /** A delete held at the foot of the window while it stands. */
@@ -279,24 +282,31 @@ function asStep(res: ChangeAnswer, title: string): StepResult & ChangeAnswer {
 	return res;
 }
 
-/** The Keep of suggestions `ids`, which loom wrote in: undone by `change-undo`, which takes their words out again and opens them, and done again by keeping them again. */
-function kept(ids: string[], quilt: string): Step {
+/** The Keep of suggestions `ids`, which loom wrote in: undone by `change-undo`, which takes their words out again and opens them, back in the lists from its answer (`rows`, held until the publication lands), and done again by keeping them again. */
+function kept(ids: string[], quilt: string, rows: PendingChange[] = []): Step {
 	const step: Step = {
 		label: ids.length === 1 ? 'keep' : `keep of ${ids.length} suggestions`,
 		keeps: ids,
 		quilt,
+		rows,
 		undo: async () => {
 			const res = asStep((await run('change-undo', { changes: step.keeps, quilt: step.quilt })) as ChangeAnswer, 'Not all undone');
 			if (res.ok) {
 				step.keeps = res.done ?? step.keeps;
+				const back = new Set(step.keeps);
+				store.hold((step.rows ?? []).filter((r) => back.has(r.id)), updating.on ? updating.idle() : undefined);
 				unmark(step.keeps ?? []);
 			}
 			return res;
 		},
 		redo: async () => {
+			const before = pending(store.manifest);
 			const { res, done } = await act('change-keep', { changes: step.keeps ?? [] });
 			const again = asStep({ ...res, done }, 'Not all kept again');
-			if (again.ok && done.length) step.keeps = done;
+			if (again.ok && done.length) {
+				step.keeps = done;
+				step.rows = before.filter((c) => done.includes(c.id));
+			}
 			return again;
 		}
 	};
@@ -318,13 +328,13 @@ function kept(ids: string[], quilt: string): Step {
  */
 export const keepChanges = recorded(async (which: Which): Promise<ChangeAnswer> => {
 	// what loom will write in: a suggestion the manifest lists ready; one taken already is kept with nothing written
-	const writes = new Set(pending(store.manifest).filter((c) => c.kind === 'suggested' && c.state === 'ready').map((c) => c.id));
+	const writes = new Map(pending(store.manifest).filter((c) => c.kind === 'suggested' && c.state === 'ready').map((c) => [c.id, c]));
 	const { res, suggested } = await act('change-keep', which);
 	const wrote = suggested.filter((id) => writes.has(id));
 	if (wrote.length) {
 		// a step names the quilt it was made in, so none is kept before the server has said which it serves
 		if (serving === undefined) follow(await capabilities());
-		if (serving) push(kept(wrote, serving));
+		if (serving) push(kept(wrote, serving, wrote.map((id) => writes.get(id) as PendingChange)));
 	}
 	return res;
 });
