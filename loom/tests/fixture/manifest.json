@@ -802,25 +802,25 @@
   {
    "answers": null,
    "at": [
-    195,
-    222
+    282,
+    305
    ],
    "author": null,
    "block": null,
    "comment": null,
    "comment_html": null,
    "created": null,
-   "diff": "changes/c-5a59b9ba.diff",
+   "diff": "changes/c-08cf8655.diff",
    "documents": [],
-   "id": "c-5a59b9ba",
+   "id": "c-08cf8655",
    "key": null,
    "kind": "edit",
-   "new": "locus, and by nothing else.",
-   "new_html": "<p data-from=\"tex\" data-src=\"drafting/review-02d2c92515102c16ae3d.tex:0:26\"> locus, and by nothing else.\n  </p>",
-   "old": "locus.",
-   "path": "notes/intro.md",
+   "new": "text, and nothing else.",
+   "new_html": "<p data-from=\"tex\" data-src=\"drafting/review-a9214d8c531ba6344011.tex:0:22\"> text, and nothing else.\n  </p>",
+   "old": "text.",
+   "path": "drafting/old.tex",
    "place": {
-    "src": "notes/intro.md:195:222"
+    "src": "drafting/old.tex:282:305"
    },
    "state": "ready",
    "why": null
@@ -2544,7 +2544,7 @@
    "path": "drafting/nodes/sy-999E.tex"
   },
   {
-   "bytes": 320,
+   "bytes": 338,
    "denied": null,
    "kind": "tex",
    "path": "drafting/old.tex"

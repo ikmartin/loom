@@ -203,6 +203,18 @@
     "rows": [
      {
       "by": null,
+      "change": "c-08cf8655",
+      "doc": null,
+      "docs": [],
+      "key": null,
+      "kind": "edits",
+      "row": "edits:c-08cf8655",
+      "state": "ready",
+      "type": "edit",
+      "where": null
+     },
+     {
+      "by": null,
       "change": "c-0f621ccf",
       "doc": "drafting/main.tex",
       "docs": [
@@ -214,30 +226,6 @@
       "state": "ready",
       "type": "edit",
       "where": "Definition 1.1"
-     },
-     {
-      "by": null,
-      "change": "c-5a59b9ba",
-      "doc": null,
-      "docs": [],
-      "key": null,
-      "kind": "edits",
-      "row": "edits:c-5a59b9ba",
-      "state": "ready",
-      "type": "edit",
-      "where": null
-     },
-     {
-      "by": null,
-      "change": "c-8ed02146",
-      "doc": null,
-      "docs": [],
-      "key": null,
-      "kind": "edits",
-      "row": "edits:c-8ed02146",
-      "state": "ready",
-      "type": "edit",
-      "where": null
      },
      {
       "by": "agent",

@@ -11,14 +11,14 @@
     "n": 3
    }
   ],
-  "everything": 14,
+  "everything": 13,
   "kinds": {
    "accepted-changed": 5,
    "attest": 1,
    "attested-changed": 1,
    "check": 0,
    "cited": 0,
-   "edits": 5,
+   "edits": 4,
    "fetch": 1,
    "questions": 1
   },
