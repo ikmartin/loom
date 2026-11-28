@@ -89,12 +89,13 @@
 		here.setSeen(k, onScreen(el, r));
 	}
 
-	/** The results and proofs at least partly on screen in the pane, top to bottom, each once. */
+	/** The results and proofs on screen in the pane, top to bottom, each once: half of one in view, or enough to fill a third of the pane, so the tail of one scrolled past is not offered. */
 	function onScreen(el: HTMLElement, r: DOMRect): string[] {
 		const keys: string[] = [];
 		for (const at of el.querySelectorAll<HTMLElement>('div.env[data-key], details.env-proof[data-key]')) {
 			const b = at.getBoundingClientRect();
-			if (b.bottom <= r.top || b.top >= r.bottom || !b.height) continue;
+			const shown = Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top);
+			if (!b.height || shown <= 0 || (shown < b.height / 2 && shown < r.height / 3)) continue;
 			const key = at.dataset.key;
 			if (key && !keys.includes(key)) keys.push(key);
 		}
