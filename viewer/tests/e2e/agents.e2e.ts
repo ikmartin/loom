@@ -51,6 +51,11 @@ test('the chip stands at the foot of the open column, under the legend, and open
 	await expect(panel.getByTestId('agent-setup')).toBeVisible();
 	await expect(panel).toContainText('What it may change');
 	await expect(panel).toContainText('What it never does');
+	// the files it may only read are a list, one to a line
+	const readOnly = panel.getByTestId('agents-read-only').getByRole('listitem');
+	await expect(readOnly).toHaveText([/^\.loom\/ \(but /, 'config.toml', 'research-state.md']);
+	const tops = await readOnly.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()));
+	for (let i = 1; i < tops.length; i++) expect(tops[i].top).toBeGreaterThanOrEqual(tops[i - 1].bottom - 1);
 	// what it sees says when it reads what you write, so a comment is known to reach it
 	await expect(panel).toContainText('It reads what is new when its conversation starts');
 	// and nothing in the viewer says whether a session is chosen

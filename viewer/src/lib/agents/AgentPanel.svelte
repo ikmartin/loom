@@ -88,10 +88,9 @@
 			<ul class="said">
 				<li>
 					<strong>{words.panel.changesFiles}</strong>{words.panel.changesFilesWhat}
-					<span class="chips">
-						{#each config?.deny ?? [] as p (p)}<code>{p}</code>{/each}
-						{#each config?.protected ?? [] as p (p)}<code>{p}</code>{/each}
-					</span>
+					<ul class="paths" data-testid="agents-read-only">
+						{#each [...(config?.deny ?? []), ...(config?.protected ?? [])] as p, i (i)}<li><code>{p}</code></li>{/each}
+					</ul>
 				</li>
 				<li data-testid="agents-in-place"><strong>{words.panel.changesInPlace}</strong>{words.panel.changesInPlaceWhat}</li>
 				{#if config?.holds}<li data-testid="agents-holds-here"><strong>{words.panel.changesWho}</strong> {config.holds}</li>{/if}
@@ -193,13 +192,15 @@
 		display: grid;
 		gap: 5px;
 	}
-	.chips {
-		display: inline-flex;
-		flex-wrap: wrap;
-		gap: 4px;
-		margin-left: 2px;
+	/* the files it may only read, one to a line */
+	.paths {
+		margin: 4px 0 0;
+		padding-left: 16px;
+		display: grid;
+		gap: 3px;
+		list-style: disc;
 	}
-	.chips code {
+	.paths code {
 		font-family: var(--mono);
 		font-size: 11px;
 		background: var(--leaf);
