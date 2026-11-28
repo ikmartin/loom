@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The setup card: Use with Claude and Use with Codex, nothing written until one is pressed, which asks the publisher's `agents-setup`. For an app set up, the steps that connect it, then it waits for the app's first conversation to start loom here, says when one has, and after a minute with none says what to check. The trust step is there because Claude Code applies none of loom's permissions until the folder is trusted. A quilt whose agents reach loom in a shell is told that no app shows as connected there.
+	// The setup card: Use with Claude and Use with Codex, beneath what one press writes, which is the person's yes: the press asks the publisher's `agents-setup` at once, and nothing is written before it. For an app set up, the steps that connect it, then it waits for the app's first conversation to start loom here, says when one has, and after a minute with none says what to check. The trust step is there because Claude Code applies none of loom's permissions until the folder is trusted. A quilt whose agents reach loom in a shell is told that no app shows as connected there.
 	import { refusalOf } from '$lib/library/said';
 	import { onMount } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
@@ -58,6 +58,7 @@
 	{#if !setUp.length}
 		<p class="lead">{words.setup.lead}</p>
 		{#if writes}
+			<p class="aside" data-testid="setup-writes">{words.setup.writes}</p>
 			<div class="uses">
 				{#each offered as o (o.key)}
 					<button type="button" class="btn" class:primary={o.key === 'claude-code'} disabled={!!setup.busy} onclick={() => void setup.run(o.key)} data-testid="use-{o.key}">{setup.busy === o.key ? words.setup.busy : words.setup.use(o.short)}</button>
