@@ -56,7 +56,7 @@
 								<!-- svelte-ignore a11y_autofocus -->
 								<input bind:value={title} aria-label="Rename {titleOf(s)}" autofocus onkeydown={(e) => (e.key === 'Enter' ? rename(s) : e.key === 'Escape' ? (renaming = '') : undefined)} onblur={() => rename(s)} />
 							{:else}
-								<a href={threadUrl(s.id)}>{titleOf(s)}</a>{#if s.purpose}<div class="muted">{s.purpose}</div>{/if}
+								<a class="name" href={threadUrl(s.id)} data-testid="session-open-{s.id}">{titleOf(s)}</a>{#if s.purpose}<div class="muted">{s.purpose}</div>{/if}
 							{/if}
 						</td>
 						<td>{s.state}</td>
@@ -97,6 +97,10 @@
 		color: var(--ink-soft);
 		font-size: 13px;
 		line-height: 1.6;
+	}
+	/* one box however the name wraps, so a click anywhere on it opens the session, at 760 as at 1440 */
+	.name {
+		display: inline-block;
 	}
 	.verbs {
 		white-space: nowrap;
