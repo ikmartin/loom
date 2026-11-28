@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A work's tab (2, 3): the work's paper in the one reader (`pdf/Reading`), the very reader a pane of Docs draws for the work, with the same annotations and place, and the Library's layers over it, each where the source serves its read: the `view` menu's digest marks, which draw beside each node on the pages in view a chip with its paper mark and number and a bar down its margin (a click puts the node beside the page), offered where places and digesting are both served, since a node's place comes with the digest; every annotation, a mark to digest among them, is the reader's own to draw; on words selected, `mark to digest` and `ask an agent…` beside Quote; the result chosen beside the page; and the outline's jumps (`lib.go`). A work loom holds no document of says so, with its own page to open.
+	// A work's tab (2, 3): the work's paper in the one reader (`pdf/Reading`), the very reader a pane of Docs draws for the work, with the same annotations and place, and the Library's layers over it, each where the source serves its read: the `view` menu's digest marks, which draw beside each node on the pages in view a chip with its paper mark and number and a bar down its margin (a click puts the node beside the page), offered where places and digesting are both served, since a node's place comes with the digest; every annotation, a mark to digest among them, is the reader's own to draw; on words selected, `mark to digest` and `ask an agent…` beside Quote; the result chosen beside the page; and the outline's jumps (`lib.go`). A work loom holds no document of says so, with its own page to open; one added by an identifier and not looked up says that, and looks it up this once on the person's word.
 	import { untrack } from 'svelte';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
@@ -13,6 +13,7 @@
 	import Reading from '$lib/pdf/Reading.svelte';
 	import { message } from '$lib/shell/message.svelte';
 	import { library as words } from '$lib/words/library';
+	import { asking as asked } from '$lib/library/added.svelte';
 	import type { Item } from '$lib/workspace/item';
 	import { workState } from '$lib/workspace/state.svelte';
 	import { can } from '$lib/write';
@@ -23,6 +24,14 @@
 	let { ref }: { ref: string } = $props();
 
 	const w = $derived(lib.work.value?.ref === ref ? lib.work.value : null);
+	/** Added by an identifier and not looked up, the network not allowed: the tab says so and offers the look-up, once. */
+	const unlooked = $derived(lib.works.value?.works.find((x) => x.ref === ref)?.lookup?.state === 'unconfirmed');
+
+	async function lookOnce(): Promise<void> {
+		asked.delete(ref);
+		const done = await api.lookUp(ref, true);
+		if (!done.ok) message.post(said(done.error));
+	}
 	const beside = $derived(lib.beside[ref] ?? null);
 	/** The work as Docs' workspace keys it, so its annotations, its desk and its place are the pane's own. */
 	const item = $derived<Item>({ kind: 'work', id: ref });
@@ -93,7 +102,12 @@
 	<p class="note grey">{words.works.loading}</p>
 {:else if !w.holds.pdf}
 	<div class="nodoc" data-testid="work-no-document">
-		<p class="grey">{words.reader.noDocument}</p>
+		{#if unlooked}
+			<p class="grey">{words.reader.notLookedUp}</p>
+			<p><button type="button" class="btn" onclick={() => void lookOnce()} data-testid="work-look-up">{words.reader.lookUpOnce}</button></p>
+		{:else}
+			<p class="grey">{words.reader.noDocument}</p>
+		{/if}
 		{#if w.link}<button type="button" class="btn" onclick={() => window.open(w.link!, '_blank', 'noopener')}>{words.works.openSource}</button>{/if}
 	</div>
 {:else}

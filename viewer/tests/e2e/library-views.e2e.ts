@@ -454,6 +454,44 @@ test('on a quilt that has not said whether loom may use the network, a work adde
 	await expect(row(page, 'Gadget towers')).not.toContainText('look it up');
 });
 
+test("at 760, an arXiv number added on a quilt that has not said whether loom may go online says plainly that its title waits, and its row's question is in view whole", async ({ page }) => {
+	await page.setViewportSize({ width: 760, height: 800 });
+	await page.goto('/library?fixture=round6&network=unasked');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('paste-identifier').fill('1709.09864');
+	await page.getByTestId('paste-identifier').press('Enter');
+	const msg = page.getByTestId('column-message');
+	await expect(msg).toContainText('Added arXiv 1709.09864. Its title and authors are not looked up yet');
+	await expect(msg).not.toContainText('found by');
+	const added = row(page, 'arXiv 1709.09864');
+	await added.scrollIntoViewIfNeeded();
+	await expect(added.getByTestId('look-yes')).toBeInViewport({ ratio: 1 });
+	expect((await added.getByTestId('look-yes').boundingBox())!.x + 10).toBeLessThan(760);
+	await added.getByTestId('look-yes').click();
+	await expect(added).toHaveCount(0);
+});
+
+test('in thumbnails, a work added by an identifier and not looked up says so on its page, and its tab says what waits and looks it up on the word', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/library?fixture=round6&network=unasked');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('paste-identifier').fill('1709.09864');
+	await page.getByTestId('paste-identifier').press('Enter');
+	await expect(row(page, 'arXiv 1709.09864')).toBeVisible();
+	await page.getByRole('searchbox').fill('1709');
+	await page.getByTestId('works-thumbs').click();
+	const card = page.getByTestId('work-thumb').filter({ hasText: 'arXiv 1709.09864' });
+	await expect(card).toContainText('not looked up yet');
+	await expect(card).not.toContainText('no document');
+	await card.click();
+	const tab = page.getByTestId('work-no-document');
+	await expect(tab).toContainText('Loom has not looked this work up yet');
+	await tab.getByTestId('work-look-up').click();
+	await expect(tab).toHaveCount(0);
+});
+
 test('with no backend, the list says so in a sentence, with no name of an endpoint', async ({ page }) => {
 	await page.goto('/library');
 	await expect(page.getByTestId('works-failed')).toHaveText('This loom does not serve the Library yet.');

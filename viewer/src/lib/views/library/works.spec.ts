@@ -45,6 +45,8 @@ describe('two works stating one identifier', () => {
 	it('an unconfirmed row says the name it came in as, unless that is the identifier itself', () => {
 		expect(cameAs({ title: 'b.pdf', lookup: unconfirmed })).toBe('b.pdf');
 		expect(cameAs({ title: 'arXiv 2401.01234v1', lookup: unconfirmed })).toBe('');
+		// a pasted number comes in titled by the number alone, which is the identifier too
+		expect(cameAs({ title: '2401.01234v1', lookup: unconfirmed })).toBe('');
 		expect(cameAs({ title: 'Widgets', lookup: null })).toBe('');
 	});
 	it('the question names each by its short name, and by its title as well where two short names are alike', () => {

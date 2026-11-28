@@ -271,8 +271,9 @@ export function outlineOf(f: Fixture, ref: string): WorkAnswer['outline'] {
 
 export function workAnswer(f: Fixture, ref: string): WorkAnswer | null {
 	const row = f.works.find((w) => w.ref === ref);
-	const w = protoOf(ref);
-	if (!row || !w) return null;
+	if (!row) return null;
+	// a work added on this page is round six's by its row alone
+	const w = protoOf(ref) ?? { id: '', authors: row.authors, title: row.title, year: row.year };
 	const key = w.authors.length ? `${w.authors[0].slice(0, 3)}${String(w.year).slice(2)}` : 'X';
 	const entry = `@article{${key},\n  author = {${w.authors.join(' and ')}},\n  title  = {${w.title}},\n  year   = {${w.year}},\n}`;
 	const unplaced = w.id === 'okafor' ? [{ node: 'tq-00C2', name: 'Theorem 2.3', paper: 'stub' as const }, { node: 'tq-00C3', name: 'Corollary 4.2', paper: 'stub' as const }] : [];

@@ -19,6 +19,7 @@ function tell(rows: api.TakeRow[], refused: string[]): void {
 	if (rows.length === 1 && !refused.length) {
 		const r = rows[0];
 		if (r.state === 'added' && r.under) return message.post(words.add.filed(r.name, r.short ?? ''), undo);
+		if (r.state === 'added' && r.unconfirmed && r.identifier) return message.post(words.add.addedUnlooked(words.works.identifier(r.identifier)), undo);
 		if (r.state === 'added') return message.post(words.add.added(r.title ?? r.name, r.short ?? '', words.add.foundBy[r.found_by ?? 'none'] ?? '', !!r.tex), undo);
 		if (r.state === 'here') return message.post(words.add.here(r.name, r.short ?? ''));
 		if (r.state === 'cannot') return message.post(words.add.cannot(r.name, whyNot(r)));

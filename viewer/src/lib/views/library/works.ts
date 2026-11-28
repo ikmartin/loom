@@ -42,8 +42,9 @@ export function shown(works: readonly Work[], o: { filter: Filter; q: string; so
 	});
 }
 
-/** What an unconfirmed work's row says beside its identifier: the name it came in under (its title, a file's name where nothing was looked up), where that is not the identifier itself; '' otherwise. Two works stating one identifier are told apart by it, as the intake's question names them. */
+/** What an unconfirmed work's row says beside its identifier: the name it came in under (its title, a file's name where nothing was looked up), where that is not the identifier itself, as read or as its bare value (a pasted number's title); '' otherwise. Two works stating one identifier are told apart by it, as the intake's question names them. */
 export function cameAs(w: Pick<Work, 'title' | 'lookup'>): string {
 	if (!w.lookup || !w.title) return '';
-	return w.title === words.works.identifier(w.lookup.identifier) ? '' : w.title;
+	const id = w.lookup.identifier;
+	return w.title === words.works.identifier(id) || w.title === id.slice(id.indexOf(':') + 1) ? '' : w.title;
 }
