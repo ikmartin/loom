@@ -171,6 +171,10 @@ export const library = {
 		asksOn: (name: string, short: string) => `Is ${name} ${short}, the work you dropped it on?`,
 		/** The same, of several files dropped on one row together. */
 		asksOnMany: (names: string[], short: string) => `Are ${list(names)} ${short}, the work you dropped them on?`,
+		/** The question of a file dropped anywhere while the Library shows a work's tab, asked before it is taken in. */
+		asksOpen: (name: string, short: string) => `Is ${name} ${short}, the work you have open?`,
+		/** The same, of several files dropped together. */
+		asksOpenMany: (names: string[], short: string) => `Are ${list(names)} ${short}, the work you have open?`,
 		/** The question where every work it named has since been deleted: only whether the file is a work of its own. */
 		asksGone: (name: string, stated: string) => (stated ? `${name} states ${stated}, as a work since deleted from your library did. Add it as a work of its own?` : `The work ${name} was dropped on has since been deleted from your library. Add it as a work of its own?`),
 		/** The question where every work the file's identifiers name holds a document of its kind already: the copy asked about as what it is, kept as a work of its own or let go. */

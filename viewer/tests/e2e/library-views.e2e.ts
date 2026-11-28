@@ -347,6 +347,37 @@ test("a file dropped on a work's row is asked about before anything is taken in:
 	await expect(rows).toHaveCount(301);
 });
 
+test("a file dropped while a work is open in the Library is asked about as that work's before anything is taken in, wherever on the window it lands", async ({ page }) => {
+	await open(page);
+	const msg = page.getByTestId('column-message');
+	const answers = msg.getByTestId('column-message-choice');
+	await row(page, 'Widgets and their bounds').click();
+	await expect(page.getByTestId('work-reader')).toBeVisible();
+	const drop = (on: string, name: string) =>
+		page.getByTestId(on).evaluate((el, name) => {
+			const data = new DataTransfer();
+			data.items.add(new File(['%PDF-1.4'], name, { type: 'application/pdf' }));
+			el.dispatchEvent(new DragEvent('dragover', { dataTransfer: data, bubbles: true, cancelable: true }));
+			el.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }));
+		}, name);
+	await drop('work-reader', 'mZK_paper.pdf');
+	await expect(msg).toContainText(/^Is mZK_paper\.pdf .+, the work you have open\?/);
+	await expect(answers).toHaveText(['yes', 'no, a work of its own']);
+	await answers.filter({ hasText: 'no, a work of its own' }).click();
+	await expect(msg).toContainText('Added mZK_paper.pdf');
+	await page.getByTestId('column-message-dismiss').click();
+	// on the column beside the open work too
+	await drop('library-column', 'widgets.pdf');
+	await expect(msg).toContainText(/^Is widgets\.pdf .+, the work you have open\?/);
+	await answers.filter({ hasText: 'yes' }).click();
+	await expect(msg).toContainText(/^Filed widgets\.pdf under /);
+	// with the list of works in front, a drop away from a row is a drop anywhere
+	await page.getByTestId('column-message-dismiss').click();
+	await page.getByTestId('library-tab-works').click();
+	await drop('library-column', 'other.pdf');
+	await expect(msg).toContainText('Added other.pdf');
+});
+
 test('on a window narrow enough to fold the column, what a drop on the works list did is said beside the folded column, with its answers', async ({ page }) => {
 	await page.setViewportSize({ width: 760, height: 800 });
 	await page.goto('/library?fixture=round6');

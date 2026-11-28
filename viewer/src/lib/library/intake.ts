@@ -148,15 +148,16 @@ export async function addFiles(files: File[], onto?: string): Promise<void> {
 	tell(done.value.rows, refused);
 }
 
-/** Asks in the column whether files dropped on a work's row in the Library are that work's before taking anything in, since the row under the pointer is no sign of what the person meant: `yes` files them under it, `no` takes them in as a drop anywhere. A work gone from the library meanwhile takes them as a drop anywhere; a question closed unanswered takes nothing. */
-export async function askOnRow(files: File[], onto: string): Promise<void> {
+/** Asks in the column whether files dropped on a work's row in the Library, or anywhere while the Library shows that work's tab (`open`), are that work's before taking anything in, since the row under the pointer or the work in front is no sign of what the person meant: `yes` files them under it, `no` takes them in as a drop anywhere. A work gone from the library meanwhile takes them as a drop anywhere; a question closed unanswered takes nothing. */
+export async function askOnRow(files: File[], onto: string, open = false): Promise<void> {
 	if (!files.length) return;
 	const library = await api.works();
 	const work = library.ok ? library.value.works.find((w) => w.ref === onto) : undefined;
 	if (!work) return addFiles(files);
 	const names = files.map((f) => f.name);
 	const one = names.length === 1;
-	message.post(one ? words.add.asksOn(names[0], work.short) : words.add.asksOnMany(names, work.short), undefined, {
+	const asked = open ? (one ? words.add.asksOpen(names[0], work.short) : words.add.asksOpenMany(names, work.short)) : one ? words.add.asksOn(names[0], work.short) : words.add.asksOnMany(names, work.short);
+	message.post(asked, undefined, {
 		choices: [
 			{ label: words.add.isIt, act: () => addFiles(files, onto) },
 			{ label: one ? words.add.notIt : words.add.notThem, act: () => addFiles(files) }
