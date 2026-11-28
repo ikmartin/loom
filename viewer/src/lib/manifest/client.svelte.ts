@@ -52,7 +52,7 @@ class ManifestStore {
 		if (changed) this.manifest = { ...m, contributions };
 	}
 
-	/** Pending changes an act made pending again before a publication lists them (an undone Keep), put into every manifest held that does not list them, until `release`, or with no `until`, until a manifest that lists them or a later one is loaded. */
+	/** Pending changes an act made pending again before a publication lists them (an undone Keep), put into every manifest shown that does not list them: with `until`, until it resolves, whatever the manifests before then list, since the one shown when the act is answered may predate the act it undoes and the next may be that act's publication; with none, until the next manifest loaded. */
 	#held: { row: PendingChange; until: boolean }[] = [];
 
 	/**
@@ -61,7 +61,7 @@ class ManifestStore {
 	 * Parameters
 	 * ----------
 	 * rows : PendingChange[]
-	 *     The rows as the manifest last listed them; one the manifest lists already is left out.
+	 *     The rows as the manifest last listed them; each is added only to a manifest that does not list it.
 	 * until : Promise, optional
 	 *     Resolves once the manifest held carries the act, when the rows go; without it, they go at the next manifest loaded.
 	 */
@@ -74,12 +74,11 @@ class ManifestStore {
 		until?.then(go, go);
 	}
 
-	/** `m` with the held rows it does not list added at the end; a row it lists is no longer held. */
+	/** `m` with the held rows it does not list added at the end; a row it lists stays held, as a later manifest may not list it. */
 	#withHeld(m: Manifest): Manifest {
-		if (!this.#held.length) return m;
 		const listed = new Set((m.changes ?? []).map((c) => c?.id));
-		this.#held = this.#held.filter((h) => !listed.has(h.row.id));
-		return this.#held.length ? { ...m, changes: [...(m.changes ?? []), ...this.#held.map((h) => h.row)] } : m;
+		const add = this.#held.filter((h) => !listed.has(h.row.id)).map((h) => h.row);
+		return add.length ? { ...m, changes: [...(m.changes ?? []), ...add] } : m;
 	}
 
 	/** Let the held rows `ids` go, taking out of the manifest held those it shows only because they were held. */

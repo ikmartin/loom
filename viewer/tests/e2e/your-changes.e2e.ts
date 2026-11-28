@@ -103,18 +103,21 @@ test('an undone Keep is a card again at once, before a publication lists it agai
 	let listed = rows;
 	await serve(page, (m) => (m.changes = listed));
 	const sent = await serving(page);
+	// the publication after the Keep lists it no more, and none after the undo lists it yet: the manifest the Keep fetches once answered, before its undo is offered, is the one the undo is pressed over
+	await page.route('**/_api/change-keep', (route) => {
+		listed = rows.filter((r) => r.id !== SUGGESTED);
+		return route.fallback();
+	});
 	await page.goto('/review');
 	await card(page, SUGGESTED).getByTestId('card-keep').click();
 	await expect(card(page, SUGGESTED)).toHaveCount(0);
-	// the publication after the Keep lists it no more, and none after the undo lists it yet
-	listed = rows.filter((r) => r.id !== SUGGESTED);
-	await page.waitForResponse('**/build/manifest.json');
 	await page.getByTestId('review-undo').click();
 	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED], quilt: 'q-test' });
 	await expect(card(page, SUGGESTED)).toHaveCount(1, { timeout: 2000 });
-	// the publication that lists it again shows it once
+	// the publication that lists it again shows it once: a fetch begun after it came is one begun after it was loaded
 	listed = rows;
-	await page.waitForResponse('**/build/manifest.json');
+	await page.waitForResponse(async (r) => r.url().endsWith('/build/manifest.json') && (await r.text()).includes(SUGGESTED));
+	await page.waitForRequest('**/build/manifest.json');
 	await expect(card(page, SUGGESTED)).toHaveCount(1);
 });
 
