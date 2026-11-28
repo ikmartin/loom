@@ -69,6 +69,22 @@ def test_only_latex_source_is_watched_so_a_change_to_markdown_notes_or_a_bibliog
     assert changes(q) == {"notes/b.tex": "second"}
 
 
+def test_an_agent_s_suggested_edit_on_markdown_still_waits_and_keeps_though_markdown_is_not_watched(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A suggestion is an agent's record, not a change the look finds: one filed on a Markdown file is listed, and Keep writes it, with no in-place change listed after."""
+    (q / "notes/answers.md").write_text("# Answers\n\nThe bound is two.\n", encoding="utf-8")
+    ok("changes", "--keep-all", cwd=q)
+    monkeypatch.setenv("AI_AGENT", "1")
+    ok("suggest", "notes/answers.md", "--quote", "is two", "--with", "is three", "--as", "Referee Agent", cwd=q)
+    monkeypatch.delenv("AI_AGENT")
+    (row,) = [c for c in json_of("changes", "--json", cwd=q)["changes"] if c["path"] == "notes/answers.md"]
+    assert row["kind"] == "suggested"
+    ok("changes", "--keep", row["id"], cwd=q)
+    assert (q / "notes/answers.md").read_text(encoding="utf-8") == "# Answers\n\nThe bound is three.\n"
+    assert [c for c in json_of("changes", "--json", cwd=q)["changes"] if c["path"] == "notes/answers.md"] == []
+
+
 def test_an_svg_is_drawn_as_a_picture_and_never_listed(q: Path) -> None:
     """An SVG is text, but the viewer draws it as a picture: one changed, made or removed since the look is no change, nor one an older look held."""
     from loom.looks import Look, _write, read_look
