@@ -102,7 +102,11 @@ export const frame = {
 		/** Under Versions: when loom keeps one. */
 		made: "Loom keeps a version of a document when it comes in; when you keep or undo a proposed edit, take in an agent's copy or restore a version; and when you record one. Saving a file makes none.",
 		/** Under Versions: how to compare two. */
-		compare: "To compare, open history on the document's toolbar and choose compare beside a version: it opens beside the text with what differs marked. Review › History lists every version."
+		compare: "To compare, open history on the document's toolbar and choose a version: it opens beside the text with what differs marked. Review › History lists every version.",
+		/** The panel's line over how to read two things at once. */
+		sideBySide: 'Side by side',
+		/** Under Side by side: how to open a second document beside the first. */
+		beside: 'To read two at once, point at a file under Files and choose ⇄: it opens in a second pane beside the one you are reading. ⇄ on a tab moves it there too.'
 	},
 	marks: {
 		/** A result's paper mark, filled green: the person found loom's copy matches its paper. Also the mark's accessible name. */

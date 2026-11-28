@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The quiet link in the column's foot, How loom works, and the panel it opens: the margin's icons beside a text (as `fragments/gutter.ts` draws them), the marks of how a result stands with its paper and its Lean, the mark a person puts on a page, and when a version is kept and how to compare. A click anywhere else, Escape, or the keyboard moving past it closes it.
+	// The quiet link in the column's foot, How loom works, and the panel it opens: the margin's icons beside a text (as `fragments/gutter.ts` draws them), the marks of how a result stands with its paper and its Lean, the mark a person puts on a page, when a version is kept and how to compare, and how to read two documents side by side. A click anywhere else, Escape, or the keyboard moving past it closes it.
 	//
 	// The panel is a `Popover` above the link, fixed to the window, so it is not cut to the column's width.
 	import Popover from '$lib/components/Popover.svelte';
@@ -39,7 +39,9 @@
 			<div class="lg"><Mark kind="marked" size={14} hidden /><span>{frame.marks.marked}</span></div>
 			{w.versions}
 			<p class="say" data-testid="legend-versions">{w.made}</p>
-			<p class="say last">{w.compare}</p>
+			<p class="say">{w.compare}</p>
+			{w.sideBySide}
+			<p class="say last" data-testid="legend-beside">{w.beside}</p>
 		</div>
 	</Popover>
 </div>
