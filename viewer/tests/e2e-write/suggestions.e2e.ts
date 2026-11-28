@@ -8,7 +8,9 @@ test("an annotation written while a session's transcript is read names no sessio
 	await expect(page.locator('[data-pane="1"]').getByTestId('chat')).toBeVisible();
 	const at = page.locator('[data-pane="0"] .fragment .env[data-id="sy-0003"] > p[data-src]').first();
 	await at.locator('mjx-container').first().waitFor();
-	// a comment left on the theorem
+	// a comment left on the theorem, its tool behind the toolbar's ˅ where the half-width pane has folded it there
+	const more = page.getByTestId('pane-0').getByTestId('annotate-more');
+	if (await more.isVisible()) await more.click();
 	await page.getByTestId('pane-0').getByTestId('tool-comment').click();
 	await at.click();
 	await page.getByTestId('popup-comment-field').fill('Written while reading the side sitting.');
