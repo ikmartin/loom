@@ -51,6 +51,8 @@ test('the chip stands at the foot of the open column, under the legend, and open
 	await expect(panel.getByTestId('agent-setup')).toBeVisible();
 	await expect(panel).toContainText('What it may change');
 	await expect(panel).toContainText('What it never does');
+	// what it sees says when it reads what you write, so a comment is known to reach it
+	await expect(panel).toContainText('It reads what is new when its conversation starts');
 	// and nothing in the viewer says whether a session is chosen
 	await expect(page.locator('body')).not.toContainText(/session chosen|writing in/i);
 });
@@ -77,13 +79,27 @@ test("the panel's first heading follows who is connected: never Connected over n
 	await expect(panel.locator('h4').first()).toHaveText('Not connected');
 });
 
-test('at 760 the panel opened from the folded dot keeps Use with Claude and Use with Codex in the window', async ({ page }) => {
-	await page.setViewportSize({ width: 760, height: 900 });
-	await publisher(page, [], ['agents-setup']);
-	await page.goto('/master/drafting/main');
-	await page.getByTestId('agent-chip').click();
-	for (const id of ['use-claude-code', 'use-codex']) await expect(page.getByTestId(id)).toBeInViewport({ ratio: 1 });
-});
+for (const height of [900, 800])
+	test(`at 760×${height} the panel opened from the folded dot keeps Use with Claude and Use with Codex in the window`, async ({ page }) => {
+		await page.setViewportSize({ width: 760, height });
+		// a quilt whose agents are told loom's line and held to its list, as the showcase is: the panel's longest
+		await serve(page, (m) => {
+			m.config.agents.layer = true;
+			m.agents.line = 'This directory is a quilt managed by loom.';
+			m.config.agents.holds = 'In the places agents are denied, Claude Code is refused an edit, though whether a command it runs in a shell is held back as well depends on the command and on how you have set it up; Codex, Gemini CLI, Cursor and any other app are only asked not to edit, and a change one of them makes there anyway is not listed in Your Changes.';
+		});
+		await publisher(page, [], ['agents-setup']);
+		await page.goto('/master/drafting/main');
+		await page.getByTestId('agent-chip').click();
+		for (const id of ['use-claude-code', 'use-codex']) await expect(page.getByTestId(id)).toBeInViewport({ ratio: 1 });
+		// read to the panel's end, as a person reads what it sees and may change, and the buttons stay in view and take a click
+		await page.getByTestId('agent-popover').evaluate((el) => (el.scrollTop = el.scrollHeight));
+		await expect(page.getByTestId('agent-panel')).toContainText('What it never does');
+		expect(await page.getByTestId('agent-popover').evaluate((el) => el.scrollTop)).toBeGreaterThan(100);		for (const id of ['use-claude-code', 'use-codex']) {
+			await expect(page.getByTestId(id)).toBeInViewport({ ratio: 1 });
+			await page.getByTestId(id).click({ trial: true, timeout: 2000 });
+		}
+	});
 
 test('folded, the chip is its dot inside the strip, its words its hover text', async ({ page }) => {
 	await page.setViewportSize({ width: 1100, height: 900 });

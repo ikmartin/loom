@@ -424,6 +424,8 @@ test.describe('the toolbar', () => {
 		await expect(draft).toBeVisible();
 		await expect(draft.getByTestId('popup-type')).toContainText('Question');
 		expect(sent.annotate).toBeUndefined();
+		// where the comment is written, who reads it: anyone with the quilt, and an agent working here
+		await expect(draft.getByTestId('popup-read-by')).toContainText('An agent working here reads it');
 		await draft.getByTestId('popup-comment-field').fill('Is finiteness needed?');
 		await draft.getByTestId('popup-save').click();
 		await expect.poll(() => sent.annotate).toBeTruthy();

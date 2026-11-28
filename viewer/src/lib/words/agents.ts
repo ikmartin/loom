@@ -79,7 +79,7 @@ export const agents = {
 		seesOpen: 'What you have open,',
 		seesOpenWhat: ' when it asks: the document or page, the place you are at, and the words you selected, in the tab you used last.',
 		seesNotes: 'Every annotation and reply you write,',
-		seesNotesWhat: ' and each suggested edit you keep or discard.',
+		seesNotesWhat: ' and each suggested edit you keep or discard. It reads what is new when its conversation starts, and again when you tell it you have left it something.',
 		seesFiles: 'Every file in this folder,',
 		seesFilesWhat: " which it can read with its app's own tools.",
 		/** The fourth part's heading. */
@@ -96,6 +96,8 @@ export const agents = {
 		never: 'What it never does',
 		neverWhat: 'Keep or discard a suggested edit, take its copy into your document, add or drop a paper in the library, restore an earlier version, or delete an annotation that is not its own. Those are yours, and loom refuses each to an agent whatever name it gives.'
 	},
+	/** Under the field where a person writes a new comment: who reads it. */
+	readBy: 'Kept with this quilt for anyone who has it. An agent working here reads it when its conversation starts, or when you tell it you have left it something.',
 	/** The setup card, in the panel with nothing set up and always in Settings › Agents. */
 	setup: {
 		/** Above the apps' buttons, with nothing set up. */

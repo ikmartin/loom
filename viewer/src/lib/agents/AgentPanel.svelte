@@ -5,6 +5,7 @@
 	import { agents as words } from '$lib/words/agents';
 	import AgentSetup from './AgentSetup.svelte';
 	import { presence } from './presence.svelte';
+	import { OFFERED } from './setup.svelte';
 	import { ago, appOf, callOf, clock, isActive, startedIn } from './connected';
 
 	type Part = 'connected' | 'told' | 'sees' | 'changes' | 'never';
@@ -18,11 +19,13 @@
 	// what follows the first part is read from the manifest, so without one it says nothing rather than something untrue
 	const has = (p: Part) => parts.includes(p) && (p === 'connected' || !!m);
 	const noLayer = $derived(config?.layer === false);
+	// none connected and neither app set up: the setup card offers Use with Claude and Use with Codex, which stay at the panel's top while the rest scrolls under them
+	const offering = $derived(!!records && !records.length && !OFFERED.some((o) => agents?.apps?.find((a) => a.key === o.key)?.set_up));
 </script>
 
 <div class="panel" data-testid="agent-panel">
 	{#if has('connected')}
-		<section>
+		<section class:offer={offering}>
 			<h4>{records === null ? words.panel.connectedUnknown : records.length ? words.panel.connected : words.panel.connectedNone}</h4>
 			{#if records === null}
 				<p class="aside" data-testid="agents-unknown">{words.panel.unknown}</p>
@@ -116,6 +119,16 @@
 	section {
 		display: grid;
 		gap: 6px;
+	}
+	/* in the chip's box, which scrolls in a short window: what the apps' buttons offer stays in view while what it is told, sees and may change is read beneath it */
+	:global(.floating) section.offer {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		margin: -12px -14px 0;
+		padding: 12px 14px 10px;
+		background: var(--sheet);
+		border-bottom: 1px solid var(--rule);
 	}
 	h4 {
 		margin: 0;

@@ -22,6 +22,7 @@
 	import TypeList from './TypeList.svelte';
 	import VersionView from './VersionView.svelte';
 	import { openSettings } from '$lib/shell/settings/opener.svelte';
+	import { agents } from '$lib/words/agents';
 
 	let {
 		id = '',
@@ -287,6 +288,7 @@
 		{/if}
 		{#if editing && (draft || allowed.edit)}
 			<textarea class="cmt" rows="2" placeholder={draft?.quote === undefined && draft ? 'Write the comment' : 'Add a comment'} aria-label="Comment" data-testid="popup-comment-field" value={value} use:field oninput={(e) => { text = e.currentTarget.value; confirming = false; grow(e.currentTarget); }} onkeydown={keys}></textarea>
+			{#if draft}<p class="read-by" data-testid="popup-read-by">{agents.readBy}</p>{/if}
 			{#if confirming}
 				<div class="pact ask" role="alert" data-testid="popup-discard-ask">
 					<span>Discard this comment?</span>
@@ -549,5 +551,12 @@
 		margin: 0;
 		font-size: 12px;
 		color: var(--state-stale);
+	}
+	/* who reads a new comment, quiet under its field */
+	.read-by {
+		margin: -2px 0 0;
+		font-size: 11.5px;
+		line-height: 1.4;
+		color: var(--ink-faint);
 	}
 </style>
