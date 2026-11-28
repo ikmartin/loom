@@ -72,10 +72,30 @@ async function drawnAndListed(page: Page, rows: Row[]): Promise<void> {
 	for (const r of rows.filter((x) => x.detached)) await expect(list.locator(`[data-testid="comment-card"][data-annotation="${r.id}"]`).getByTestId('card-detached')).toBeVisible();
 }
 
-/** Click the middle of a mark that takes no pointer: the page below is asked what the click landed on. */
+/**
+ * Click the middle of a mark that takes no pointer: the page below is asked what the click landed on, and a click at a box out of view lands on nothing.
+ *
+ * The tests reach a page by scrolling, which is no reader's hand, so the `?page=` link they opened stays in force; closing Comments refits the paper and that link sends it back to its page, carrying the mark out of view after it was brought in. So the mark is brought into view whenever it is out of it, and clicked once it has held still in view from one poll to the next with no scroll between.
+ */
 async function clickMark(page: Page, id: string): Promise<void> {
-	const box = (await page.getByTestId(`page-mark-${id}`).boundingBox())!;
-	await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+	const mark = page.getByTestId(`page-mark-${id}`);
+	const height = page.viewportSize()!.height;
+	let box = null as { x: number; y: number; width: number; height: number } | null;
+	await expect
+		.poll(async () => {
+			const again = (await mark.boundingBox())!;
+			if (again.y < 0 || again.y + again.height > height) {
+				await mark.scrollIntoViewIfNeeded();
+				box = null;
+				return `out of view at y ${again.y}`;
+			}
+			const same = !!box && Math.abs(again.x - box.x) < 1 && Math.abs(again.y - box.y) < 1 && Math.abs(again.width - box.width) < 1 && Math.abs(again.height - box.height) < 1;
+			box = again;
+			return same ? 'held in view' : `at ${again.x}, ${again.y}, ${again.width} by ${again.height}`;
+		}, { intervals: [300] })
+		.toBe('held in view');
+	const at = box!;
+	await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
 }
 
 const paint = (page: Page, testid: string, name: string) => page.getByTestId(testid).evaluate((el, n) => getComputedStyle(el).getPropertyValue(n).trim(), name);
@@ -84,7 +104,9 @@ const paint = (page: Page, testid: string, name: string) => page.getByTestId(tes
 test.beforeEach(({ page }, info) => {
 	page.on('pageerror', (e) => info.annotations.push({ type: 'pageerror', description: e.message }));
 });
-test.afterEach(({}, info) => {
+// a poll still in the manifest's handler reads its body before the context that holds it closes, and none starts after
+test.afterEach(async ({ page }, info) => {
+	await page.unrouteAll({ behavior: 'wait' });
 	expect(info.annotations.filter((a) => a.type === 'pageerror')).toEqual([]);
 });
 
