@@ -1074,7 +1074,7 @@ def test_an_act_that_puts_its_words_into_the_look_cut_short_at_any_step_lists_as
     (base / "notes/tasks.md").write_text("# Tasks\n\n- [ ] first\n- [ ] second\n", encoding="utf-8")
     take(load_quilt(base), "Tester")
     ok("suggest", "zk-0002", "--quote", "Second statement uses", "--with", "The second statement uses", "--as", "Referee Agent", cwd=base, env={"AI_AGENT": "1"})  # fmt: skip
-    (base / "notes/agent.md").write_text("an agent's note\n", encoding="utf-8")  # waits throughout
+    (base / "notes/agent.tex").write_text("an agent's note\n", encoding="utf-8")  # waits throughout
     listed = json.loads(run("changes", "--json", cwd=base).stdout)["changes"]
     (edit,) = [c["id"] for c in listed if c["kind"] == "suggested"]
     if which == "undo of a keep":
@@ -1103,7 +1103,7 @@ def test_an_act_that_puts_its_words_into_the_look_cut_short_at_any_step_lists_as
         count = dying_at_step(mp, whole, 0)
         act(whole)
     after = _rows(whole)
-    assert count[0] > 5 and ("notes/agent.md", "an agent's note") in after, (count, after)
+    assert count[0] > 5 and ("notes/agent.tex", "an agent's note") in after, (count, after)
     for k in range(1, count[0] + 1):
         q = tmp_path / f"at-{k}"
         shutil.copytree(base, q)
@@ -1179,8 +1179,8 @@ def test_keep_all_cut_short_at_any_step_keeps_an_in_place_change_with_its_keep_l
     take(load_quilt(base), "Tester")
     ok("suggest", "zk-0002", "--quote", "Second statement uses", "--with", "The second statement uses", "--as", "Referee Agent", cwd=base, env={"AI_AGENT": "1"})  # fmt: skip
     (base / "notes").mkdir()
-    (base / "notes/agent.md").write_text("an agent's note\n", encoding="utf-8")
-    note = ("notes/agent.md", "an agent's note")
+    (base / "notes/agent.tex").write_text("an agent's note\n", encoding="utf-8")
+    note = ("notes/agent.tex", "an agent's note")
 
     def kept_line(root: Path) -> bool:
         hist = load_quilt(root).history_dir

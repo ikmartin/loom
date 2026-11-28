@@ -28,12 +28,12 @@ def stale(q: Path) -> None:
 
 
 def looked(q: Path) -> None:
-    """A look by the author, then an edit to an open file, so `changes` has one to show."""
+    """A look by the author, then a new LaTeX file open to agents, so `changes` has one to show."""
     from tests.helpers import ok
 
     author(q)
     ok("changes", "--keep-all", cwd=q)
-    (q / "README.md").write_text("an edit since the look\n", encoding="utf-8")
+    (q / "draft.tex").write_text("an edit since the look\n", encoding="utf-8")
 
 
 KIND: dict[str, str] = {
@@ -132,8 +132,8 @@ CASES: dict[str, list[Case]] = {
     "changes": [
         Case((), setup=author, unchanged=True, why="no look yet"),
         Case((), setup=looked, unchanged=True),
-        Case(("--keep", "README.md"), setup=looked),
-        Case(("--discard", "README.md"), setup=looked),
+        Case(("--keep", "draft.tex"), setup=looked),
+        Case(("--discard", "draft.tex"), setup=looked),
         Case(("--keep-all",), setup=author),
         Case(("--by", "Referee Agent"), setup=looked, unchanged=True, why="an author's suggested edits"),
         Case(("c-00000000",), setup=looked, exit=2, unchanged=True, why="no such change"),

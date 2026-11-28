@@ -398,7 +398,7 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
     look = read_look(quilt.root, who) if who else None
     if look is None:
         return None
-    # only the places agents may edit: one they are denied is the person's own, and a change there is never listed
+    # only the LaTeX files agents may edit: one they are denied is the person's own, and a change there or to any other file is never listed
     current = watched_texts(quilt)
     watched = watching(quilt.config, quilt.root)
     # a file the scan read is as the scan read it: one saved since is the next build's, so a change is never cut from one reading of a file and drawn against another

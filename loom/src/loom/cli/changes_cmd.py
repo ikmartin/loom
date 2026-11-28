@@ -56,9 +56,9 @@ def changes_command(
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """List what waits on you, by document: each open suggested edit and each in-place edit since your last look to an open file agents may edit, cut by words; with ID, print the change's patch, which `git apply` takes as it stands.
+    """List what waits on you, by document: each open suggested edit and each in-place edit since your last look to a LaTeX file agents may edit, cut by words; with ID, print the change's patch, which `git apply` takes as it stands.
 
-    The open files are the ones the viewer shows that are text, at most 1 MB, LaTeX's auxiliary files left out; your look holds the text of each one agents may edit as you last saw it, and `loom serve` takes your first when it starts. A place agents are denied is yours, and an edit there is never listed, whoever made it. Keeping and discarding are yours, never an agent's: keeping an in-place edit puts it into your look, keeping a suggested edit writes it into its file; discarding an in-place edit puts its old words back, discarding a suggested edit leaves the text as it is. A version of each document a write changes is kept first. Keeping says nothing about whether the mathematics is right, which is `loom accept`'s.
+    Only LaTeX source (`.tex`) is watched, so an edit to Markdown, notes, a bibliography or any other file is never listed; your look holds the text of each `.tex` file the viewer shows, at most 1 MB, that agents may edit, as you last saw it, and `loom serve` takes your first when it starts. A place agents are denied is yours, and an edit there is never listed, whoever made it. Keeping and discarding are yours, never an agent's: keeping an in-place edit puts it into your look, keeping a suggested edit writes it into its file; discarding an in-place edit puts its old words back, discarding a suggested edit leaves the text as it is. A version of each document a write changes is kept first. Keeping says nothing about whether the mathematics is right, which is `loom accept`'s.
     """
     from loom.cli.review import _annotator
     from loom.looks import keep_all as take_all
@@ -155,7 +155,7 @@ def changes_command(
 
     # what the look leaves to the person, so a short list is not read as "nothing changed" there
     left_to_you = unwatched(result.quilt.config)
-    watched = f"watching the places agents may edit; your own, never listed: {', '.join(left_to_you)}"
+    watched = f"watching the LaTeX files agents may edit; your own, never listed: {', '.join(left_to_you)}"
     data: dict[str, Any] = {"look": look.to_json() | {"files": len(look.files)} if look else None}
     data["changes"] = [c.to_dict() for c in listed]
     data["unwatched"] = left_to_you

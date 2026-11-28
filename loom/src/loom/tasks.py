@@ -105,7 +105,7 @@ def items(text: str) -> list[Task]:
 def tick(quilt: Quilt, who: str, path: str, task: str, done: bool) -> bool:
     """Set the box `task` of the Markdown file `path` to `done`; whether the file changed.
 
-    The person's act (P7), through the door (`loom.writes`): the file is read and the box found under its lock, one character changes and its old bytes are kept, the ledger records it, and the same change goes into `who`'s look so that it is not listed back to them (`looks.take_line`). A box already in that state writes nothing. Raises TickRefused for a file the viewer does not show, one that is not Markdown or not UTF-8, and a line that no longer reads as the page drew it.
+    The person's act (P7), through the door (`loom.writes`): the file is read and the box found under its lock, one character changes and its old bytes are kept, the ledger records it, and the same change goes into `who`'s look where the look watches the file (`looks.take_line`), which for a Markdown file it never does, so a tick is never listed. A box already in that state writes nothing. Raises TickRefused for a file the viewer does not show, one that is not Markdown or not UTF-8, and a line that no longer reads as the page drew it.
     """
     from loom import writes
     from loom.files import Shown, kind_of

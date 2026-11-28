@@ -188,34 +188,19 @@ def test_a_tick_is_not_listed_back_to_the_person_who_made_it(q: Path) -> None:
     assert "notes/a.md" not in listed(q)
 
 
-def test_another_edit_to_the_file_stays_listed_beside_a_tick(q: Path) -> None:
-    from tests.helpers import ok
-
-    ok("changes", "--keep-all", cwd=q)
-    p = q / "notes/a.md"
-    p.write_text(
-        "# A edited\n\n" + "\n".join(f"line {n}" for n in range(9)) + "\n\n- [ ] one\n- [ ] two\n", encoding="utf-8"
-    )
-    before = {c.path: c.diff for c in changes(load_quilt(q), WHO)}["notes/a.md"]
-    set_box(q, box(q, 1).id, True)
-    after = {c.path: c.diff for c in changes(load_quilt(q), WHO)}["notes/a.md"]
-    assert "# A edited" in after and "- [x] two" in p.read_text(encoding="utf-8")
-    assert "+- [x] two" not in after and "-- [ ] two" not in after, "the tick is in the look, so it is only context"
-    assert before == after.replace("- [x] two", "- [ ] two")
-
-
-def test_a_tick_inside_an_edit_already_listed_stays_part_of_it(q: Path) -> None:
+def test_a_task_list_is_markdown_so_neither_a_tick_nor_another_edit_to_it_is_ever_listed(q: Path) -> None:
+    """Proposed edits watch LaTeX documents only (`looks.watching`): a person's edit to their task list waits on nobody, before a tick or after it."""
     from tests.helpers import ok
 
     ok("changes", "--keep-all", cwd=q)
     p = q / "notes/a.md"
     p.write_text(p.read_text(encoding="utf-8").replace("- [ ] two", "- [ ] two, reworded"), encoding="utf-8")
+    assert "notes/a.md" not in listed(q)
     set_box(q, box(q, 1).id, True)
-    [diff] = [c.diff for c in changes(load_quilt(q), WHO) if c.path == "notes/a.md"]
-    assert "+- [x] two, reworded" in diff and "-- [ ] two\n" in diff
+    assert "- [x] two, reworded" in p.read_text(encoding="utf-8") and "notes/a.md" not in listed(q)
 
 
-def test_with_no_name_or_look_the_tick_still_lands_and_the_file_is_listed_as_ever(q: Path) -> None:
+def test_with_no_name_or_look_the_tick_still_lands(q: Path) -> None:
     set_box(q, box(q).id, True, who="")
     assert "- [x] one" in (q / "notes/a.md").read_text(encoding="utf-8")
     assert ledger(q)[0]["actor"] is None

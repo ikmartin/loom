@@ -1770,7 +1770,7 @@ def _follow_look(
 ) -> None:
     """After an act the person made through loom, give the reviewer's look what it wrote, so the person's own act is never listed back to them as a change to keep (Keep, the undo, Discard and a tick do this themselves, `OWN_LOOK`).
 
-    A file the look held as it was before the act now holds what the act wrote; one with another change waiting in it gets the act's change merged in by lines, and keeps its look where the two meet (`merge_lines`), so nothing waiting is taken in unseen; a file the act made goes in when it is an open text file. A file the look does not watch (`looks.watching`), one agents are denied, is left: nothing there is listed. An agent's act (`agent`, as the act's journal line records it) changes no look: the person has not seen it. Nothing before a first look. The act has happened whatever this does, so a failure here leaves the look as it was.
+    A file the look held as it was before the act now holds what the act wrote; one with another change waiting in it gets the act's change merged in by lines, and keeps its look where the two meet (`merge_lines`), so nothing waiting is taken in unseen; a file the act made goes in when it is a LaTeX file the look watches. A file the look does not watch (`looks.watching`), one agents are denied or one that is not LaTeX, is left: nothing there is listed. An agent's act (`agent`, as the act's journal line records it) changes no look: the person has not seen it. Nothing before a first look. The act has happened whatever this does, so a failure here leaves the look as it was.
     """
     if kind in OWN_LOOK or agent:
         return
