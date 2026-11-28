@@ -52,7 +52,7 @@
 	<div class="fbody">
 		{#if !focus.statement}<p class="quiet">{words.focus.numberOnly}</p>
 		{:else if 'fragment' in focus.statement}<Statement fragment={focus.statement.fragment} />
-		{:else}<NodeBody body={focus.statement.body} macros={focus.statement.macros} points={focus.statement.points} italic={THEOREMS.has(row.taxon)} />{/if}
+		{:else}<NodeBody body={focus.statement.body} macros={focus.statement.macros?.body ?? null} points={focus.statement.points} italic={THEOREMS.has(row.taxon)} />{/if}
 	</div>
 	{#if focus.relative_to}
 		<p class="vr" data-testid="web-standing">

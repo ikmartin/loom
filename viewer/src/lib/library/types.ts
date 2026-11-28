@@ -454,7 +454,7 @@ export interface WebSearch extends Gen {
 }
 
 /** A result's text in the focus card: a draft's fragment, or a library node's body as `library-node` gives it. */
-export type WebStatement = Statement | { body: string; macros: string | null; points: Record<string, Point> };
+export type WebStatement = Statement | { body: string; macros: { node: string; hash: Hash; body: string } | null; points: Record<string, Point> };
 
 /** `web-focus`: the result, its statement, its standing in Lean in rows, and its neighbourhood. */
 export interface WebFocus extends Gen {
