@@ -142,6 +142,36 @@ test("a paper dropped anywhere on the empty page, not only on its area, is the a
 	expect(sent).toEqual(['/_api/paper-receive', '/_api/paper-import']);
 });
 
+test("a paper that comes into a quilt with nothing to read typesets with its own macros, though the page loaded MathJax before it had any", async ({ page }) => {
+	let full = false;
+	await page.route('**/build/manifest.json', async (route) => {
+		const m = structuredClone(manifest);
+		if (!full) {
+			m.masters = [];
+			m.canon = [];
+			m.corpus.home = null;
+			m.macros.default = [];
+		}
+		await route.fulfill({ json: m });
+	});
+	await page.goto('/');
+	await expect(page.getByTestId('how-to-start')).toBeVisible();
+	// MathJax loads while the page is idle, with the macros the quilt has then: none
+	await page.waitForFunction(() => !!(window as unknown as { MathJax?: { startup?: { document?: unknown } } }).MathJax?.startup?.document);
+	full = true;
+	await expect(page).toHaveURL(/\/file\/README\.md$/);
+	// on to a section using the paper's \Fix, with no reload
+	await page.evaluate(() => {
+		const a = document.createElement('a');
+		a.href = '/node/sy-0100';
+		document.body.append(a);
+		a.click();
+	});
+	const math = pane(page, 0).locator('.fragment mjx-container');
+	await expect(math.first()).toBeVisible();
+	await expect(pane(page, 0).locator('.fragment mjx-container [data-mml-node="mtext"][fill="red"], .fragment mjx-container [data-mml-node="merror"]')).toHaveCount(0);
+});
+
 /** A loom server whose first build has not ended until `built.published` or `built.failed` says so: its manifest is missing until it publishes, and its stream says how its builds ended. */
 async function firstBuild(page: Page, built: { published: number; failed: number; why: string | null }): Promise<void> {
 	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: [], token: 't', stream: true } }));
