@@ -36,13 +36,13 @@ export const review = {
 	},
 	/** The kinds' names, in the column and over their groups in the list, and the hover card on each in the column. */
 	kinds: {
-		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or from Overleaf, what one copy brought in as one row. Read each, and accept it or not; those never accepted are folded beneath.' },
+		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from an agent document or from Overleaf, what one agent document brought in as one row. Read each, and accept it or not; those never accepted are folded beneath.' },
 		questions: { name: 'Agent questions', hover: 'Questions an agent asked while working. Answer with one of its choices or in your own words.' },
 		cited: { name: "Cited results loom can't read", hover: 'Results your drafts cite that loom could not read by itself: have an agent read them, or locate one yourself. Then citations that name no result, where loom asks which one the text rests on; none is a fault in your LaTeX.' },
 		check: { name: 'Results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
 		attest: { name: 'Lean statements to attest', hover: "Results whose statement, or a definition under it, changed since you attested the Lean come first: say whether the Lean still states each. Then those Lean has accepted that you never attested. To attest is to give your word that the Lean statement says what your result says; only then does the result read 'formalized'." },
 		fetch: { name: 'Papers to add', hover: 'Papers an agent needs and could not download. Open each page, download the paper, and drop the file anywhere in loom.' },
-		edits: { name: 'Proposed edits', hover: "Agents' suggestions, edits to your LaTeX since your look, and agents' copies to take in. Keep or discard each." },
+		edits: { name: 'Proposed edits', hover: "Agents' suggestions, edits to your LaTeX since your look, and agent documents to take in. Keep or discard each." },
 		agents: { name: 'Agents still working', hover: 'Work you asked of an agent that none has finished. Nothing here needs you.' }
 	} satisfies Record<Exclude<ReviewKind, 'attested-changed'> | 'agents', { name: string; hover: string }>,
 	list: {
@@ -366,10 +366,10 @@ export const review = {
 		todoHover: 'The open annotations from others, beneath the changes',
 		/** In place of those annotations, where there are none. */
 		todoNone: 'No open annotations from others.',
-		/** A copy's quiet line before what it holds. */
-		copy: "an agent's copy",
-		/** A copy's link at the right of its row: opens it on its own page in Review, where it is taken in and applied. */
-		openCopy: 'review the copy',
+		/** An agent document's quiet line before what it holds. */
+		copy: 'an agent document',
+		/** An agent document's link at the right of its row: opens it on its own page in Review, where it is taken in and applied. */
+		openCopy: 'review the agent document',
 		/** The column's message for changes loom would not keep or discard, one line for each reason; `why` by its code, absent where none is known. */
 		notDone: (how: 'keep' | 'discard', n: number, why?: string) => `${n === 1 ? 'One change was' : `${n} changes were`} not ${how === 'keep' ? 'kept' : 'discarded'}${why ? `: ${why}` : '.'}`,
 		/** Why, by the code loom refuses a keep or a discard with; a code not here is said by the frame's words, else not at all. */
@@ -391,7 +391,7 @@ export const review = {
 		/** The column's message when the last keep or discard could not be undone. */
 		notUndone: 'The last keep or discard could not be undone.'
 	},
-	/** Beside an agent's copy's Apply once it has written (`AppliedUndo`): the undo that puts the document back as it was before, from the version Apply kept, and what it says after. */
+	/** Beside an agent document's Apply once it has written (`AppliedUndo`): the undo that puts the document back as it was before, from the version Apply kept, and what it says after. */
 	applied: {
 		/** The button. */
 		undo: 'Undo',
@@ -400,7 +400,7 @@ export const review = {
 		/** Hover text on it. */
 		hover: (doc: string) => `Puts ${file(doc)} back as it was before you applied; its text now is kept as a version in History`,
 		/** Said once it is undone. */
-		undone: (doc: string) => `Put ${file(doc)} back as it was before you applied. Its text with the copy's changes is kept as a version in History, and the changes you took wait in the copy again.`,
+		undone: (doc: string) => `Put ${file(doc)} back as it was before you applied. Its text with the agent document's changes is kept as a version in History, and the changes you took wait in the agent document again.`,
 		/** Said when loom would not undo it, with why. */
 		notUndone: (why: string) => `It could not be undone. ${why}`,
 		/** Why, by the code loom refuses it with; a code not here is said by the frame's words. */
@@ -443,14 +443,14 @@ export const review = {
 		acceptPicked: (n: number) => `accept ${n}`,
 		/** Unchooses them. */
 		clear: 'clear',
-		/** An adoption's quiet line in Results to accept: how many results the person took in from an agent's copy. */
-		adoption: (n: number) => `taken in ${n} ${n === 1 ? 'result' : 'results'} from the copy`,
+		/** An adoption's quiet line in Results to accept: how many results the person took in from an agent document. */
+		adoption: (n: number) => `taken in ${n} ${n === 1 ? 'result' : 'results'} from the agent document`,
 		/** After it, how many of them cannot be accepted yet. */
 		cannotCount: (n: number) => `${n} can't be accepted yet`,
 		/** In an open adoption: accepts every result it took in that can be accepted. */
 		acceptAll: (n: number) => `accept all ${n}`,
 		/** Hover text on it. */
-		acceptAllHover: 'Accepts every result taken in from this copy that can be accepted; those that cannot yet say why',
+		acceptAllHover: 'Accepts every result taken in from this agent document that can be accepted; those that cannot yet say why',
 		/** A block's quiet line within its adoption where it cannot be accepted yet, by the queue's `refusal_code`. */
 		cannotRow: (code?: string) =>
 			({
@@ -491,7 +491,7 @@ export const review = {
 			})[code ?? ''] ?? "Can't be accepted yet.",
 		/** The same for a block marked incomplete with notes, before the person's own notes on it. */
 		cannotNoted: "Can't be accepted yet: it is marked incomplete:",
-		/** Over a copy opened from Proposed edits: back to the list. */
+		/** Over an agent document opened from Proposed edits: back to the list. */
 		back: '‹ Proposed edits',
 	},
 	/** Settling a write loom could neither finish nor undo, on its notice in Problems (`SettleLeft`): the control, the preview drawn from `write-settle-preview`'s fields, and what is said after. Never an id, a digest, a command, or loom's own sentence. */
@@ -633,7 +633,7 @@ export const review = {
 		/** Everything recorded's words for a file's version put back. */
 		restored: (name: string) => `Put ${name} back as a version`
 	},
-	/** The review of an agent's copy, opened from its row: the bar, the change shown, and what loom answered. Loom's own refusal is never shown: it is written for the command line. */
+	/** The review of an agent document, opened from its row: the bar, the change shown, and what loom answered. Loom's own refusal is never shown: it is written for the command line. */
 	contribution: {
 		lead: (copy: string, source: string) => ['From ', copy, ` into ${source} · `] as const,
 		counts: (taken: number, left: number, undecided: number, clash: number) => `${taken} taken · ${left} left · ${undecided} to decide${clash ? ` · ${clash} can't be taken` : ''}`,
@@ -652,20 +652,20 @@ export const review = {
 		leave: 'Leave it',
 		acceptHover: "Records your acceptance of this block's mathematics as it is written in, when you apply",
 		accept: 'accept as checked',
-		refresh: 'Refresh the copy',
-		about: (source: string) => `An agent's copy of ${source}. Take or leave each change; Apply writes the ones you took into ${source}, keeping it as it was first.`,
-		read: 'Read the copy',
+		refresh: 'Refresh the agent document',
+		about: (source: string) => `An agent document made from ${source}. Take or leave each change; Apply writes the ones you took into ${source}, keeping it as it was first.`,
+		read: 'Read the agent document',
 		noName: 'Choose your reviewer name in Settings to take changes.',
-		/** In place of the changes where loom could not compare the copy with its document. */
-		unreadable: 'Loom cannot compare this copy with your document now, so nothing of it can be taken. Ask your agent to look at the copy.',
+		/** In place of the changes where loom could not compare the agent document with its source. */
+		unreadable: 'Loom cannot compare this agent document with your document now, so nothing of it can be taken. Ask your agent to look at the agent document.',
 		mergedNote: 'You both changed it, and the edits fall apart line by line: what would be written holds both.',
-		removes: (source: string) => `The copy removes it from ${source}.`,
+		removes: (source: string) => `The agent document removes it from ${source}.`,
 		separate: 'It belongs to another document, so it is taken as a result of its own.',
 		sourceOnly: 'This changes its source, not its mathematics.',
 		yours: 'Yours',
-		copys: "The copy's",
+		copys: "The agent document's",
 		both: 'With both edits',
-		isNew: 'New in this copy.',
+		isNew: 'New in this agent document.',
 		removed: 'Removed.',
 		shared: (docs: string) => `This result is shared: it changes in ${docs} too.`,
 		bears: 'May bear on: ',
@@ -676,13 +676,13 @@ export const review = {
 		notRecorded: ' Your acceptance could not be recorded, so the blocks wait to be accepted.',
 		/** After it, where blocks marked as checked were not accepted. */
 		dropped: (n: number) => ` ${n} marked as checked wait too, since what they rest on was not accepted.`,
-		refreshed: 'The copy now has your latest text wherever you changed it alone; a clash stays until it is reconciled.',
+		refreshed: 'The agent document now has your latest text wherever you changed it alone; a clash stays until it is reconciled.',
 		/** Loom's refusal of each step, said in the viewer's words; a refusal with a sentence of its own in the frame's words says that. */
 		refused: {
-			decide: 'Loom did not save that choice: the copy changed, or you chose in another tab. Reload Review and choose again.',
-			prepare: 'Loom could not prepare these changes: the copy or your document changed since you chose, or a change you took needs another you left out, as a new result needs the prose that places it. Choose again.',
+			decide: 'Loom did not save that choice: the agent document changed, or you chose in another tab. Reload Review and choose again.',
+			prepare: 'Loom could not prepare these changes: the agent document or your document changed since you chose, or a change you took needs another you left out, as a new result needs the prose that places it. Choose again.',
 			apply: 'Loom did not write these changes: a file changed since they were prepared, so nothing was written. Apply again.',
-			refresh: 'Loom did not refresh the copy.'
+			refresh: 'Loom did not refresh the agent document.'
 		}
 	},
 	/** A session and its transcript, said where they show: Review › History › Sessions and a session's page, its Transcript and What it did. */
@@ -706,16 +706,16 @@ export const review = {
 		/** What each of loom's commands did, by the command's name in loom, for a step's row. */
 		step: {
 			accept: 'Accepted a result',
-			adopt: "Took in an agent's copy",
+			adopt: 'Took in an agent document',
 			'ai annotations': 'Read the annotations',
-			'ai close': "Closed an agent's copy",
+			'ai close': 'Closed an agent document',
 			'ai delete': 'Deleted annotations',
-			'ai drafts': "Listed the agents' copies",
+			'ai drafts': 'Listed the agent documents',
 			'ai init': "Set up an agent's app here",
 			'ai mode': 'Read a mode',
 			'ai orient': "Read loom's orientation and the quilt's state",
-			'ai refresh': "Brought an agent's copy up to date with its document",
-			'ai reopen': "Reopened an agent's copy",
+			'ai refresh': 'Brought an agent document up to date with its source',
+			'ai reopen': 'Reopened an agent document',
 			annotate: 'Annotated',
 			ask: 'Asked you a question',
 			atomize: 'Split a document into results',
@@ -727,7 +727,7 @@ export const review = {
 			deps: 'Read what a result depends on',
 			doctor: 'Checked the set-up',
 			downstream: 'Read what rests on a result',
-			draft: "Made an agent's copy of a document",
+			draft: 'Made an agent document from one of yours',
 			evidence: 'Read what is known of a result',
 			formal: "Read the quilt's Lean",
 			'formal check': 'Checked the Lean',
@@ -809,10 +809,10 @@ export const review = {
 	help: {
 		review: {
 			title: 'What the Your Changes page shows',
-			body: "The mathematics first: every statement and proof you have not accepted as it stands, one document at a time, each listed once with every reason it waits. Accepting records your reading of the text against what it rests on; it goes stale when either changes. Blocks taken in from an agent's copy or a pull are grouped by where they came from; what loom cannot accept says why in its row. Then the changes waiting to be kept, by document: suggestions not yet kept or discarded and edits made since your look to the LaTeX files in the places agents may edit, each a few words out and a few words in. Only LaTeX is watched, so an edit to Markdown or any other file is never listed. Your own places, the config and each place agents are denied (Settings › Agents), are not watched, so an edit there is never listed. Keep writes a suggestion into its file, or takes an edit into your look; Discard drops a suggestion, or writes your words back over an edit, its text kept as a version first. Neither says whether the mathematics is right, and each acts as it does in the document. To do adds the open annotations from others.",
+			body: "The mathematics first: every statement and proof you have not accepted as it stands, one document at a time, each listed once with every reason it waits. Accepting records your reading of the text against what it rests on; it goes stale when either changes. Blocks taken in from an agent document or a pull are grouped by where they came from; what loom cannot accept says why in its row. Then the changes waiting to be kept, by document: suggestions not yet kept or discarded and edits made since your look to the LaTeX files in the places agents may edit, each a few words out and a few words in. Only LaTeX is watched, so an edit to Markdown or any other file is never listed. Your own places, the config and each place agents are denied (Settings › Agents), are not watched, so an edit there is never listed. Keep writes a suggestion into its file, or takes an edit into your look; Discard drops a suggestion, or writes your words back over an edit, its text kept as a version first. Neither says whether the mathematics is right, and each acts as it does in the document. To do adds the open annotations from others.",
 			states: [
 				['changed since you accepted', 'the text, or something it rests on, changed after you accepted it'],
-				['taken in', "it came in from an agent's copy or a pull, and you have not accepted it since"],
+				['taken in', "it came in from an agent document or a pull, and you have not accepted it since"],
 				['never accepted', 'nothing has been recorded about this text; these are listed and not counted'],
 				["can't be accepted yet", 'it is marked incomplete, it is a conjecture or question, its basis is not said, or something it rests on cannot be identified; the row says which'],
 				['suggestion', 'words someone proposes in place of yours, not yet in the file'],
@@ -821,7 +821,7 @@ export const review = {
 		},
 		problems: {
 			title: 'What the problems page shows',
-			body: "What is wrong in your own LaTeX, a document that did not compile among it, by whose it is to put right. Your files come first, and are what Review counts; an agent's copy is the agent's, or yours to leave out when you take it back. What loom notices about its own picture of the quilt is your agent's to keep, and is not shown here.",
+			body: "What is wrong in your own LaTeX, a document that did not compile among it, by whose it is to put right. Your files come first, and are what Review counts; an agent document is the agent's, or yours to leave out when you take it back. What loom notices about its own picture of the quilt is your agent's to keep, and is not shown here.",
 			states: [
 				['error', 'a reader would notice it: a document that did not compile, a reference to nothing'],
 				['warning', 'probably a mistake, though the document still reads'],

@@ -26,7 +26,7 @@ describe('with a base: a copy against its source', () => {
 		expect(p.marks[1].get('s2')?.whole).toBe(true); // no answer yet: every line of the node
 	});
 	it('draws amber on both sides when both changed since the copy', () => {
-		expect(p.marks[0].get('s1')).toMatchObject({ kind: 'both', tag: 'changed on both sides since the copy' });
+		expect(p.marks[0].get('s1')).toMatchObject({ kind: 'both', tag: 'changed on both sides since the agent document' });
 		expect(p.marks[1].get('s1')?.kind).toBe('both');
 	});
 	it('marks a node only one side has, with a wedge where the base places it', () => {

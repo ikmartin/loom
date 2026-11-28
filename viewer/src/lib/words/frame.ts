@@ -100,7 +100,7 @@ export const frame = {
 		/** The panel's line over when a version is kept and how to compare. */
 		versions: 'Versions',
 		/** Under Versions: when loom keeps one. */
-		made: "Loom keeps a version of a document when it comes in; when you keep or undo a proposed edit, take in an agent's copy or restore a version; and when you record one. Saving a file makes none.",
+		made: "Loom keeps a version of a document when it comes in; when you keep or undo a proposed edit, take in an agent document or restore a version; and when you record one. Saving a file makes none.",
 		/** Under Versions: how to compare two. */
 		compare: "To compare, open history on the document's toolbar and choose a version: it opens beside the text with what differs marked. Review › History lists every version.",
 		/** The panel's line over how to read two things at once. */

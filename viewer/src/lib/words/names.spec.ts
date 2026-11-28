@@ -24,7 +24,9 @@ const NEVER: [string, RegExp][] = [
 	['the manifest', /\bmanifest\b/i],
 	['the publisher', /\bpublisher\b/i],
 	['Proposed Changes', /Proposed Changes/],
-	['pending change', /\bpending changes?\b/i]
+	['pending change', /\bpending changes?\b/i],
+	["an agent's copy", /\bagents?'s? cop(y|ies)\b/i],
+	['AI document', /\bAI documents?\b/i]
 ];
 
 describe("the viewer's words", () => {

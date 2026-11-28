@@ -24,7 +24,7 @@ const m = {
 	unresolved: [
 		row('a', 'earlier-change'),
 		row('b', 'adopted', { contribution: '.loom/agents/copies/examples-shared.tex' }),
-		row('c', 'adopted', { source_label: 'Taken in from the copy “aidoc”' }),
+		row('c', 'adopted', { source_label: 'Taken in from the agent document “aidoc”' }),
 		row('d', 'never-accepted', { refusal: 'It is marked incomplete.' }),
 		row('e', 'never-accepted')
 	],
@@ -37,8 +37,8 @@ describe('blocks not freshly accepted', () => {
 		const g = groupsOf(m, 'main.tex');
 		expect(g.changed.map((r) => r.key)).toEqual(['a']);
 		expect(g.taken.map((t) => [t.label, t.rows.map((r) => r.key)])).toEqual([
-			['Taken in from the copy “examples-shared”', ['b']],
-			['Taken in from the copy “aidoc”', ['c']]
+			['Taken in from the agent document “examples-shared”', ['b']],
+			['Taken in from the agent document “aidoc”', ['c']]
 		]);
 		expect(g.never.map((r) => r.key)).toEqual(['d']);
 		expect(g.accepted.map((k) => k.key)).toEqual(['f']);
@@ -50,7 +50,7 @@ describe('blocks not freshly accepted', () => {
 	});
 
 	it('heads a taken-in group by its source, the copy named when loom gives no label', () => {
-		expect([takenLabel(row('x', 'adopted', { contribution: 'a/b/copy.tex' })), takenLabel(row('x', 'incoming-pull'))]).toEqual(['Taken in from the copy “copy”', 'Taken in from Overleaf']);
+		expect([takenLabel(row('x', 'adopted', { contribution: 'a/b/copy.tex' })), takenLabel(row('x', 'incoming-pull'))]).toEqual(['Taken in from the agent document “copy”', 'Taken in from Overleaf']);
 	});
 
 	it('offers only documents that reach a block', () => {

@@ -114,7 +114,7 @@
 
 <main class="page" use:barShown>
 	<ReviewHeading title="Problems">{#snippet aside()}<HelpDot label="what the problems page shows" topic="problems" />{/snippet}</ReviewHeading>
-	<p class="lead">What is wrong in your LaTeX, a document that did not compile among it, comes first, and is what Review counts. What is wrong in the LaTeX of an agent's copy is below it, folded.</p>
+	<p class="lead">What is wrong in your LaTeX, a document that did not compile among it, comes first, and is what Review counts. What is wrong in the LaTeX of an agent document is below it, folded.</p>
 	<div class="filters" data-testid="problem-filters">
 		{#each SEVERITIES as s (s)}
 			<button class="chip" class:on={severity === s} aria-pressed={severity === s} onclick={() => pick(s)} data-testid="filter-{s}">{counts[s]} {NAMES[s][counts[s] === 1 ? 0 : 1]}</button>
@@ -139,8 +139,8 @@
 
 	{#if parts.copy.length}
 		<details class="part" open={isOpen('copy', false)} ontoggle={toggled('copy')} data-testid="problems-copy">
-			<summary><h2>In an agent's copy <span class="n">{parts.copy.length}</span></h2></summary>
-			<p class="whose">The agent's to put right, or to leave out when you take the copy back in {#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="problems-copy-link">{reviewWords.kinds.edits.name}</a>{:else}<a href={route('/review/proposed')} data-testid="problems-copy-link">Proposed edits</a>{/if}.</p>
+			<summary><h2>In an agent document <span class="n">{parts.copy.length}</span></h2></summary>
+			<p class="whose">The agent's to put right, or to leave out when you take the agent document back in {#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="problems-copy-link">{reviewWords.kinds.edits.name}</a>{:else}<a href={route('/review/proposed')} data-testid="problems-copy-link">Proposed edits</a>{/if}.</p>
 			{@render groups(parts.copy, 'copy')}
 		</details>
 	{/if}

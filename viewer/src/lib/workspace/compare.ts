@@ -202,7 +202,7 @@ export function plan(found: [Found[], Found[]], sides: [Side, Side], baseOf: (ke
 			for (const p of [0, 1] as const) {
 				const whole = !(p === 0 ? a?.left.fragment : a?.right.fragment);
 				const kind: MarkKind = dir === 'both' || !based ? 'both' : dir === p ? 'del' : 'add';
-				const tag = dir === 'both' && based ? `changed on both sides since the ${copyRel !== null || lists.some((x) => x.some((f) => derived(f.key))) ? 'copy' : 'base'}` : '';
+				const tag = dir === 'both' && based ? `changed on both sides since the ${copyRel !== null || lists.some((x) => x.some((f) => derived(f.key))) ? 'agent document' : 'base'}` : '';
 				marks[p].set(pair, { kind, tag: joinTags(tag, movedTag(p, pair, also)), also, whole });
 			}
 		} else if (also) {

@@ -51,7 +51,7 @@ export function accessOfAll(files: ProjectFile[]): Access | null {
 export function explain(a: Access, at: { dir?: boolean; kind?: string; copyOf?: string; statePath?: string }): Explained {
 	if (at.copyOf) {
 		const of = at.copyOf.slice(at.copyOf.lastIndexOf('/') + 1);
-		return { title: 'You and agents edit this copy', body: `An agent's copy of ${of}. What you take from it comes back to ${of} through Review.` };
+		return { title: 'You and agents edit this agent document', body: `An agent document made from ${of}. What you take from it comes back to ${of} through Review.` };
 	}
 	if (a.agents) {
 		if (at.dir) return { title: 'You and agents edit what is in here', body: 'An agent may change any file in this folder. Review lists what changed in a text file since you last looked, to keep or undo.' };

@@ -28,7 +28,7 @@ export interface Decision {
 	kept: string[];
 }
 
-const CLASH = 'You and the agent both changed it and the edits clash. Reconcile it in your editor, then refresh the copy.';
+const CLASH = 'You and the agent both changed it and the edits clash. Reconcile it in your editor, then refresh the agent document.';
 
 function sectionOf(m: Manifest, key: string, master: string): string {
 	const node = m.nodes[key] ?? m.nodes[m.keys[key]?.node ?? ''];
@@ -47,8 +47,8 @@ export function itemsOf(m: Manifest, c: AdoptionReview): Item[] {
 		const clash = ch.class === 'conflict';
 		return { key: ch.key, kind: 'result', name, detail: shown.context, section: sectionOf(m, key, master), can: !clash, why: clash ? CLASH : '', change: ch };
 	});
-	if (c.document_changed) out.push({ key: 'document', kind: 'prose', name: 'Prose and ordering', detail: 'The text between results, and their order', section: '', can: !c.document_conflict, why: c.document_conflict ? 'The prose changed on both sides and the edits clash. Reconcile it in your editor, then refresh the copy.' : '' });
-	if (c.preamble_changed) out.push({ key: 'preamble', kind: 'preamble', name: 'Preamble', detail: 'Packages and macros for the whole paper', section: '', can: !c.preamble_conflict, why: c.preamble_conflict ? 'The preamble changed on both sides and the edits clash. Reconcile it in your editor, then refresh the copy.' : '' });
+	if (c.document_changed) out.push({ key: 'document', kind: 'prose', name: 'Prose and ordering', detail: 'The text between results, and their order', section: '', can: !c.document_conflict, why: c.document_conflict ? 'The prose changed on both sides and the edits clash. Reconcile it in your editor, then refresh the agent document.' : '' });
+	if (c.preamble_changed) out.push({ key: 'preamble', kind: 'preamble', name: 'Preamble', detail: 'Packages and macros for the whole paper', section: '', can: !c.preamble_conflict, why: c.preamble_conflict ? 'The preamble changed on both sides and the edits clash. Reconcile it in your editor, then refresh the agent document.' : '' });
 	return out;
 }
 

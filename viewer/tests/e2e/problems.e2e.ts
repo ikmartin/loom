@@ -86,7 +86,7 @@ test("where Review's reads are served, an agent's copy's problems point to Propo
 	await serve(page, (m) => void m.diagnostics.push(copyFailed as never));
 	await page.goto('/review/problems?fixture=round6');
 	const copy = page.getByTestId('problems-copy');
-	await expect(copy).toContainText('take the copy back in Proposed edits.');
+	await expect(copy).toContainText('take the agent document back in Proposed edits.');
 	await copy.locator('summary').first().click();
 	await copy.getByTestId('problems-copy-link').click();
 	await expect(page).toHaveURL(/\/review(\?|$)/);

@@ -94,7 +94,7 @@ export const agents = {
 		changesSuggestedWhat: ' change nothing until you keep them.',
 		/** The fifth part's heading. */
 		never: 'What it never does',
-		neverWhat: 'Keep or discard a suggested edit, take its copy into your document, add or drop a paper in the library, restore an earlier version, or delete an annotation that is not its own. Those are yours, and loom refuses each to an agent whatever name it gives.'
+		neverWhat: 'Keep or discard a suggested edit, take an agent document into your document, add or drop a paper in the library, restore an earlier version, or delete an annotation that is not its own. Those are yours, and loom refuses each to an agent whatever name it gives.'
 	},
 	/** Under the field where a person writes a new comment: who reads it. */
 	readBy: 'Kept with this quilt for anyone who has it. An agent working here reads it when its conversation starts, or when you tell it you have left it something.',

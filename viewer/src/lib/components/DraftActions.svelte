@@ -39,7 +39,7 @@
    <button disabled={busy} onclick={() => action('adopt-close')}>Close draft</button>
   {/if}
  {/if}
- {#if confirmation}<div role="alert"><p>{confirmation}</p><button disabled={busy} onclick={() => action('adopt-close', true)}>Close and keep saved copy</button><button disabled={busy} onclick={() => confirmation = ''}>Cancel</button></div>{/if}
+ {#if confirmation}<div role="alert"><p>{confirmation}</p><button disabled={busy} onclick={() => action('adopt-close', true)}>Close and keep it saved</button><button disabled={busy} onclick={() => confirmation = ''}>Cancel</button></div>{/if}
  {#if error}<p role="alert">{error}</p>{/if}
  {#if message}<p role="status">{message}</p>{/if}
  {#if pdf}<p><a href={dataUrl(pdf)} target="_blank" rel="noreferrer">Open preview PDF</a> · saved paper context with this draft substituted</p>{/if}

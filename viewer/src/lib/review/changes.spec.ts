@@ -79,7 +79,7 @@ describe('the pending changes the manifest lists', () => {
 	it('says why one that is not ready cannot be kept, in loom\'s words where it gives them', () => {
 		expect(refusal(change({}))).toBe('');
 		expect(refusal(change({ state: 'unplaced', why: 'an earlier suggestion overlaps it' }))).toBe('an earlier suggestion overlaps it');
-		expect(refusal(change({ state: 'on-a-copy' }))).toMatch(/agent's copy/);
+		expect(refusal(change({ state: 'on-a-copy' }))).toMatch(/agent document/);
 		expect(refusal(change({ state: 'taken' }))).toMatch(/already reads/);
 		// a suggestion the text already reads as is kept to record it, or discarded
 		expect(ready(change({ state: 'taken' }))).toBe(true);

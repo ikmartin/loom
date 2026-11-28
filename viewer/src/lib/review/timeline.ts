@@ -57,13 +57,13 @@ export function actWords(a: HistoryAct): string {
 			if (a.kept_for === 'adopt' || a.kept_for === 'sync') return `Kept a version${of} first: ${a.message ?? ''}`.trim();
 			return a.landmark ? `Recorded the version “${a.message ?? ''}”${of}` : `Recorded the whole quilt: ${a.message ?? ''}`;
 		case 'copy':
-			return `Made an agent's copy${a.in ? ` of ${file(a.in)}` : ''}`;
+			return `Made an agent document${a.in ? ` from ${file(a.in)}` : ''}`;
 		case 'adopt':
-			return `Took changes in from the copy ${file(a.copy ?? '')}`;
+			return `Took changes in from the agent document ${file(a.copy ?? '')}`;
 		case 'draft-close':
-			return `Closed the agent's copy ${file(a.copy ?? '')}`;
+			return `Closed the agent document ${file(a.copy ?? '')}`;
 		case 'draft-reopen':
-			return `Reopened the agent's copy ${file(a.copy ?? '')}`;
+			return `Reopened the agent document ${file(a.copy ?? '')}`;
 		case 'live':
 			return `Brought ${file(a.path ?? '')} back into the quilt`;
 		case 'page-write':

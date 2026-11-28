@@ -17,7 +17,7 @@ export function editAnswering(m: Pick<Manifest, 'suggested_edits'> | null, id: s
 }
 
 /**
- * The document a key is read in, and the words that say so: "in draft5.tex", or "in examples-shared.tex, the agent's copy of examples.tex". The document `inDoc` names when it names one, else the first live document reading the key, the person's own before an agent's copy; null for a key no live document reads.
+ * The document a key is read in, and the words that say so: "in draft5.tex", or "in examples-shared.tex, the agent document made from examples.tex". The document `inDoc` names when it names one, else the first live document reading the key, the person's own before an agent's copy; null for a key no live document reads.
  */
 export function documentOf(m: Pick<Manifest, 'nodes' | 'keys' | 'masters'> & Partial<Pick<Manifest, 'regions'>>, at: { target: { key: string }; in?: string | null }): { path: string; words: string; copy: boolean } | null {
 	const key = at.target.key;
@@ -29,8 +29,8 @@ export function documentOf(m: Pick<Manifest, 'nodes' | 'keys' | 'masters'> & Par
 	if (!doc) return null;
 	const copy = isAgentDocument(doc);
 	// one on a whole document is named by it already
-	if (doc.path === key) return { path: doc.path, copy, words: copy ? `the agent's copy of ${file(doc.copy_of ?? '')}` : '' };
-	return { path: doc.path, copy, words: copy ? `in ${file(doc.path)}, the agent's copy of ${file(doc.copy_of ?? '')}` : `in ${file(doc.path)}` };
+	if (doc.path === key) return { path: doc.path, copy, words: copy ? `the agent document made from ${file(doc.copy_of ?? '')}` : '' };
+	return { path: doc.path, copy, words: copy ? `in ${file(doc.path)}, the agent document made from ${file(doc.copy_of ?? '')}` : `in ${file(doc.path)}` };
 }
 
 /** Who wrote it, as the person reads it: "you" for their own, an agent by the name it gave itself. */

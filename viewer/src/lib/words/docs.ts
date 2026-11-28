@@ -288,7 +288,7 @@ export const docs = {
 		/** At a version's right, which compares it with the one shown; its accessible name. */
 		compare: 'compare',
 		compareName: (of: string, label: string) => `compare ${of} with ${label}`,
-		/** The line for an agent's copy, or for a copy's source: its file. */
+		/** The line for an agent document, or for an agent document's source: its file. */
 		compareWith: (file: string) => `compare with ${file}`,
 		/** Under the newest versions, the line that lists the rest in the menu; once they are listed, the line that folds them again. Its accessible name. */
 		older: (n: number) => `${n} older`,

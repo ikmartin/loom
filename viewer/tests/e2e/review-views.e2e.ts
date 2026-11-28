@@ -691,9 +691,9 @@ test("an adoption is one row of Results to accept, opening to the blocks it took
 	const COPY = '.loom/agents/copies/aidoc.tex';
 	await serve(page, (m) => {
 		const from: Record<string, object> = {
-			'sy-0002': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”' },
-			'sy-0004': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”', refusal: 'It is marked incomplete.', refusal_code: 'incomplete' },
-			'sy-0005': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”' }
+			'sy-0002': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the agent document “aidoc”' },
+			'sy-0004': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the agent document “aidoc”', refusal: 'It is marked incomplete.', refusal_code: 'incomplete' },
+			'sy-0005': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the agent document “aidoc”' }
 		};
 		for (const r of m.unresolved) Object.assign(r, from[r.key] ?? {});
 	});
@@ -712,7 +712,7 @@ test("an adoption is one row of Results to accept, opening to the blocks it took
 	await expect(kindRows(page, 'accepted-changed')).toHaveCount(3);
 	const adoption = page.locator(`[data-testid="review-row"][data-adoption="${COPY}"]`);
 	await expect(adoption.locator('.tx').first()).toHaveText('main.tex · aidoc');
-	await expect(adoption.getByTestId('review-row-why')).toHaveText("taken in 3 results from the copy · 1 can't be accepted yet");
+	await expect(adoption.getByTestId('review-row-why')).toHaveText("taken in 3 results from the agent document · 1 can't be accepted yet");
 	// the blocks not from an adoption stay rows of their own
 	await expect(page.locator('[data-testid="review-row"][data-key="sy-0001"]')).toBeVisible();
 	await expect(page.locator('[data-testid="review-row"][data-key="sy-0002/proof"]')).toBeVisible();

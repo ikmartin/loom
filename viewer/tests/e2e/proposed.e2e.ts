@@ -29,7 +29,7 @@ test("a suggested edit on a copy is listed on the copy's card with its document,
 	const fold = card(page, COPY).getByTestId('proposed-on-copy');
 	await fold.locator('summary').click();
 	const text = edit(page, TEXT);
-	await expect(text.getByTestId('suggestion-document')).toContainText("the agent's copy");
+	await expect(text.getByTestId('suggestion-document')).toContainText('the agent document');
 	await expect(text.getByTestId('suggestion-quote')).not.toContainText('\\ref');
 	await expect(text.getByTestId('suggestion-writer')).toContainText('agent');
 	await expect(text).toContainText('Say what the comparison shows.');
@@ -200,7 +200,7 @@ test('an Apply is undone where it was applied: the version it kept is restored i
 	await expect(page.getByTestId('proposed-answer')).toContainText('Took 1 change into main');
 	await page.getByTestId('applied-undo').click();
 	await expect.poll(() => restored).toEqual({ document: 'drafting/main.tex', version: 'main-before-adopt-aidoc', quilt: 'q-applied' });
-	await expect(page.getByTestId('proposed-answer')).toHaveText("Put main.tex back as it was before you applied. Its text with the copy's changes is kept as a version in History, and the changes you took wait in the copy again.");
+	await expect(page.getByTestId('proposed-answer')).toHaveText("Put main.tex back as it was before you applied. Its text with the agent document's changes is kept as a version in History, and the changes you took wait in the agent document again.");
 	await expect(page.getByTestId('applied-undo')).toHaveCount(0);
 	await expect(page.getByTestId('contribution')).toBeVisible();
 });
@@ -242,7 +242,7 @@ test("an Undo pressed in the copy's bar is said above the copy, even when the co
 	leave();
 	await expect.poll(() => restored).toEqual({ document: 'drafting/main.tex', version: 'main-before-adopt-aidoc', quilt: 'q-applied' });
 	await expect(page.getByTestId('contribution')).toBeVisible();
-	await expect(page.getByTestId('proposed-answer')).toHaveText("Put main.tex back as it was before you applied. Its text with the copy's changes is kept as a version in History, and the changes you took wait in the copy again.");
+	await expect(page.getByTestId('proposed-answer')).toHaveText("Put main.tex back as it was before you applied. Its text with the agent document's changes is kept as a version in History, and the changes you took wait in the agent document again.");
 	await expect(page.getByTestId('applied-undo')).toHaveCount(0);
 });
 

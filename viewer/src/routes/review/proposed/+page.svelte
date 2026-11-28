@@ -75,7 +75,7 @@
 	{#if e.comment_html}<Prose html={e.comment_html} />{/if}
 	{#if change?.diff}<DiffView path={change.diff} />{/if}
 	{#if change && change.state !== 'ready' && change.state !== 'on-a-copy'}<p class="why" data-testid="suggestion-unplaced">{refusal(change)}</p>{/if}
-	<p class="why" data-testid="suggestion-on-copy">It is on the agent's copy, and comes in with the copy.</p>
+	<p class="why" data-testid="suggestion-on-copy">It is on the agent document, and comes in with it.</p>
 {/snippet}
 
 <main class="page" use:barShown class:review-page={!opened} data-testid="proposed">
@@ -93,24 +93,24 @@
 		{#if !cards.length}
 			<Empty text="Nobody has proposed anything." testid="proposed-none" />
 		{:else}
-			<p class="lead" data-testid="proposed-summary">{cards.length} to decide. What agents and collaborators propose in a pass of its own: a copy is reviewed whole. A suggested edit is kept or discarded where it stands, in its document or in Review.</p>
+			<p class="lead" data-testid="proposed-summary">{cards.length} to decide. What agents and collaborators propose in a pass of its own: an agent document is reviewed whole. A suggested edit is kept or discarded where it stands, in its document or in Review.</p>
 			<ul class="plain cards" data-testid="proposed-cards">
 				{#each cards as c (c.kind + c.id)}
 					<li class="card" data-testid="proposed-card" data-kind={c.kind} data-id={c.id}>
 						{#if c.kind === 'copy'}
 							{@const items = itemsOf(m, c.copy)}
 							<div class="line">
-								<span class="tag">an agent's copy</span>
+								<span class="tag">an agent document</span>
 								<span class="name">{file(c.copy.copy)}</span>
 								<span class="of">into {file(c.copy.source)}</span>
-								<span class="acts"><a class="btn small primary" href="{here}?copy={encodeURIComponent(c.copy.copy)}" data-testid="proposed-open">Review the copy</a></span>
+								<span class="acts"><a class="btn small primary" href="{here}?copy={encodeURIComponent(c.copy.copy)}" data-testid="proposed-open">Review the agent document</a></span>
 							</div>
 							<p class="why" data-testid="proposed-tally">{copySays(tally(c.copy, items))}.</p>
 							{#if c.copy.issues.length}<p class="why" data-testid="proposed-issue">{c.copy.issues[0]}</p>{/if}
 							{@render chips(items.map((i) => ({ name: i.name, bad: !i.can })))}
 							{#if c.edits.length}
 								<details class="on-copy" data-testid="proposed-on-copy">
-									<summary>{count(c.edits.length, 'suggested edit', 'suggested edits')} on it, which come in with the copy</summary>
+									<summary>{count(c.edits.length, 'suggested edit', 'suggested edits')} on it, which come in with the agent document</summary>
 									<ul class="plain">
 										{#each c.edits as e (e.id)}<li class="folded" id={e.id} data-testid="suggestion" data-id={e.id}>{@render suggestedEdit(e)}</li>{/each}
 									</ul>

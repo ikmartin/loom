@@ -23,7 +23,7 @@ const reaches = (m: Pick<Manifest, 'nodes' | 'keys'>, key: string, path: string)
 /** The source a taken-in row came from, as its group is headed. */
 export function takenLabel(row: UnresolvedReview): string {
 	if (row.source_label) return row.source_label;
-	if (row.contribution) return `Taken in from the copy “${row.contribution.split('/').pop()!.replace(/\.tex$/, '')}”`;
+	if (row.contribution) return `Taken in from the agent document “${row.contribution.split('/').pop()!.replace(/\.tex$/, '')}”`;
 	return 'Taken in from Overleaf';
 }
 

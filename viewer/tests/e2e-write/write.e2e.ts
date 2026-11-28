@@ -470,7 +470,7 @@ test('an agent copy is taken back in one pass: Take it, then one Apply writes it
 	await page.goto('/review');
 	// what it took in is one row, opening to the block
 	const adoption = page.locator('[data-testid="review-row"][data-adoption=".loom/agents/copies/adoption-proposal.tex"]');
-	await expect(adoption.getByTestId('review-row-why')).toHaveText('taken in 1 result from the copy');
+	await expect(adoption.getByTestId('review-row-why')).toHaveText('taken in 1 result from the agent document');
 	await openRow(adoption);
 	await expect(acceptRow(page, 'sy-0900')).toBeVisible();
 });

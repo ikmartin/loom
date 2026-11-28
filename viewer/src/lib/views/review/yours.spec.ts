@@ -47,7 +47,7 @@ describe('the accept section', () => {
 		const taken: Manifest = { ...m, unresolved: m.unresolved!.map((r) => (r.key === 'sy-0001' ? { ...r, cause: 'adopted' as const, contribution: '.loom/copies/main-agent.tex' } : r)) };
 		const rows = acceptList(taken).waiting;
 		const row = rows.find((b) => b.key === 'sy-0001');
-		expect(row?.taken).toBe('Taken in from the copy “main-agent”');
+		expect(row?.taken).toBe('Taken in from the agent document “main-agent”');
 		const own = rows.filter((b) => b.doc === row!.doc);
 		expect(own.at(-1)?.key).toBe('sy-0001');
 	});

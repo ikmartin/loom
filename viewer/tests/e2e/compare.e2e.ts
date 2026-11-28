@@ -53,7 +53,7 @@ test('an agent document against its source: − on the source, + on the copy, am
 	await expect(right.locator('[data-pair="sy-0002"].compare-add')).toHaveCount(1);
 	await expect(left.locator('.compare-gutter .gl.del').first()).toHaveText('−');
 	// sy-0001 was changed on both sides since the copy
-	await expect(left.locator('[data-pair="sy-0001"]')).toContainText('changed on both sides since the copy');
+	await expect(left.locator('[data-pair="sy-0001"]')).toContainText('changed on both sides since the agent document');
 	await expect(right.locator('.compare-gutter .gl.both').first()).toHaveText('~');
 	// sy-0202 is gone from the copy: marked on the source, a wedge in the copy where it stood
 	await expect(left.locator('[data-pair="sy-0202"]')).toContainText('removed in aidoc.tex');

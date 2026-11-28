@@ -67,7 +67,7 @@ export function refusal(c: Pick<PendingChange, 'state' | 'why'>): string {
 	if (ready(c)) return '';
 	if (c.why) return c.why;
 	if (c.state === 'unplaced') return 'It has no place in the text as it stands.';
-	if (c.state === 'on-a-copy') return "It is on the agent's copy, and comes in with the copy.";
+	if (c.state === 'on-a-copy') return 'It is on the agent document, and comes in with it.';
 	return 'It cannot be kept or discarded now.';
 }
 

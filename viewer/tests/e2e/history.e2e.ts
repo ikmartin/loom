@@ -30,11 +30,11 @@ test('the menu lists the live text and the landmarks newest first, each with its
 
 test('a version kept at an act is listed with the rest, named by the act', async ({ page }) => {
 	await serve(page, (m) => {
-		m.canon.push({ ...structuredClone(m.canon[1]), path: '.loom/records/history/0007-main-before-adopt-aidoc/main-before-adopt-aidoc.tex', stem: 'main-before-adopt-aidoc', name: 'main-before-adopt-aidoc', step: '0007', kept_for: 'adopt', message: 'Before taking changes from the copy “aidoc”' });
+		m.canon.push({ ...structuredClone(m.canon[1]), path: '.loom/records/history/0007-main-before-adopt-aidoc/main-before-adopt-aidoc.tex', stem: 'main-before-adopt-aidoc', name: 'main-before-adopt-aidoc', step: '0007', kept_for: 'adopt', message: 'Before taking changes from the agent document “aidoc”' });
 	});
 	await page.goto('/master/drafting/main');
 	await history(page);
-	await expect(page.getByTestId('history-version-main-before-adopt-aidoc')).toContainText('Before taking changes from the copy “aidoc”');
+	await expect(page.getByTestId('history-version-main-before-adopt-aidoc')).toContainText('Before taking changes from the agent document “aidoc”');
 	await expect(page.getByTestId('history-menu').locator('[role="menuitemradio"]').nth(1)).toContainText('Before taking changes');
 });
 
