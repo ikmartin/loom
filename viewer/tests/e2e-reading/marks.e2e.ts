@@ -272,10 +272,10 @@ test.describe('on a project PDF', () => {
 		await page.keyboard.press('Escape');
 		await selectWords(page, 1, 'Abstract');
 		await expect(marks(page, 'underline')).toHaveCount(1);
-		// words the tool marked keep Quote and New note beside them, and no Annotate
+		// words the tool marked keep Quote and New note beside them, and no Comment
 		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
-		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
+		await expect(page.getByTestId('selection-comment')).toHaveCount(0);
 		// Escape closes the actions first, the tool staying in hand
 		await page.keyboard.press('Escape');
 		await expect(page.getByTestId('selection-menu')).toHaveCount(0);
@@ -287,13 +287,13 @@ test.describe('on a project PDF', () => {
 		await selectWords(page, 1, 'Introduction');
 		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
-		await expect(page.getByTestId('selection-annotate')).toBeVisible();
-		// the menu's Annotate marks the words as the tool does, and they keep Quote and New note
-		await page.getByTestId('selection-annotate').click();
+		await expect(page.getByTestId('selection-comment')).toBeVisible();
+		// the menu's Comment marks the words as the tool does, and they keep Quote and New note
+		await page.getByTestId('selection-comment').click();
 		await published(served, 3);
 		await page.getByTestId('selection-actions').click();
 		await expect(page.getByTestId('quote-offer')).toBeVisible();
-		await expect(page.getByTestId('selection-annotate')).toHaveCount(0);
+		await expect(page.getByTestId('selection-comment')).toHaveCount(0);
 	});
 
 	test('Comment writes a pin once it says something, the drawing tools each leave a mark in the look in hand, and a shape moves, resizes and comes back with Undo', async ({ page, served }) => {
