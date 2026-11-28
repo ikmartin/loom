@@ -10,6 +10,7 @@
 	import { can } from '$lib/write';
 	import type { Item } from '../item';
 	import ItemToolbar from '../ItemToolbar.svelte';
+	import type { ToolsAt } from '../fold';
 	import ToolbarItem from '../ToolbarItem.svelte';
 	import { openOutside } from '../links';
 	import { fileState } from '../state.svelte';
@@ -36,9 +37,9 @@
 </script>
 
 {#snippet reading()}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="read" {writes} onoutside={opens ? () => void outside() : undefined} />{/snippet}
-{#snippet writing()}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="write" {writes} />{/snippet}
+{#snippet writing(where: ToolsAt)}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="write" {writes} {where} />{/snippet}
 {#snippet marking()}<AnnotateBar notes={held.notes} of={name} part="read" {writes} />{/snippet}
-{#snippet marks()}<AnnotateBar notes={held.notes} of={name} part="write" {writes} />{/snippet}
+{#snippet marks(where: ToolsAt)}<AnnotateBar notes={held.notes} of={name} part="write" {writes} {where} />{/snippet}
 {#snippet settled()}
 	<ToolbarItem
 		label={ui.showSettled ? 'hide settled annotations' : 'show settled annotations'}

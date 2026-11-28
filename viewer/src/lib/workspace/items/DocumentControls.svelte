@@ -9,6 +9,7 @@
 	import { follow } from '../links';
 	import { documentState, getPane } from '../state.svelte';
 	import ItemToolbar from '../ItemToolbar.svelte';
+	import type { ToolsAt } from '../fold';
 	import ToolbarItem from '../ToolbarItem.svelte';
 	import AnnotateBar from '$lib/review/AnnotateBar.svelte';
 	import ChangesMenu from '$lib/review/ChangesMenu.svelte';
@@ -48,7 +49,7 @@
 {#snippet changes()}{#if master}<ChangesMenu {notes} document={master.path} of={name} />{/if}{/snippet}
 {#snippet size()}<TextSize doc={documentState(item)} of={name} />{/snippet}
 {#snippet reading()}<AnnotateBar {notes} of={name} part="read" {writes} {changes} />{@render size()}{#if master}<UpdateButton doc={master.path} />{/if}{/snippet}
-{#snippet writing()}<AnnotateBar {notes} of={name} part="write" {writes} />{/snippet}
+{#snippet writing(where: ToolsAt)}<AnnotateBar {notes} of={name} part="write" {writes} {where} />{/snippet}
 {#snippet versions()}<HistoryMenu {item} {name} divided={(!!master && !master.closed && !master.context_only) || !!draft} />{/snippet}
 {#snippet live()}{#if draft}<VersionControls {item} {draft} />{/if}{@render size()}{/snippet}
 {#snippet viewPdf()}

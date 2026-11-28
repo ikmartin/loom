@@ -289,6 +289,67 @@ export const frame = {
 		/** The page `loom open` lands on, when the link it was given names nothing in this quilt. */
 		nothing: (link: string) => (link ? `${link} names nothing in this quilt.` : 'No link was given to open.')
 	},
+	toolbar: {
+		/** The accessible name of a pane's toolbar. */
+		controls: (name: string) => `controls for ${name}`,
+		/** The menu at the toolbar's right holding every other control in full words. */
+		view: 'view',
+		viewName: (name: string) => `view menu for ${name}`,
+		viewMenu: (name: string) => `view of ${name}`,
+		/** The view menu's last line, turning every annotation in the pane off or on, and its accessible name. */
+		hide: (hidden: boolean) => (hidden ? 'turn annotations on' : 'turn annotations off'),
+		hideName: (hidden: boolean, name: string) => `${hidden ? 'turn annotations on' : 'turn annotations off'} in the pane showing ${name}`,
+		/** The × closing the line under the toolbar. */
+		close: 'close',
+		annotate: {
+			/** The toolbar's Annotate, which shows its tools that write after it in the same row or puts them away; its hover and accessible name. */
+			label: 'Annotate',
+			hover: (open: boolean) => (open ? 'Put the annotation tools away' : 'Show the annotation tools'),
+			name: (name: string) => `annotation tools for ${name}`,
+			/** The ˅ after the tools in the row, opening the menu that holds those that do not fit; its hover and accessible name, and the menu's. */
+			more: 'More annotation tools',
+			moreName: (name: string) => `more annotation tools for ${name}`,
+			menu: (name: string) => `annotation tools for ${name} that do not fit the toolbar`,
+			/** The group of tools that write, in the row or the menu. */
+			group: (of: string) => `annotating ${of}`,
+			/** The tool that marks the words selected, with the look in hand beside its icon. */
+			mark: 'Annotate: select words and they are marked',
+			markName: (of: string) => `Annotate in ${of}`,
+			/** The tool that leaves a comment at the next place clicked. */
+			comment: 'Comment: click a place to leave a comment there',
+			commentName: (of: string) => `Comment in ${of}`,
+			/** The caret beside them opening the format menu, and the menu's own name, its two headings and its two links. */
+			format: 'Format for annotations and comments',
+			formatName: (of: string) => `Format for annotations in ${of}`,
+			type: 'Type',
+			look: 'Look',
+			saveType: 'Save as new type…',
+			customize: 'Customize…',
+			/** Undo and Redo over this page's annotation writes: the hover names the next one where it is known. */
+			undo: (next: string) => (next ? `Undo ${next} (⌘Z)` : 'Undo'),
+			undoName: (of: string) => `Undo in ${of}`,
+			redo: (next: string) => (next ? `Redo ${next} (⇧⌘Z)` : 'Redo'),
+			redoName: (of: string) => `Redo in ${of}`,
+			/** A PDF's drawing tools after them, their group and each tool's hover; its accessible name is the hover and what it draws on. */
+			drawing: (of: string) => `drawing on ${of}`,
+			draw: { ink: 'Draw freehand', text: 'Words on the page: press where they go', rect: 'Draw a box', oval: 'Draw an oval', arrow: 'Draw an arrow' },
+			drawName: (title: string, of: string) => `${title} in ${of}`
+		},
+		reading: {
+			/** The toolbar's reading half: its group, the stepper over the annotations and changes in reading order, and Comments. */
+			group: (of: string) => `reading ${of}`,
+			prev: 'Previous (K)',
+			prevName: (of: string) => `Previous annotation in ${of}`,
+			next: 'Next (J)',
+			nextName: (of: string) => `Next annotation in ${of}`,
+			/** The stepper's count: where the open one stands, or how many there are. */
+			at: (i: number, n: number) => `${i} of ${n}`,
+			count: (n: number, items: boolean) => (items ? `${n} ${n === 1 ? 'item' : 'items'}` : `${n} ${n === 1 ? 'annotation' : 'annotations'}`),
+			comments: 'Comments',
+			commentsHover: 'The annotations here in reading order, with the changes among them',
+			commentsName: (of: string, n: number) => `Comments in ${of}, ${n}`
+		}
+	},
 	page: {
 		/** The heading of the page shown when the manifest could not be read. */
 		problems: 'Problems',

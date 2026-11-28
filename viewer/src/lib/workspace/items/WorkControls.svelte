@@ -7,6 +7,7 @@
 	import { can } from '$lib/write';
 	import type { Item } from '../item';
 	import ItemToolbar from '../ItemToolbar.svelte';
+	import type { ToolsAt } from '../fold';
 	import ToolbarItem from '../ToolbarItem.svelte';
 	import { workState } from '../state.svelte';
 	import { library } from '$lib/words/library';
@@ -34,7 +35,7 @@
 </script>
 
 {#snippet reading()}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="read" {writes} disabled={!readable} />{/snippet}
-{#snippet writing()}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="write" {writes} disabled={!readable} />{/snippet}
+{#snippet writing(where: ToolsAt)}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="write" {writes} disabled={!readable} {where} />{/snippet}
 
 {#if gone}
 	<ItemToolbar {name} />

@@ -108,6 +108,23 @@ test("a change's popup says what it is and what is on its words, and Keep takes 
 	await expect(pane(page, 0).getByTestId('changes-count')).toHaveText('3');
 });
 
+test('at 760 Undo stands in the menu the toolbar\'s ˅ opens, and ⌘Z undoes a Keep from anywhere in the pane', async ({ page }) => {
+	await page.setViewportSize({ width: 760, height: 800 });
+	const sent = await withChanges(page);
+	await words(page, SUGGESTED, 'new').click();
+	await page.getByTestId('change-popup').getByTestId('change-keep').click();
+	await expect.poll(() => sent['change-keep']).toEqual({ changes: [SUGGESTED] });
+	await expect(pane(page, 0).getByTestId('changes-count')).toHaveText('2');
+	// no row beneath: Undo is one press past the ˅, and says what it undoes
+	await pane(page, 0).getByTestId('annotate-more').click();
+	await expect(page.getByTestId('annotate-menu').getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo keep (⌘Z)');
+	await page.keyboard.press('Escape');
+	// the key undoes it with the menu shut
+	await page.keyboard.press('ControlOrMeta+z');
+	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED], quilt: 'q-test' });
+	await expect(pane(page, 0).getByTestId('changes-count')).toHaveText('3');
+});
+
 test('a Keep is still undone from the toolbar after the page reloads, and a step loom can no longer undo leaves it', async ({ page }) => {
 	const sent = await withChanges(page);
 	await words(page, SUGGESTED, 'new').click();

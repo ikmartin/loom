@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A text's annotating, in two halves (`part`). The half that writes stands on the annotation row: Annotate, Comment and the format menu beside them, and Undo and Redo, where the publisher takes writes. The half that reads stands on the toolbar's own row: a document's Changes menu where its text has pending changes (`changes`); the stepper over the annotations and changes in reading order (the arrows, J and K); Comments, counting the annotations here, and Notes, counting and listing the files of the quilt that link here (`backlinks.ts`), which open the list beside the text. The keys are the reading half's, since it is always drawn, and putting the annotation row away puts the tool in hand down.
+	// A text's annotating, in two halves (`part`), both on the toolbar's one row. The half that writes stands after the toolbar's Annotate while it is on, where the publisher takes writes, in two groups (`where`, `fold.ts`): Annotate, Comment and the format menu beside them, then Undo and Redo; a group that does not fit the row is drawn in the menu the toolbar's ˅ opens instead. The half that reads stands on the bar: a document's Changes menu where its text has pending changes (`changes`); the stepper over the annotations and changes in reading order (the arrows, J and K); Comments, counting the annotations here, and Notes, counting and listing the files of the quilt that link here (`backlinks.ts`), which open the list beside the text. The keys are the reading half's, since it is always drawn, and turning the toolbar's Annotate off puts the tool in hand down.
 	//
 	// Annotate stays on until it is turned off, and selecting words while it is on marks them in the look in hand. Comment leaves a comment at the next place clicked. The format menu sets the look in hand: the Type list (Add new… starts a type the hand takes), the look controls, the line saying what the look was changed from, a type or Plain (Reset, Update it), Save as new type, and Customize, which opens Settings › Annotations. Number keys choose a type while Annotate is on, 0 for Plain. Undo and Redo, and ⌘Z and ⇧⌘Z, go back and forth over this page's annotation writes (`history.svelte.ts`); Delete or Backspace removes the annotation open, with the same undo.
 	import { refusalOf } from '$lib/library/said';
@@ -8,7 +8,9 @@
 	import { getPane } from '$lib/workspace/state.svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
 	import { openSettings } from '$lib/shell/settings/opener.svelte';
-	import { annotationRow } from '$lib/workspace/annotationRow.svelte';
+	import { annotateTools } from '$lib/workspace/annotateTools.svelte';
+	import { drawnAt, ROW, type ToolsAt } from '$lib/workspace/fold';
+	import { frame } from '$lib/words/frame';
 	import { untrack } from 'svelte';
 	import { can, write } from '$lib/write';
 	import { linkName } from '$lib/workspace/names';
@@ -28,11 +30,17 @@
 		of,
 		part,
 		writes = false,
-		changes
+		changes,
+		where = ROW,
+		groups = 2
 	}: {
 		notes: Annotating;
-		/** Which half: the tools that write, for the annotation row, or what reads, for the toolbar's own row. */
+		/** Which half: the tools that write, after the toolbar's Annotate, or what reads, on its bar. */
 		part: 'read' | 'write';
+		/** Where the half that writes is drawn, the row or the menu, and how much of it the menu holds. */
+		where?: ToolsAt;
+		/** How many groups the host's tools have in all, these two first: 2 alone, 3 in a PDF's bar. */
+		groups?: number;
 		/** What the tools act on, for their accessible names. */
 		of: string;
 		/** Whether the publisher takes annotations, which the tools need. */
@@ -51,7 +59,7 @@
 	const seq = $derived(entries(m, notes));
 	const at = $derived(notes.open ? seq.findIndex((e) => e.id === notes.open) : -1);
 	/** What the stepper and the list count: annotations, or items where changes are among them. */
-	const things = $derived((n: number) => (seq.some((e) => e.c) ? `${n} ${n === 1 ? 'item' : 'items'}` : `${n} ${n === 1 ? 'annotation' : 'annotations'}`));
+	const things = $derived((n: number) => frame.toolbar.reading.count(n, seq.some((e) => e.c)));
 	/** What Comments counts: the annotations here; the changes among them in the list have their own count. */
 	const said = $derived(seq.filter((e) => e.a).length);
 	/** How many files link here: what the Notes list beside the item holds. */
@@ -163,9 +171,9 @@
 		notes.side = notes.side === which ? null : which;
 	}
 
-	// the annotation row put away puts the tool in hand down, so none is armed out of sight
+	// Annotate turned off puts the tool in hand down, so none is armed out of sight
 	$effect(() => {
-		if (part !== 'read' || annotationRow.open) return;
+		if (part !== 'read' || annotateTools.open) return;
 		untrack(() => {
 			if (notes.tool) notes.tool = null;
 		});
@@ -210,42 +218,53 @@
 
 {#if part === 'write'}
 	{#if writes}
-	<span class="annotate-bar" role="group" aria-label="annotating {of}">
+	{@const w = frame.toolbar.annotate}
+	{@const marks = drawnAt(where, 0, groups)}
+	{@const backs = drawnAt(where, 1, groups)}
+	{#if marks || backs}
+	<span class="annotate-bar" role="group" aria-label={w.group(of)}>
+		{#if marks}
 		<span class="split">
-			<button type="button" class="tool main" class:on={notes.tool === 'annotate'} aria-pressed={notes.tool === 'annotate'} title="Annotate: select words and they are marked" aria-label="Annotate in {of}" data-testid="tool-annotate" onclick={() => toggle('annotate')}><Icon name="highlighter" size={15} /><Sample {look} /></button>
-			<button type="button" class="tool" class:on={notes.tool === 'comment'} aria-pressed={notes.tool === 'comment'} title="Comment: click a place to leave a comment there" aria-label="Comment in {of}" data-testid="tool-comment" onclick={() => toggle('comment')}><Icon name="pin" size={14} /></button>
-			<button type="button" class="tool caret" class:on={menu} bind:this={caret} aria-expanded={menu} aria-haspopup="dialog" title="Format for annotations and comments" aria-label="Format for annotations in {of}" data-testid="format-toggle" onclick={openMenu}><Icon name="caret" size={12} /></button>
+			<button type="button" class="tool main" class:on={notes.tool === 'annotate'} aria-pressed={notes.tool === 'annotate'} title={w.mark} aria-label={w.markName(of)} data-testid="tool-annotate" onclick={() => toggle('annotate')}><Icon name="highlighter" size={15} /><Sample {look} /></button>
+			<button type="button" class="tool" class:on={notes.tool === 'comment'} aria-pressed={notes.tool === 'comment'} title={w.comment} aria-label={w.commentName(of)} data-testid="tool-comment" onclick={() => toggle('comment')}><Icon name="pin" size={14} /></button>
+			<button type="button" class="tool caret" class:on={menu} bind:this={caret} aria-expanded={menu} aria-haspopup="dialog" title={w.format} aria-label={w.formatName(of)} data-testid="format-toggle" onclick={openMenu}><Icon name="caret" size={12} /></button>
 		</span>
-		<span class="sep" aria-hidden="true"></span>
-		<button type="button" class="tool" title={nextUndo() ? `Undo ${nextUndo()} (⌘Z)` : 'Undo'} aria-label="Undo in {of}" aria-keyshortcuts="Control+Z Meta+Z" disabled={!history.done.length || history.busy} data-testid="annotate-undo" onclick={() => void back('undo')}><Icon name="undo" size={14} /></button>
-		<button type="button" class="tool" title={nextRedo() ? `Redo ${nextRedo()} (⇧⌘Z)` : 'Redo'} aria-label="Redo in {of}" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" disabled={!history.undone.length || history.busy} data-testid="annotate-redo" onclick={() => void back('redo')}><Icon name="redo" size={14} /></button>
+		{/if}
+		{#if marks && backs}<span class="sep" aria-hidden="true"></span>{/if}
+		{#if backs}
+		<button type="button" class="tool" title={w.undo(nextUndo() ?? '')} aria-label={w.undoName(of)} aria-keyshortcuts="Control+Z Meta+Z" disabled={!history.done.length || history.busy} data-testid="annotate-undo" onclick={() => void back('undo')}><Icon name="undo" size={14} /></button>
+		<button type="button" class="tool" title={w.redo(nextRedo() ?? '')} aria-label={w.redoName(of)} aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" disabled={!history.undone.length || history.busy} data-testid="annotate-redo" onclick={() => void back('redo')}><Icon name="redo" size={14} /></button>
+		{/if}
 	</span>
 	{/if}
+	{/if}
 {:else}
-<span class="annotate-bar" role="group" aria-label="reading {of}">
+{@const r = frame.toolbar.reading}
+<span class="annotate-bar" role="group" aria-label={r.group(of)}>
 	{#if changes}{@render changes()}{/if}
 	{#if seq.length}
 		{#if changes}<span class="sep" aria-hidden="true"></span>{/if}
-		<button type="button" class="tool" title="Previous (K)" aria-label="Previous annotation in {of}" aria-keyshortcuts="k" data-testid="step-prev" onclick={() => step(-1)}><Icon name="left" size={14} /></button>
-		<span class="count" data-testid="step-count">{at >= 0 ? `${at + 1} of ${seq.length}` : things(seq.length)}</span>
-		<button type="button" class="tool" title="Next (J)" aria-label="Next annotation in {of}" aria-keyshortcuts="j" data-testid="step-next" onclick={() => step(1)}><Icon name="right" size={14} /></button>
+		<button type="button" class="tool" title={r.prev} aria-label={r.prevName(of)} aria-keyshortcuts="k" data-testid="step-prev" onclick={() => step(-1)}><Icon name="left" size={14} /></button>
+		<span class="count" data-testid="step-count">{at >= 0 ? r.at(at + 1, seq.length) : things(seq.length)}</span>
+		<button type="button" class="tool" title={r.next} aria-label={r.nextName(of)} aria-keyshortcuts="j" data-testid="step-next" onclick={() => step(1)}><Icon name="right" size={14} /></button>
 	{/if}
 	{#if changes || seq.length}<span class="sep" aria-hidden="true"></span>{/if}
-	<button type="button" class="tool words" class:on={notes.side === 'comments'} aria-pressed={notes.side === 'comments'} title="The annotations here in reading order, with the changes among them" aria-label="Comments in {of}, {said}" data-testid="open-comments" onclick={() => side('comments')}><Icon name="panel" size={14} />Comments<span class="badge">{said}</span></button>
-	<button type="button" class="tool words" class:on={notes.side === 'notes'} aria-pressed={notes.side === 'notes'} title={docsWords.beside.hover} aria-label={docsWords.beside.named(of, notesN)} data-testid="open-notes" onclick={() => side('notes')}><Icon name="note" size={14} />{docsWords.beside.title}<span class="badge">{notesN}</span></button>
+	<button type="button" class="tool words" class:on={notes.side === 'comments'} aria-pressed={notes.side === 'comments'} title={r.commentsHover} aria-label={r.commentsName(of, said)} data-testid="open-comments" onclick={() => side('comments')}><Icon name="panel" size={14} /><span class="fold-word">{r.comments}</span><span class="badge">{said}</span></button>
+	<button type="button" class="tool words" class:on={notes.side === 'notes'} aria-pressed={notes.side === 'notes'} title={docsWords.beside.hover} aria-label={docsWords.beside.named(of, notesN)} data-testid="open-notes" onclick={() => side('notes')}><Icon name="note" size={14} /><span class="fold-word">{docsWords.beside.title}</span><span class="badge">{notesN}</span></button>
 </span>
 {/if}
 
 {#if menu && part === 'write'}
-	<div class="format-menu" bind:this={menuEl} role="dialog" aria-label="Format for annotations and comments" style="left: {place.left}px; top: {place.top}px;" data-testid="format-menu">
-		<div class="sec">Type</div>
+	{@const w = frame.toolbar.annotate}
+	<div class="format-menu" bind:this={menuEl} role="dialog" aria-label={w.format} style="left: {place.left}px; top: {place.top}px;" data-testid="format-menu">
+		<div class="sec">{w.type}</div>
 		<TypeList {types} {current} {plain} keys onpick={(id) => hand.set(withType(m, hand.value, id))} onadd={saves ? () => customize({}) : undefined} />
-		<div class="sec">Look</div>
+		<div class="sec">{w.look}</div>
 		<LookControls {look} onpick={(c) => hand.set(withLook(m, hand.value, c))} />
 		{#if from}<Changed name={from} onreset={reset} onupdate={saves ? () => void update() : undefined} />{/if}
 		<div class="mfoot">
-			{#if saves}<button type="button" class="lnk" data-testid="format-save-type" onclick={() => customize({ look })}>Save as new type…</button>{/if}
-			<button type="button" class="lnk" data-testid="format-customize" onclick={() => customize()}>Customize…</button>
+			{#if saves}<button type="button" class="lnk" data-testid="format-save-type" onclick={() => customize({ look })}>{w.saveType}</button>{/if}
+			<button type="button" class="lnk" data-testid="format-customize" onclick={() => customize()}>{w.customize}</button>
 		</div>
 	</div>
 {/if}

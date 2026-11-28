@@ -97,7 +97,7 @@
 
 {#if list.length}
 	<span class="sep" aria-hidden="true"></span>
-	<button type="button" class="tool words" class:on={open} bind:this={button} aria-expanded={open} aria-haspopup="menu" title="Proposed edits: how the text shows them, and keeping or discarding them all" aria-label="Changes in {of}, {list.length}" data-testid="changes-toggle" onclick={toggle}><Icon name="pen" size={14} />Changes<span class="badge" data-testid="changes-count">{list.length}</span><Icon name="caret" size={12} /></button>
+	<button type="button" class="tool words" class:on={open} bind:this={button} aria-expanded={open} aria-haspopup="menu" title="Proposed edits: how the text shows them, and keeping or discarding them all" aria-label="Changes in {of}, {list.length}" data-testid="changes-toggle" onclick={toggle}><Icon name="pen" size={14} /><span class="fold-word">Changes</span><span class="badge" data-testid="changes-count">{list.length}</span><Icon name="caret" size={12} /></button>
 {/if}
 
 {#if open}

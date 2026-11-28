@@ -696,16 +696,17 @@ test.describe('the toolbar', () => {
 		expect([await firstLine(page, 0), await firstLine(page, 1)]).toEqual(before);
 	});
 
-	test('Ask your agent, Annotate, the bar, then view with every other control in full words, the pane\'s own line last, and the tools that write on a row beneath; the divider only when something stands left of view', async ({ page }) => {
+	test('Ask your agent, Annotate and its tools, the bar, then view with every other control in full words, the pane\'s own line last, all in one row; the divider only when something stands left of view', async ({ page }) => {
 		await writes(page);
+		await page.setViewportSize({ width: 1440, height: 900 });
 		await page.goto('/master/drafting/main');
 		const bar = controls(page, 0);
 		await expect(bar.getByTestId('tool-annotate')).toBeVisible();
 		// the stepper once the document has said what it holds: its annotations and its pending changes
 		await expect(bar.getByTestId('step-prev')).toBeVisible();
 		const order = await bar.locator('button').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.testid));
-		expect(order).toEqual(['toolbar-ask', 'toggle-annotation-row', 'changes-toggle', 'step-prev', 'step-next', 'open-comments', 'open-notes', 'text-smaller', 'text-larger', 'toolbar-history', 'toolbar-view', 'tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo']);
-		await expect(bar.getByTestId('annotation-row').getByTestId('tool-annotate')).toBeVisible();
+		expect(order).toEqual(['toolbar-ask', 'toggle-annotation-row', 'tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo', 'changes-toggle', 'step-prev', 'step-next', 'open-comments', 'open-notes', 'text-smaller', 'text-larger', 'toolbar-history', 'toolbar-view']);
+		await expect(bar.getByTestId('toolbar-row').getByTestId('tool-annotate')).toBeVisible();
 		await expect(page.getByTestId('toolbar-view')).toHaveCSS('border-left-style', 'solid');
 		await expect(page.getByTestId('toolbar-view')).toHaveAttribute('aria-label', 'view menu for main.tex');
 		await viewMenu(page);
@@ -746,30 +747,83 @@ test.describe('the toolbar', () => {
 		await expect(page.getByTestId('toolbar-view')).toHaveCSS('border-left-style', 'solid');
 	});
 
-	test('Annotate puts the annotation row away and shows it again, everywhere and on the next visit, and the tool in hand goes down with it', async ({ page }) => {
+	test('Annotate puts its tools away and shows them again in the same row, everywhere and on the next visit, and the tool in hand goes down with them', async ({ page }) => {
 		await writes(page);
+		await page.setViewportSize({ width: 1440, height: 900 });
 		await page.goto('/master/drafting/main');
-		const row = controls(page, 0).getByTestId('annotation-row');
 		const toggle = controls(page, 0).getByTestId('toggle-annotation-row');
-		await expect(row).toBeVisible();
+		const tools = controls(page, 0).getByTestId('annotate-tools');
+		await expect(tools).toBeVisible();
 		await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-		// the row that reads holds no tool that writes
-		const reads = await controls(page, 0).locator('.toolbar button').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.testid));
-		expect(reads).not.toContain('tool-annotate');
-		// armed, its hint at the row's right; put away, the tool goes down with it
-		await row.getByTestId('tool-annotate').click();
-		await expect(row.getByTestId('annotate-hint')).toContainText('Annotate is on');
+		// armed, its hint one line under the row; put away, the tool goes down with it
+		await tools.getByTestId('tool-annotate').click();
+		await expect(controls(page, 0).getByTestId('annotate-hint')).toContainText('Annotate is on');
 		await toggle.click();
-		await expect(row).toHaveCount(0);
+		await expect(tools).toHaveCount(0);
 		await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 		await expect(page.getByTestId('annotate-hint')).toHaveCount(0);
 		// kept in this browser, and shown again with nothing armed
 		await page.reload();
 		await expect(controls(page, 0).getByTestId('toggle-annotation-row')).toHaveAttribute('aria-expanded', 'false');
-		await expect(controls(page, 0).getByTestId('annotation-row')).toHaveCount(0);
+		await expect(controls(page, 0).getByTestId('annotate-tools')).toHaveCount(0);
 		await controls(page, 0).getByTestId('toggle-annotation-row').click();
 		await expect(controls(page, 0).getByTestId('tool-annotate')).toHaveAttribute('aria-pressed', 'false');
 	});
+
+	/** The tools that write on each kind with them, a document's first, then a PDF's drawing tools. */
+	const TOOLS = ['tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo'];
+	const DRAW = ['tool-ink', 'tool-text', 'tool-rect', 'tool-oval', 'tool-arrow'];
+	for (const width of [1440, 760]) {
+		for (const [kind, url, ids] of [
+			['a LaTeX document', '/master/drafting/main', TOOLS],
+			['a Markdown file', '/file/notes/intro.md', TOOLS],
+			['a PDF', FIG, [...TOOLS, ...DRAW]]
+		] as const) {
+			test(`at ${width}, Annotate on draws no second row on ${kind}: each tool and Undo are in the toolbar's one row, or in the menu its ˅ opens, and nothing runs past the row's end`, async ({ page }) => {
+				await writes(page);
+				await withPdfs(page);
+				await page.setViewportSize({ width, height: 800 });
+				await page.goto(url);
+				const bar = controls(page, 0);
+				const row = bar.getByTestId('toolbar-row');
+				await expect(bar.getByTestId('toggle-annotation-row')).toHaveAttribute('aria-expanded', 'true');
+				await expect(bar.getByTestId('open-comments')).toBeVisible();
+				// one row: the controls are no taller than it, and nothing is drawn under it at rest
+				await expect(bar.getByTestId('annotation-row')).toHaveCount(0);
+				const r = (await row.boundingBox())!;
+				expect((await bar.boundingBox())!.height, 'the toolbar, px').toBeLessThan(34);
+				// nothing past the row's end, and nothing of the bar cut
+				for (const b of await row.locator('button').all()) {
+					if (!(await b.isVisible())) continue;
+					const at = (await b.boundingBox())!;
+					expect(at.x, `${await b.getAttribute('data-testid')} inside the row`).toBeGreaterThanOrEqual(r.x - 1);
+					expect(at.x + at.width, `${await b.getAttribute('data-testid')} inside the row`).toBeLessThanOrEqual(r.x + r.width + 1);
+					expect(at.y + at.height / 2, `${await b.getAttribute('data-testid')} on the row`).toBeGreaterThan(r.y);
+					expect(at.y + at.height / 2, `${await b.getAttribute('data-testid')} on the row`).toBeLessThan(r.y + r.height);
+				}
+				const cut = await row.evaluate((el) => [...el.querySelectorAll<HTMLElement>('.end, .bar')].some((e) => e.scrollWidth > e.clientWidth + 1));
+				expect(cut, 'something on the row cut').toBe(false);
+				// each tool in the row, one press away, or in the menu the ˅ after them opens
+				const inRow: string[] = [];
+				for (const id of ids) if (await row.getByTestId(id).isVisible()) inRow.push(id);
+				if (width === 1440) expect(inRow, 'every tool in the row at 1440').toEqual([...ids]);
+				if (inRow.length < ids.length) {
+					await row.getByTestId('annotate-more').click();
+					const menu = page.getByTestId('annotate-menu');
+					for (const id of ids.filter((i) => !inRow.includes(i))) await expect(menu.getByTestId(id), id).toBeVisible();
+					// the format menu opens from inside it and leaves it open, and Escape shuts both
+					if (!inRow.includes('format-toggle')) {
+						await menu.getByTestId('format-toggle').click();
+						await expect(page.getByTestId('format-menu')).toBeVisible();
+						await expect(menu).toBeVisible();
+					}
+					await page.keyboard.press('Escape');
+					await expect(page.getByTestId('format-menu')).toHaveCount(0);
+					await expect(menu).toHaveCount(0);
+				} else await expect(row.getByTestId('annotate-more')).toHaveCount(0);
+			});
+		}
+	}
 
 	test('a node keeps its context and its source under view', async ({ page }) => {
 		await page.goto('/node/sy-0003');

@@ -5,6 +5,7 @@
 	import { nodeState } from '../state.svelte';
 	import { workspace } from '../store.svelte';
 	import ItemToolbar from '../ItemToolbar.svelte';
+	import type { ToolsAt } from '../fold';
 	import ToolbarItem from '../ToolbarItem.svelte';
 	import AnnotateBar from '$lib/review/AnnotateBar.svelte';
 	import { hand, hintFor } from '$lib/review/annotating.svelte';
@@ -36,7 +37,7 @@
 </script>
 
 {#snippet reading()}<AnnotateBar notes={held.notes} of={name} part="read" writes={writes && !node?.external} />{/snippet}
-{#snippet writing()}<AnnotateBar notes={held.notes} of={name} part="write" writes={writes && !node?.external} />{/snippet}
+{#snippet writing(where: ToolsAt)}<AnnotateBar notes={held.notes} of={name} part="write" writes={writes && !node?.external} {where} />{/snippet}
 
 {#if node}
 	<ItemToolbar {name} {note} ask={() => placesFor(store.manifest, item)} bar={reading} tools={writes && !node.external ? writing : undefined} on={ui.showSettled || held.verbatim} hint={writes && !node.external ? hintFor(store.manifest, held.notes, hand.value) : ''}>
