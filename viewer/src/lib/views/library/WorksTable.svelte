@@ -83,7 +83,7 @@
 				<tr class:sel={lastAdded.ref === w.ref} class:multi={lib.multi.has(w.ref)} class:hot onclick={(e) => opened(e, w)} data-testid="work-row" data-ref={w.ref}>
 					{#each shownCols as c (c)}
 						{#if c === 'title'}
-							<td class="t" class:asks={asking.has(w.ref) && w.lookup?.state === 'unconfirmed'}>
+							<td class="t" class:asks={w.lookup?.state === 'unconfirmed'}>
 								{#if asking.has(w.ref) && w.lookup?.state === 'unconfirmed'}
 									<span>{words.works.identifier(w.lookup.identifier)}</span>{#if cameAs(w)}<span class="grey came" data-testid="work-came-as">{cameAs(w)}</span>{/if}<span class="found ask">{words.works.lookAsk}</span>
 									<button type="button" class="linkish small" onclick={(e) => { e.stopPropagation(); void lookUp(w, true); }} data-testid="look-yes">{words.works.yes}</button>
@@ -230,7 +230,7 @@
 		outline: 2px solid var(--link);
 		outline-offset: 2px;
 	}
-	/* a row's question wraps rather than being cut off, so its answers are in view on a narrow window */
+	/* a row not looked up wraps rather than being cut off, so its question and its look up are in view on a narrow window */
 	td.asks {
 		white-space: normal;
 		height: auto;
